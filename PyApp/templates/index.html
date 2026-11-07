@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgriStack Farmer ID Card Extractor & Generator</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%3E%3Ctext y=%2226%22 font-size=%2224%22>🌾</text></svg>">
+</head>
+<body>
+  <!-- Header Bar -->
+  <header class="navbar">
+    <div class="nav-container">
+      <div class="brand">
+        <span class="brand-icon">🌾</span>
+        <div>
+          <h1 class="brand-title">AgriStack Farmer ID Card System</h1>
+          <p class="brand-subtitle">Automated Local PDF Parser & Identity Card Generator</p>
+        </div>
+      </div>
+      <div class="badge-container">
+        <span class="badge badge-green">✓ 100% Free & Local</span>
+        <span class="badge badge-orange">⚡ No AI • No Subscriptions</span>
+        <span class="badge badge-blue">🔒 Private & Offline</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="main-content">
+    
+    <!-- Upload Section -->
+    <section class="upload-card" id="uploadCard">
+      <div class="drop-zone" id="dropZone">
+        <div class="drop-icon">📄</div>
+        <h2 class="drop-title">Upload Farmer Registration Form (PDF)</h2>
+        <p class="drop-desc">Drag & drop your scanned or digital registration PDF form here, or browse files</p>
+        
+        <div class="btn-group">
+          <label class="btn btn-primary" for="fileInput">
+            <span>📁 Browse PDF File</span>
+            <input type="file" id="fileInput" accept="application/pdf" style="display: none;">
+          </label>
+          <button class="btn btn-secondary" id="sampleBtn" type="button">
+            <span>⚡ Load Sample Form (1-Click Test)</span>
+          </button>
+        </div>
+        <p class="hint-text">Supported: Scanned / image-based PDFs & digital AgriStack forms</p>
+      </div>
+
+      <!-- Processing Progress Overlay -->
+      <div class="progress-box" id="progressBox" style="display: none;">
+        <div class="spinner"></div>
+        <h3 id="progressTitle">Analyzing Document...</h3>
+        <p id="progressSubtitle" class="hint-text">Running local deterministic OCR and spatial photo cropper</p>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="progressBar"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Results Section (Hidden until extraction completes) -->
+    <section class="results-section" id="resultsSection" style="display: none;">
+      
+      <div class="grid-2col">
+        
+        <!-- Left Column: Extracted & Editable Fields -->
+        <div class="card panel-form">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">Extracted Farmer Details</h2>
+              <p class="card-subtitle">Review or adjust any details. Changes automatically sync to the ID card.</p>
+            </div>
+            <button class="btn btn-sm btn-outline" id="copyAllBtn" title="Copy all details to clipboard">
+              <span>📋 Copy All</span>
+            </button>
+          </div>
+
+          <form id="farmerForm" onsubmit="return false;">
+            <!-- Farmer ID & Enrollment -->
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="farmerId">1. Farmer ID</label>
+                <div class="input-with-action">
+                  <input type="text" id="farmerId" class="form-control highlight-input" placeholder="e.g. 77900535348">
+                  <button type="button" class="btn-copy" onclick="copyField('farmerId')" title="Copy ID">📋</button>
+                </div>
+              </div>
+              <div class="form-group flex-1">
+                <label for="enrollmentNo">Enrollment Number</label>
+                <input type="text" id="enrollmentNo" class="form-control" placeholder="e.g. 27_490_4187_555391_006318">
+              </div>
+            </div>
+
+            <!-- Farmer Name & Identifier Name -->
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="farmerName">2. Farmer Name</label>
+                <div class="input-with-action">
+                  <input type="text" id="farmerName" class="form-control font-bold" placeholder="e.g. Ganesh Pandurang Shinde">
+                  <button type="button" class="btn-copy" onclick="copyField('farmerName')" title="Copy Name">📋</button>
+                </div>
+              </div>
+              <div class="form-group flex-1">
+                <label for="identifierName">3. Identifier Name (Father / Spouse)</label>
+                <div class="input-with-action">
+                  <input type="text" id="identifierName" class="form-control" placeholder="e.g. Pandurang Shinde">
+                  <button type="button" class="btn-copy" onclick="copyField('identifierName')" title="Copy Identifier">📋</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- DOB, Age, Gender, Caste -->
+            <div class="form-row-4">
+              <div class="form-group">
+                <label for="dob">4. DOB</label>
+                <input type="text" id="dob" class="form-control" placeholder="DD/MM/YYYY">
+              </div>
+              <div class="form-group">
+                <label for="age">Age</label>
+                <input type="text" id="age" class="form-control" placeholder="e.g. 39">
+              </div>
+              <div class="form-group">
+                <label for="gender">5. Gender</label>
+                <select id="gender" class="form-control">
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="casteCategory">6. Caste Category</label>
+                <input type="text" id="casteCategory" class="form-control" placeholder="e.g. General">
+              </div>
+            </div>
+
+            <!-- Mobile & Land Area -->
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="mobileNumber">7. Mobile Number</label>
+                <div class="input-with-action">
+                  <input type="text" id="mobileNumber" class="form-control font-mono" placeholder="10-digit Mobile">
+                  <button type="button" class="btn-copy" onclick="copyField('mobileNumber')" title="Copy Mobile">📋</button>
+                </div>
+              </div>
+              <div class="form-group flex-1">
+                <label for="landArea">8. Land Area (Hectare)</label>
+                <input type="text" id="landArea" class="form-control" placeholder="e.g. 0.72">
+              </div>
+            </div>
+
+            <!-- Land Details breakdown -->
+            <div class="form-row-4">
+              <div class="form-group">
+                <label for="surveyNo">Survey / Gat No</label>
+                <input type="text" id="surveyNo" class="form-control" placeholder="e.g. 102">
+              </div>
+              <div class="form-group">
+                <label for="village">Village</label>
+                <input type="text" id="village" class="form-control" placeholder="e.g. Shindewadi">
+              </div>
+              <div class="form-group">
+                <label for="district">District</label>
+                <input type="text" id="district" class="form-control" placeholder="e.g. PUNE">
+              </div>
+              <div class="form-group">
+                <label for="state">State</label>
+                <input type="text" id="state" class="form-control" placeholder="e.g. MAHARASHTRA">
+              </div>
+            </div>
+
+            <!-- Full Address -->
+            <div class="form-group">
+              <label for="address">9. Full Residential Address</label>
+              <textarea id="address" class="form-control" rows="2" placeholder="Full Address"></textarea>
+            </div>
+
+            <!-- Photo status info -->
+            <input type="hidden" id="photoBase64">
+
+            <!-- Update button -->
+            <div class="btn-row">
+              <button type="button" class="btn btn-success" id="updateCardBtn">
+                <span>🔄 Update & Regenerate Card</span>
+              </button>
+              <button type="button" class="btn btn-secondary" id="resetBtn">
+                <span>Upload Another Form</span>
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Right Column: Farmer Photo & ID Card Preview -->
+        <div class="panel-preview">
+          
+          <!-- Photo & Verification Card -->
+          <div class="card card-photo-preview">
+            <div class="photo-info-wrap">
+              <div class="photo-container">
+                <img id="photoThumb" class="photo-img" src="" alt="10. Extracted Farmer Photo">
+                <span class="photo-badge">10. Extracted Photo</span>
+              </div>
+              <div class="photo-meta">
+                <h3 class="meta-name" id="previewFarmerName">Farmer Name</h3>
+                <p class="meta-id" id="previewFarmerId">Farmer ID: --</p>
+                <div class="meta-tags">
+                  <span class="tag tag-green" id="tagVerified">✓ AgriStack Verified</span>
+                  <span class="tag tag-blue" id="tagArea">-- Hectare</span>
+                </div>
+                <button class="btn btn-xs btn-outline" id="downloadPhotoBtn">
+                  <span>📥 Download Photo</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Generated ID Card Live Preview -->
+          <div class="card card-id-preview">
+            <div class="card-header">
+              <h2 class="card-title">Official Farmer ID Card</h2>
+              <span class="badge badge-green">Print Ready (CR80)</span>
+            </div>
+
+            <div class="id-card-stage">
+              <img id="idCardPreview" class="id-card-img" src="" alt="Generated Farmer ID Card Preview">
+            </div>
+
+            <!-- Download Action Buttons -->
+            <div class="download-grid">
+              <a id="downloadCardPngBtn" href="#" class="btn btn-primary" download>
+                <span>📥 Download ID Card (PNG)</span>
+              </a>
+              <a id="downloadCardPdfBtn" href="#" class="btn btn-emerald" download>
+                <span>📄 Download ID Card (PDF)</span>
+              </a>
+              <button id="exportJsonBtn" type="button" class="btn btn-outline">
+                <span>💾 Export JSON</span>
+              </button>
+              <button id="exportCsvBtn" type="button" class="btn btn-outline">
+                <span>📊 Export CSV</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>© 2026 AgriStack Farmer ID System • Production-Ready • 100% Free & Open Source • Zero External AI APIs • Complete Local Privacy</p>
+  </footer>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Scripts -->
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
+

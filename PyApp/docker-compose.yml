@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  farmer-extractor:
+    build: .
+    container_name: farmer_id_card_app
+    ports:
+      - "5001:5001"
+    environment:
+      - PORT=5001
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./uploads:/app/uploads
+      - ./generated_cards:/app/generated_cards
+      - ./extracted_images:/app/extracted_images
+    restart: unless-stopped
