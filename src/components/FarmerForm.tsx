@@ -41,7 +41,7 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({ data, onChange }) => {
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center">
               <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-800 inline-flex items-center justify-center text-[10px] mr-1.5 font-bold">1</span>
-              Farmer ID (फार्मर आईडी)
+              Farmer ID
             </label>
             <input
               type="text"
@@ -52,7 +52,7 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({ data, onChange }) => {
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">
-              Enrollment Number (पंजीकरण क्रमांक)
+              Enrollment Number
             </label>
             <input
               type="text"
@@ -63,12 +63,12 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({ data, onChange }) => {
           </div>
         </div>
 
-        {/* Row 2: Farmer Name (English & Local) */}
+        {/* Row 2: Farmer Name & Identifier Name */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center">
               <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-800 inline-flex items-center justify-center text-[10px] mr-1.5 font-bold">2</span>
-              Farmer Name (English)
+              Farmer Name
             </label>
             <input
               type="text"
@@ -78,40 +78,14 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({ data, onChange }) => {
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">
-              Farmer Name (Local / Devanagari)
-            </label>
-            <input
-              type="text"
-              value={data.farmer_name_local}
-              onChange={e => updateField('farmer_name_local', e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:bg-white text-slate-900 font-medium"
-            />
-          </div>
-        </div>
-
-        {/* Row 3: Identifier Name */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
             <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center">
               <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-800 inline-flex items-center justify-center text-[10px] mr-1.5 font-bold">3</span>
-              Identifier Name (Father / Spouse)
+              Father / Spouse Name
             </label>
             <input
               type="text"
               value={data.identifier_name}
               onChange={e => updateField('identifier_name', e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:bg-white text-slate-900"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">
-              Identifier Name (Local Language)
-            </label>
-            <input
-              type="text"
-              value={data.identifier_name_local}
-              onChange={e => updateField('identifier_name_local', e.target.value)}
               className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:bg-white text-slate-900"
             />
           </div>

@@ -41,15 +41,15 @@ export async function generateCardCanvas(record: FarmerRecord): Promise<HTMLCanv
 
   // Header Typography
   ctx.fillStyle = '#ffffff';
-  ctx.font = '600 15px "Noto Sans Devanagari", Inter, sans-serif';
-  ctx.fillText('कृषि एवं किसान कल्याण मंत्रालय | Ministry of Agriculture & Farmers Welfare', 28, 34);
+  ctx.font = '600 14px Inter, sans-serif';
+  ctx.fillText('GOVERNMENT OF INDIA • MINISTRY OF AGRICULTURE & FARMERS WELFARE', 28, 34);
 
-  ctx.font = '700 24px "Noto Sans Devanagari", Inter, sans-serif';
-  ctx.fillText('किसान पहचान पत्र / FARMER ID CARD', 28, 72);
+  ctx.font = '700 24px Inter, sans-serif';
+  ctx.fillText('FARMER ID CARD', 28, 72);
 
-  ctx.font = '500 14px "Noto Sans Devanagari", Inter, sans-serif';
+  ctx.font = '600 14px Inter, sans-serif';
   ctx.fillStyle = '#d1e7dd';
-  ctx.fillText('भारत सरकार / Govt. of India', w - 215, 72);
+  ctx.fillText('AGRISTACK REGISTRY', w - 215, 72);
 
   // Farmer Photo (Right Side Box matching template)
   const px = w - 235;
@@ -108,98 +108,88 @@ export async function generateCardCanvas(record: FarmerRecord): Promise<HTMLCanv
   ctx.stroke();
 
   ctx.fillStyle = '#14532d';
-  ctx.font = '600 16px "Noto Sans Devanagari", Inter, sans-serif';
-  ctx.fillText(`फार्मर आईडी (Farmer ID): ${record.farmer_id || '77900535348'}`, badgeX + 16, badgeY + 26);
+  ctx.font = '700 16px Inter, sans-serif';
+  ctx.fillText(`Farmer ID: ${record.farmer_id || '77900535348'}`, badgeX + 16, badgeY + 26);
 
-  // Information Rows (Bilingual Typography)
+  // Information Rows (Clean English Typography)
   let cy = 195;
   const col1X = 32;
-  const col2X = 245;
-  const rowGap = 36;
+  const col2X = 220;
+  const rowGap = 42;
 
   // 1. Farmer Name
-  ctx.fillStyle = '#555555';
-  ctx.font = '500 14px "Noto Sans Devanagari", Inter, sans-serif';
-  ctx.fillText('किसान का नाम (Farmer Name):', col1X, cy);
+  ctx.fillStyle = '#4b5563';
+  ctx.font = '600 15px Inter, sans-serif';
+  ctx.fillText('Farmer Name:', col1X, cy);
   ctx.fillStyle = '#111827';
-  ctx.font = '700 16px Inter, sans-serif';
+  ctx.font = '700 17px Inter, sans-serif';
   ctx.fillText(record.farmer_name || 'Ganesh Pandurang Shinde', col2X, cy);
-  if (record.farmer_name_local) {
-    ctx.fillStyle = '#4b5563';
-    ctx.font = '500 14px "Noto Sans Devanagari", sans-serif';
-    ctx.fillText(record.farmer_name_local, col2X, cy + 18);
-  }
 
   // 2. Father / Spouse Name
-  cy += rowGap + 8;
-  ctx.fillStyle = '#555555';
-  ctx.font = '500 14px "Noto Sans Devanagari", Inter, sans-serif';
-  ctx.fillText('पिता / पति (Father/Spouse):', col1X, cy);
+  cy += rowGap;
+  ctx.fillStyle = '#4b5563';
+  ctx.font = '600 15px Inter, sans-serif';
+  ctx.fillText('Father / Spouse:', col1X, cy);
   ctx.fillStyle = '#111827';
-  ctx.font = '700 15px Inter, sans-serif';
+  ctx.font = '700 16px Inter, sans-serif';
   ctx.fillText(record.identifier_name || 'Pandurang Shinde', col2X, cy);
-  if (record.identifier_name_local) {
-    ctx.fillStyle = '#4b5563';
-    ctx.font = '500 14px "Noto Sans Devanagari", sans-serif';
-    ctx.fillText(record.identifier_name_local, col2X, cy + 18);
-  }
 
   // 3. DOB & Gender
-  cy += rowGap + 8;
-  ctx.fillStyle = '#555555';
-  ctx.font = '500 14px "Noto Sans Devanagari", Inter, sans-serif';
-  ctx.fillText('जन्म तिथि (DOB):', col1X, cy);
+  cy += rowGap;
+  ctx.fillStyle = '#4b5563';
+  ctx.font = '600 15px Inter, sans-serif';
+  ctx.fillText('Date of Birth (DOB):', col1X, cy);
   ctx.fillStyle = '#111827';
-  ctx.font = '700 15px Inter, sans-serif';
+  ctx.font = '700 16px Inter, sans-serif';
   ctx.fillText(record.dob || '04/08/1987', col2X, cy);
 
-  ctx.fillStyle = '#555555';
-  ctx.font = '500 14px "Noto Sans Devanagari", Inter, sans-serif';
-  ctx.fillText('लिंग (Gender):', col2X + 130, cy);
+  ctx.fillStyle = '#4b5563';
+  ctx.font = '600 15px Inter, sans-serif';
+  ctx.fillText('Gender:', col2X + 130, cy);
   ctx.fillStyle = '#111827';
-  ctx.font = '700 15px Inter, sans-serif';
-  ctx.fillText(record.gender || 'Male', col2X + 245, cy);
+  ctx.font = '700 16px Inter, sans-serif';
+  ctx.fillText(record.gender || 'Male', col2X + 205, cy);
 
   // 4. Category & Mobile
   cy += rowGap;
-  ctx.fillStyle = '#555555';
-  ctx.font = '500 14px "Noto Sans Devanagari", Inter, sans-serif';
-  ctx.fillText('श्रेणी (Category):', col1X, cy);
+  ctx.fillStyle = '#4b5563';
+  ctx.font = '600 15px Inter, sans-serif';
+  ctx.fillText('Caste Category:', col1X, cy);
   ctx.fillStyle = '#111827';
-  ctx.font = '700 15px Inter, sans-serif';
+  ctx.font = '700 16px Inter, sans-serif';
   ctx.fillText(record.caste_category || 'General', col2X, cy);
 
-  ctx.fillStyle = '#555555';
-  ctx.font = '500 14px "Noto Sans Devanagari", Inter, sans-serif';
-  ctx.fillText('मोबाइल (Mobile):', col2X + 130, cy);
+  ctx.fillStyle = '#4b5563';
+  ctx.font = '600 15px Inter, sans-serif';
+  ctx.fillText('Mobile:', col2X + 130, cy);
   ctx.fillStyle = '#111827';
-  ctx.font = '700 15px Inter, sans-serif';
-  ctx.fillText(record.mobile_number || '9552533470', col2X + 245, cy);
+  ctx.font = '700 16px Inter, sans-serif';
+  ctx.fillText(record.mobile_number || '9552533470', col2X + 205, cy);
 
   // 5. Land Details
   cy += rowGap;
-  ctx.fillStyle = '#555555';
-  ctx.font = '500 14px "Noto Sans Devanagari", Inter, sans-serif';
-  ctx.fillText('भूमि विवरण (Land):', col1X, cy);
+  ctx.fillStyle = '#4b5563';
+  ctx.font = '600 15px Inter, sans-serif';
+  ctx.fillText('Land Details:', col1X, cy);
   ctx.fillStyle = '#111827';
-  ctx.font = '700 14px Inter, sans-serif';
+  ctx.font = '600 14px Inter, sans-serif';
   const landStr = record.land_detail?.summary || `${record.land_detail?.total_area_hectare || '0.72'} Hectare`;
-  ctx.fillText(truncateText(landStr, 48), col2X, cy);
-  if (landStr.length > 48) {
-    ctx.fillText(truncateText(landStr.substring(48), 48), col2X, cy + 18);
+  ctx.fillText(truncateText(landStr, 52), col2X, cy);
+  if (landStr.length > 52) {
+    ctx.fillText(truncateText(landStr.substring(52), 52), col2X, cy + 20);
   }
 
   // 6. Address
-  cy += rowGap + (landStr.length > 48 ? 10 : 0);
-  ctx.fillStyle = '#555555';
-  ctx.font = '500 14px "Noto Sans Devanagari", Inter, sans-serif';
-  ctx.fillText('पता (Address):', col1X, cy);
+  cy += rowGap + (landStr.length > 52 ? 12 : 0);
+  ctx.fillStyle = '#4b5563';
+  ctx.font = '600 15px Inter, sans-serif';
+  ctx.fillText('Address:', col1X, cy);
   ctx.fillStyle = '#374151';
   ctx.font = '500 13px Inter, sans-serif';
   const addr = record.address || '';
-  ctx.fillText(truncateText(addr, 54), col2X, cy);
-  if (addr.length > 54) {
-    ctx.fillText(truncateText(addr.substring(54), 58), col2X, cy + 18);
+  ctx.fillText(truncateText(addr, 56), col2X, cy);
+  if (addr.length > 56) {
+    ctx.fillText(truncateText(addr.substring(56), 60), col2X, cy + 18);
   }
 
   // Footer Disclaimer Bar
@@ -212,8 +202,8 @@ export async function generateCardCanvas(record: FarmerRecord): Promise<HTMLCanv
   ctx.restore();
 
   ctx.fillStyle = '#4b5563';
-  ctx.font = '500 12px "Noto Sans Devanagari", Inter, sans-serif';
-  ctx.fillText('कृषि एवं किसान कल्याण मंत्रालय, भारत सरकार द्वारा जारी किसान पहचान पत्र | Valid Across India', 28, footerY + 26);
+  ctx.font = '600 12px Inter, sans-serif';
+  ctx.fillText('Issued under Government of India AgriStack Farmer Registry | Valid Across India', 28, footerY + 26);
 
   return canvas;
 }

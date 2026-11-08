@@ -25,7 +25,7 @@ export const CardModal: React.FC<CardModalProps> = ({
           <div className="flex items-center space-x-2">
             <span className="text-xl">🪪</span>
             <h3 className="font-bold text-slate-800 text-base">
-              Generated Kisan Pehchan Patra (Farmer ID Card)
+              Generated Farmer ID Card
             </h3>
           </div>
           <button

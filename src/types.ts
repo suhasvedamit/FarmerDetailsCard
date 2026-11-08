@@ -13,9 +13,7 @@ export interface FarmerRecord {
   farmer_id: string;
   enrollment_no: string;
   farmer_name: string;
-  farmer_name_local: string;
   identifier_name: string;
-  identifier_name_local: string;
   dob: string;
   age: string;
   gender: string;
@@ -26,4 +24,3 @@ export interface FarmerRecord {
   photo_base64?: string;
   photo_url?: string;
 }
-

@@ -21,7 +21,7 @@ export const Header: React.FC<HeaderProps> = ({ onLoadSample, isProcessing }) =>
                 100% Client-Side WASM
               </span>
             </div>
-            <p className="text-xs text-emerald-200">Kisan Pehchan Patra AI-OCR & Photo Cropping Engine (GitHub Pages Ready)</p>
+            <p className="text-xs text-emerald-200">Farmer ID Card AI-OCR & Photo Cropping Engine (GitHub Pages Ready)</p>
           </div>
         </div>
 

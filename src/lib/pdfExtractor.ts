@@ -277,7 +277,7 @@ export async function extractFarmerDataFromPdf(
   const h1 = p1Canvas.height;
 
   onProgress?.('Initializing Tesseract WebAssembly engine...', 40);
-  const worker = await createWorker('eng+mar', 1, {
+  const worker = await createWorker('eng', 1, {
     logger: m => {
       if (m.status === 'recognizing text') {
         const pct = Math.floor(40 + (m.progress || 0) * 45);
@@ -292,14 +292,14 @@ export async function extractFarmerDataFromPdf(
   const headerRes = await worker.recognize(headerCanvas);
   const headerText = headerRes.data.text;
 
-  // Zone 2: Left Table Column (English Details: Name, Gender, Category, Identifier)
-  onProgress?.('Extracting English demographic credentials...', 60);
+  // Zone 2: Demographic Details (Farmer Name, Gender, Caste Category, Identifier)
+  onProgress?.('Extracting demographic credentials...', 60);
   const leftTableCanvas = cropCanvasRegion(p1Canvas, 0, h1 * 0.44, w1 * 0.58, h1 * 0.54);
   const leftRes = await worker.recognize(leftTableCanvas);
   const leftText = leftRes.data.text;
 
-  // Zone 3: Right Table Column (Devanagari Local Name, DOB, Age, Local Identifier)
-  onProgress?.('Extracting Marathi/Devanagari names & DOB...', 70);
+  // Zone 3: Date of Birth and Age
+  onProgress?.('Extracting Date of Birth & Age...', 70);
   const rightTableCanvas = cropCanvasRegion(p1Canvas, w1 * 0.56, h1 * 0.44, w1 * 0.44, h1 * 0.54);
   const rightRes = await worker.recognize(rightTableCanvas);
   const rightText = rightRes.data.text;
@@ -358,28 +358,11 @@ export async function extractFarmerDataFromPdf(
     farmerName = 'Ganesh Pandurang Shinde';
   }
 
-  // Farmer Name (Local Language - Marathi / Devanagari)
-  let farmerNameLocal = '';
-  const localNameMatch = rightText.match(/Local\s*Language[\s\S]*?([\u0900-\u097F]+(?:\s+[\u0900-\u097F]+)+)/);
-  if (localNameMatch) {
-    farmerNameLocal = localNameMatch[1].trim();
-  } else {
-    const devMatch = rightText.match(/[\u0900-\u097F]{2,}(?:\s+[\u0900-\u097F]{2,})+/);
-    if (devMatch) farmerNameLocal = devMatch[0].trim();
-  }
-
   // 3. Identifier Name (English)
   let identifierName = '';
-  const idMatch = leftText.match(/Identifier\s*Name\s*In\s*English\s+([A-Za-z\s]+?)(?=\s+Identifier|\n|$)/i);
+  const idMatch = leftText.match(/Identifier\s*Name\s*(?:In\s*English)?\s+([A-Za-z\s]+?)(?=\s+Identifier|\n|$)/i);
   if (idMatch) {
     identifierName = idMatch[1].replace(/[^A-Za-z\s]/g, '').replace(/\s+[A-Za-z]$/, '').trim();
-  }
-
-  // Identifier Name (Local Language)
-  let identifierNameLocal = '';
-  const idLocalMatch = rightText.match(/Identifier\s*Name\s*in\s*Local[\s\S]*?([\u0900-\u097F]+(?:\s+[\u0900-\u097F]+)*)/i);
-  if (idLocalMatch) {
-    identifierNameLocal = idLocalMatch[1].trim();
   }
 
   // 4. DOB & Age
@@ -435,7 +418,7 @@ export async function extractFarmerDataFromPdf(
     const raw = addrMatch[1];
     const lines = raw.split('\n')
       .map(l => l.replace(/\|\s*Address In.*/i, '').replace(/Local|Language/i, '').trim())
-      .filter(l => l.length > 0 && !/^(Address|In|English)$/i.test(l));
+      .filter(l => l.length > 0 && !/^(Address|In|English)$/i.test(l) && !/[\u0900-\u097F]/.test(l));
     address = lines.join(', ').replace(/[\s,]+,/g, ',').replace(/\s*,\s*/g, ', ').trim();
   }
 
@@ -445,9 +428,7 @@ export async function extractFarmerDataFromPdf(
     farmer_id: farmerId || '77900535348',
     enrollment_no: enrollmentNo || '27_490_4187_555391_006318',
     farmer_name: farmerName || 'Ganesh Pandurang Shinde',
-    farmer_name_local: farmerNameLocal || 'गणेश पांडुरंग शिंदे',
     identifier_name: identifierName || 'Pandurang Shinde',
-    identifier_name_local: identifierNameLocal || 'पांडुरंग शिंदे',
     dob: dob || '04/08/1987',
     age: age || '39',
     gender: gender || 'Male',
