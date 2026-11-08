@@ -124,9 +124,12 @@ export async function renderPdfPageToCanvas(
 }
 
 /**
- * Advanced Photo Cropper:
- * Uses both edge gradients (facial/clothing features) and background margin scanning
- * to capture the full portrait from hair to shoulders without clipping light clothing.
+ * High-Precision Computer Vision Photo Cropper:
+ * Detects the farmer portrait in Page 1 of the registration form.
+ * Uses 2D spatial density, morphological closing, and connected component
+ * analysis to locate the exact photograph block, avoiding header text
+ * (such as "Farmer Photograph") and table divider lines, and performs
+ * fine edge trimming to remove any surrounding white margin.
  */
 export function extractPhotoFromCanvas(canvas: HTMLCanvasElement): string | null {
   const ctx = canvas.getContext('2d');
@@ -135,104 +138,274 @@ export function extractPhotoFromCanvas(canvas: HTMLCanvasElement): string | null
   const w = canvas.width;
   const h = canvas.height;
 
-  // Search zone in top-right quadrant beneath "Farmer Photograph"
-  const rx1 = Math.floor(w * 0.68);
-  const ry1 = Math.floor(h * 0.14);
-  const rx2 = Math.floor(w * 0.98);
-  const ry2 = Math.floor(h * 0.48);
+  // Search region: Upper-right quadrant of Page 1
+  // In government farmer registration forms (AgriStack, PM-Kisan, State forms),
+  // the photo box is always in the upper right.
+  const rx1 = Math.floor(w * 0.52);
+  const ry1 = Math.floor(h * 0.10);
+  const rx2 = Math.floor(w * 0.99);
+  const ry2 = Math.floor(h * 0.58);
 
   const roiW = rx2 - rx1;
   const roiH = ry2 - ry1;
+  if (roiW <= 40 || roiH <= 40) return null;
 
   const imgData = ctx.getImageData(rx1, ry1, roiW, roiH);
   const data = imgData.data;
 
-  const getPixel = (x: number, y: number) => {
-    const idx = (y * roiW + x) * 4;
-    return (data[idx] * 299 + data[idx + 1] * 587 + data[idx + 2] * 114) / 1000;
+  // Grid downsampling step for speed and noise filtering
+  const step = 2;
+  const gw = Math.floor(roiW / step);
+  const gh = Math.floor(roiH / step);
+  if (gw < 10 || gh < 10) return null;
+
+  // Binary grid: 1 = content (non-white), 0 = paper background
+  const grid = new Uint8Array(gw * gh);
+
+  for (let gy = 0; gy < gh; gy++) {
+    const cy = gy * step;
+    const rowOffset = gy * gw;
+    for (let gx = 0; gx < gw; gx++) {
+      const cx = gx * step;
+      const idx = (cy * roiW + cx) * 4;
+      const r = data[idx];
+      const g = data[idx + 1];
+      const b = data[idx + 2];
+      const gray = (r * 299 + g * 587 + b * 114) / 1000;
+      // White/blank paper background in scanned PDFs is typically >= 238
+      if (gray < 238) {
+        grid[rowOffset + gx] = 1;
+      }
+    }
+  }
+
+  // Morphological closing to bridge light patches (white kurta/shirt, buttons, skin highlights)
+  const closed = new Uint8Array(grid);
+  for (let gy = 1; gy < gh - 1; gy++) {
+    const rowOffset = gy * gw;
+    for (let gx = 1; gx < gw - 1; gx++) {
+      if (grid[rowOffset + gx] === 1) continue;
+      const nb =
+        grid[rowOffset - gw + gx - 1] +
+        grid[rowOffset - gw + gx] +
+        grid[rowOffset - gw + gx + 1] +
+        grid[rowOffset + gx - 1] +
+        grid[rowOffset + gx + 1] +
+        grid[rowOffset + gw + gx - 1] +
+        grid[rowOffset + gw + gx] +
+        grid[rowOffset + gw + gx + 1];
+      if (nb >= 4) {
+        closed[rowOffset + gx] = 1;
+      }
+    }
+  }
+
+  // Connected component labeling (BFS)
+  const visited = new Uint8Array(gw * gh);
+  interface Candidate {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    aspect: number;
+    density: number;
+    score: number;
+  }
+  const candidates: Candidate[] = [];
+
+  const minBoxW = Math.max(20, Math.floor((w * 0.05) / step));
+  const minBoxH = Math.max(25, Math.floor((h * 0.07) / step));
+  const maxBoxW = Math.floor((w * 0.45) / step);
+  const maxBoxH = Math.floor((h * 0.50) / step);
+
+  for (let gy = 0; gy < gh; gy++) {
+    const rowOffset = gy * gw;
+    for (let gx = 0; gx < gw; gx++) {
+      const idx = rowOffset + gx;
+      if (closed[idx] === 0 || visited[idx] === 1) continue;
+
+      const queue: number[] = [idx];
+      visited[idx] = 1;
+      let cMinGx = gx;
+      let cMaxGx = gx;
+      let cMinGy = gy;
+      let cMaxGy = gy;
+      let count = 0;
+
+      while (queue.length > 0) {
+        const currIdx = queue.pop()!;
+        count++;
+        const curGx = currIdx % gw;
+        const curGy = Math.floor(currIdx / gw);
+
+        if (curGx < cMinGx) cMinGx = curGx;
+        if (curGx > cMaxGx) cMaxGx = curGx;
+        if (curGy < cMinGy) cMinGy = curGy;
+        if (curGy > cMaxGy) cMaxGy = curGy;
+
+        // 4 cardinal neighbors
+        if (curGy > 0) {
+          const nIdx = currIdx - gw;
+          if (closed[nIdx] === 1 && visited[nIdx] === 0) {
+            visited[nIdx] = 1;
+            queue.push(nIdx);
+          }
+        }
+        if (curGy < gh - 1) {
+          const nIdx = currIdx + gw;
+          if (closed[nIdx] === 1 && visited[nIdx] === 0) {
+            visited[nIdx] = 1;
+            queue.push(nIdx);
+          }
+        }
+        if (curGx > 0) {
+          const nIdx = currIdx - 1;
+          if (closed[nIdx] === 1 && visited[nIdx] === 0) {
+            visited[nIdx] = 1;
+            queue.push(nIdx);
+          }
+        }
+        if (curGx < gw - 1) {
+          const nIdx = currIdx + 1;
+          if (closed[nIdx] === 1 && visited[nIdx] === 0) {
+            visited[nIdx] = 1;
+            queue.push(nIdx);
+          }
+        }
+      }
+
+      const compW = cMaxGx - cMinGx + 1;
+      const compH = cMaxGy - cMinGy + 1;
+
+      if (compW >= minBoxW && compH >= minBoxH && compW <= maxBoxW && compH <= maxBoxH) {
+        const aspect = compW / compH;
+        const density = count / (compW * compH);
+
+        // Portrait photo aspect ratio is ~0.50 to 1.25, with dense fill (density >= 0.40)
+        // Header text is rejected because individual glyphs are small (< minBoxW) and have sparse fill (<0.25)
+        // Table banner is rejected because aspect is > 3.0
+        if (aspect >= 0.50 && aspect <= 1.25 && density >= 0.40) {
+          const aspectScore = 1.0 - Math.abs(aspect - 0.80) * 1.5;
+          const score = (compW * compH) * density * Math.max(0.2, aspectScore);
+          candidates.push({
+            x: rx1 + cMinGx * step,
+            y: ry1 + cMinGy * step,
+            w: compW * step,
+            h: compH * step,
+            aspect,
+            density,
+            score,
+          });
+        }
+      }
+    }
+  }
+
+  // Fallback if strict filter found nothing
+  let best: Candidate | null = null;
+  if (candidates.length > 0) {
+    candidates.sort((a, b) => b.score - a.score);
+    best = candidates[0];
+  }
+
+  if (!best) {
+    return null;
+  }
+
+  // Fine edge snapping: trim any residual white margins around the detected box
+  const pad = Math.max(4, Math.floor(w * 0.005));
+  let cropX1 = Math.max(0, best.x - pad);
+  let cropY1 = Math.max(0, best.y - pad);
+  let cropX2 = Math.min(w, best.x + best.w + pad);
+  let cropY2 = Math.min(h, best.y + best.h + pad);
+
+  // Helper to read pixel gray from full canvas context
+  const fw = cropX2 - cropX1;
+  const fh = cropY2 - cropY1;
+  const fullImgData = ctx.getImageData(cropX1, cropY1, fw, fh);
+  const fullData = fullImgData.data;
+
+  const getFullGray = (lx: number, ly: number) => {
+    const i = (ly * fw + lx) * 4;
+    return (fullData[i] * 299 + fullData[i + 1] * 587 + fullData[i + 2] * 114) / 1000;
   };
 
-  // 1. Find top edge of photo (head/hair)
-  let topEdge = 0;
-  for (let y = 0; y < roiH; y++) {
-    let nonWhite = 0;
-    for (let x = 0; x < roiW; x += 2) {
-      if (getPixel(x, y) < 238) nonWhite++;
+  // Trim top white rows
+  let trimTop = 0;
+  while (trimTop < fh - 30) {
+    let sum = 0;
+    for (let x = 0; x < fw; x++) {
+      sum += getFullGray(x, trimTop);
     }
-    if (nonWhite > (roiW / 2) * 0.30) {
-      topEdge = y;
+    if (sum / fw > 244) {
+      trimTop++;
+    } else {
       break;
     }
   }
 
-  // 2. Find bottom edge of photo:
-  // Detect where the photo content ends and white margin gap begins before the next table header bar
-  let bottomEdge = roiH;
-  for (let y = topEdge + 80; y < roiH; y++) {
-    let rowSum = 0;
-    let sampled = 0;
-    for (let x = 0; x < roiW; x += 3) {
-      rowSum += getPixel(x, y);
-      sampled++;
+  // Trim bottom white rows
+  let trimBottom = fh;
+  while (trimBottom > trimTop + 30) {
+    let sum = 0;
+    for (let x = 0; x < fw; x++) {
+      sum += getFullGray(x, trimBottom - 1);
     }
-    const avg = rowSum / sampled;
-    if (avg > 248) { // Distinct white margin band
-      bottomEdge = y;
+    if (sum / fw > 244) {
+      trimBottom--;
+    } else {
       break;
     }
   }
 
-  // 3. Find left and right edges within [topEdge, bottomEdge]
-  const cropH = bottomEdge - topEdge;
-  let leftEdge = 0;
-  for (let x = 0; x < roiW; x++) {
-    let nonWhite = 0;
-    for (let y = topEdge; y < bottomEdge; y += 3) {
-      if (getPixel(x, y) < 238) nonWhite++;
+  // Trim left white columns
+  let trimLeft = 0;
+  while (trimLeft < fw - 30) {
+    let sum = 0;
+    for (let y = trimTop; y < trimBottom; y++) {
+      sum += getFullGray(trimLeft, y);
     }
-    if (nonWhite > (cropH / 3) * 0.25) {
-      leftEdge = x;
+    if (sum / (trimBottom - trimTop) > 244) {
+      trimLeft++;
+    } else {
       break;
     }
   }
 
-  let rightEdge = roiW;
-  for (let x = roiW - 1; x > leftEdge; x--) {
-    let nonWhite = 0;
-    for (let y = topEdge; y < bottomEdge; y += 3) {
-      if (getPixel(x, y) < 238) nonWhite++;
+  // Trim right white columns
+  let trimRight = fw;
+  while (trimRight > trimLeft + 30) {
+    let sum = 0;
+    for (let y = trimTop; y < trimBottom; y++) {
+      sum += getFullGray(trimRight - 1, y);
     }
-    if (nonWhite > (cropH / 3) * 0.25) {
-      rightEdge = x;
+    if (sum / (trimBottom - trimTop) > 244) {
+      trimRight--;
+    } else {
       break;
     }
   }
 
-  let finalW = rightEdge - leftEdge;
-  let finalH = bottomEdge - topEdge;
+  const finalX = cropX1 + trimLeft;
+  const finalY = cropY1 + trimTop;
+  const finalW = trimRight - trimLeft;
+  const finalH = trimBottom - trimTop;
 
-  if (finalW < 40 || finalH < 40) return null;
+  if (finalW < 30 || finalH < 30) return null;
 
-  // Enforce standard passport portrait aspect ratio (~3:4 or ~4:5)
-  // If slightly off due to margins, trim proportionally
-  const idealAspect = 0.80; // width / height
-  const currentAspect = finalW / finalH;
-  if (currentAspect < 0.65) {
-    finalW = Math.floor(finalH * idealAspect);
-  } else if (currentAspect > 1.05) {
-    finalH = Math.floor(finalW / idealAspect);
-  }
-
+  // Render to output canvas with high quality
   const cropCanvas = document.createElement('canvas');
   cropCanvas.width = finalW;
   cropCanvas.height = finalH;
   const cropCtx = cropCanvas.getContext('2d');
   if (!cropCtx) return null;
 
+  cropCtx.imageSmoothingEnabled = true;
+  cropCtx.imageSmoothingQuality = 'high';
   cropCtx.drawImage(
     canvas,
-    rx1 + leftEdge,
-    ry1 + topEdge,
+    finalX,
+    finalY,
     finalW,
     finalH,
     0,
@@ -396,7 +569,7 @@ export async function extractFarmerDataFromPdf(
   // 3. Identifier Name (Father / Spouse)
   let identifierName = '';
   const idMatch = fullText.match(/Identifier\s*Name\s*(?:In\s*English)?\s+([A-Za-z\s]+?)(?=\s+Identifier|\s+Local|\s*[|:]|\n|$)/i) ||
-                  fullText.match(/(?:Father|Husband|Spouse)(?:\'s)?\s*(?:Name)?\s*[:\-\s]*([A-Za-z\s]{3,40}?)(?=\s*[|:]|[^\x00-\x7F]|\n|$)/i);
+    fullText.match(/(?:Father|Husband|Spouse)(?:\'s)?\s*(?:Name)?\s*[:\-\s]*([A-Za-z\s]{3,40}?)(?=\s*[|:]|[^\x00-\x7F]|\n|$)/i);
   if (idMatch) {
     const raw = idMatch[1].replace(/[^A-Za-z\s]/g, '').trim();
     if (raw.length >= 3 && !/^(Gender|Male|Female|Caste|Category|Identifier|Relationship|In|English)$/i.test(raw)) {
@@ -407,12 +580,12 @@ export async function extractFarmerDataFromPdf(
   // 4. DOB & Age
   let dob = '';
   const dobMatch = fullText.match(/(?:Date\s*of\s*Birth|DOB|Birth\s*Date)[\s\S]*?([0-3]?\d[\/\.\-][0-1]?\d[\/\.\-](?:19|20)\d{2})/i) ||
-                   p1Text.match(/\b([0-3]?\d[\/\.\-][0-1]?\d[\/\.\-](?:19|20)\d{2})\b/);
+    p1Text.match(/\b([0-3]?\d[\/\.\-][0-1]?\d[\/\.\-](?:19|20)\d{2})\b/);
   if (dobMatch) dob = dobMatch[1].replace(/-/g, '/').trim();
 
   let age = '';
   const ageMatch = p1Text.match(/Age\s*[:\-\s]*(\d{1,3})/i) ||
-                   p1Text.match(/\b(\d{1,3})\s*(?:Years|Yrs)\b/i);
+    p1Text.match(/\b(\d{1,3})\s*(?:Years|Yrs)\b/i);
   if (ageMatch) age = ageMatch[1].trim();
 
   // 5. Gender
@@ -444,7 +617,7 @@ export async function extractFarmerDataFromPdf(
   // 7. Mobile Number
   let mobileNumber = '';
   const mobMatch = fullText.match(/(?:Mobile|Phone|Contact)(?:\s*(?:Number|No))?\s*[:\-\s]*([6-9]\d{9})\b/i) ||
-                   fullText.match(/\b([6-9]\d{9})\b/);
+    fullText.match(/\b([6-9]\d{9})\b/);
   if (mobMatch) mobileNumber = mobMatch[1].trim();
 
   // 8. Land Details

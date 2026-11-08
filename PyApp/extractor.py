@@ -348,64 +348,172 @@ class FarmerFormExtractor:
         return record
 
     def _extract_photo(self, page_img: Image.Image) -> Optional[Image.Image]:
-        """Locates and extracts the farmer photograph from the first registration form page."""
+        """Locates and extracts the farmer photograph from the first registration form page using spatial computer vision."""
         try:
-            data = pytesseract.image_to_data(page_img, lang="eng", output_type=pytesseract.Output.DICT)
-            target_idx = -1
+            w, h = page_img.size
+            img_rgb = page_img.convert("RGB")
+            pix = img_rgb.load()
 
-            for i, word in enumerate(data["text"]):
-                w_lower = word.lower().strip()
-                if "photograph" in w_lower or "photo" in w_lower:
-                    target_idx = i
+            # Search region: Upper-right quadrant of Page 1
+            rx1 = int(w * 0.52)
+            ry1 = int(h * 0.10)
+            rx2 = int(w * 0.99)
+            ry2 = int(h * 0.58)
+
+            rw = rx2 - rx1
+            rh = ry2 - ry1
+            if rw <= 40 or rh <= 40:
+                return None
+
+            step = max(2, int(w / 1200))
+            gw = rw // step
+            gh = rh // step
+            if gw < 10 or gh < 10:
+                return None
+
+            grid = bytearray(gw * gh)
+
+            for gy in range(gh):
+                cy = ry1 + gy * step
+                row_offset = gy * gw
+                for gx in range(gw):
+                    cx = rx1 + gx * step
+                    r, g, b = pix[(cx, cy)]
+                    gray = (r * 299 + g * 587 + b * 114) // 1000
+                    if gray < 238:
+                        grid[row_offset + gx] = 1
+
+            # Morphological closing (3x3 dilation) to fill light clothing/hair gaps
+            closed = bytearray(grid)
+            for gy in range(1, gh - 1):
+                row_offset = gy * gw
+                for gx in range(1, gw - 1):
+                    if grid[row_offset + gx] == 1:
+                        continue
+                    nb = (
+                        grid[row_offset - gw + gx - 1] + grid[row_offset - gw + gx] + grid[row_offset - gw + gx + 1] +
+                        grid[row_offset + gx - 1] + grid[row_offset + gx + 1] +
+                        grid[row_offset + gw + gx - 1] + grid[row_offset + gw + gx] + grid[row_offset + gw + gx + 1]
+                    )
+                    if nb >= 4:
+                        closed[row_offset + gx] = 1
+
+            # Connected component analysis (BFS)
+            visited = bytearray(gw * gh)
+            candidates = []
+
+            min_cw = max(20, int(w * 0.05) // step)
+            min_ch = max(25, int(h * 0.07) // step)
+            max_cw = int(w * 0.45) // step
+            max_ch = int(h * 0.50) // step
+
+            for gy in range(gh):
+                row_offset = gy * gw
+                for gx in range(gw):
+                    idx = row_offset + gx
+                    if closed[idx] == 0 or visited[idx] == 1:
+                        continue
+
+                    q = [idx]
+                    visited[idx] = 1
+                    c_min_gx, c_max_gx = gx, gx
+                    c_min_gy, c_max_gy = gy, gy
+                    count = 0
+
+                    while q:
+                        curr_idx = q.pop()
+                        count += 1
+                        cur_gx = curr_idx % gw
+                        cur_gy = curr_idx // gw
+
+                        if cur_gx < c_min_gx: c_min_gx = cur_gx
+                        if cur_gx > c_max_gx: c_max_gx = cur_gx
+                        if cur_gy < c_min_gy: c_min_gy = cur_gy
+                        if cur_gy > c_max_gy: c_max_gy = cur_gy
+
+                        if cur_gy > 0:
+                            n_idx = curr_idx - gw
+                            if closed[n_idx] == 1 and visited[n_idx] == 0:
+                                visited[n_idx] = 1
+                                q.append(n_idx)
+                        if cur_gy < gh - 1:
+                            n_idx = curr_idx + gw
+                            if closed[n_idx] == 1 and visited[n_idx] == 0:
+                                visited[n_idx] = 1
+                                q.append(n_idx)
+                        if cur_gx > 0:
+                            n_idx = curr_idx - 1
+                            if closed[n_idx] == 1 and visited[n_idx] == 0:
+                                visited[n_idx] = 1
+                                q.append(n_idx)
+                        if cur_gx < gw - 1:
+                            n_idx = curr_idx + 1
+                            if closed[n_idx] == 1 and visited[n_idx] == 0:
+                                visited[n_idx] = 1
+                                q.append(n_idx)
+
+                    cw = c_max_gx - c_min_gx + 1
+                    ch = c_max_gy - c_min_gy + 1
+
+                    if cw >= min_cw and ch >= min_ch and cw <= max_cw and ch <= max_ch:
+                        aspect = cw / ch
+                        density = count / (cw * ch)
+                        if 0.50 <= aspect <= 1.25 and density >= 0.40:
+                            aspect_score = 1.0 - abs(aspect - 0.80) * 1.5
+                            score = (cw * ch) * density * max(0.2, aspect_score)
+                            candidates.append({
+                                "x": rx1 + c_min_gx * step,
+                                "y": ry1 + c_min_gy * step,
+                                "w": cw * step,
+                                "h": ch * step,
+                                "aspect": aspect,
+                                "density": density,
+                                "score": score,
+                            })
+
+            if not candidates:
+                return None
+
+            candidates.sort(key=lambda c: c["score"], reverse=True)
+            best = candidates[0]
+
+            pad = max(4, int(w * 0.005))
+            crop_x1 = max(0, best["x"] - pad)
+            crop_y1 = max(0, best["y"] - pad)
+            crop_x2 = min(w, best["x"] + best["w"] + pad)
+            crop_y2 = min(h, best["y"] + best["h"] + pad)
+
+            # Trim white margin rows/cols
+            while crop_y1 < crop_y2 - 30:
+                row_avg = sum((pix[(x, crop_y1)][0]*299 + pix[(x, crop_y1)][1]*587 + pix[(x, crop_y1)][2]*114)//1000 for x in range(crop_x1, crop_x2)) / (crop_x2 - crop_x1)
+                if row_avg > 244:
+                    crop_y1 += 1
+                else:
                     break
 
-            if target_idx == -1:
-                w, h = page_img.size
-                cand_x1 = int(w * 0.70)
-                cand_y1 = int(h * 0.15)
-                cand_x2 = int(w * 0.98)
-                cand_y2 = int(h * 0.45)
-            else:
-                lx = data["left"][target_idx]
-                ly = data["top"][target_idx]
-                lw = data["width"][target_idx]
-                lh = data["height"][target_idx]
-                cand_x1 = max(0, lx - 120)
-                cand_y1 = ly + lh + 5
-                cand_x2 = min(page_img.width, lx + lw + 120)
-                cand_y2 = min(page_img.height, ly + lh + 350)
-
-            gray = page_img.convert("L")
-
-            # Find top edge of photo
-            mid_x = (cand_x1 + cand_x2) // 2
-            start_y = cand_y1
-            while start_y < cand_y2 and gray.getpixel((mid_x, start_y)) >= 245:
-                start_y += 1
-
-            # Find bottom edge of photo
-            end_y = start_y
-            while end_y < cand_y2:
-                row = [gray.getpixel((x, end_y)) for x in range(cand_x1, cand_x2, 5)]
-                if all(p >= 245 for p in row):
+            while crop_y2 > crop_y1 + 30:
+                row_avg = sum((pix[(x, crop_y2 - 1)][0]*299 + pix[(x, crop_y2 - 1)][1]*587 + pix[(x, crop_y2 - 1)][2]*114)//1000 for x in range(crop_x1, crop_x2)) / (crop_x2 - crop_x1)
+                if row_avg > 244:
+                    crop_y2 -= 1
+                else:
                     break
-                end_y += 1
 
-            # Find left and right edges
-            mid_y = (start_y + end_y) // 2
-            start_x = cand_x1
-            while start_x < cand_x2 and gray.getpixel((start_x, mid_y)) >= 245:
-                start_x += 1
+            while crop_x1 < crop_x2 - 30:
+                col_avg = sum((pix[(crop_x1, y)][0]*299 + pix[(crop_x1, y)][1]*587 + pix[(crop_x1, y)][2]*114)//1000 for y in range(crop_y1, crop_y2)) / (crop_y2 - crop_y1)
+                if col_avg > 244:
+                    crop_x1 += 1
+                else:
+                    break
 
-            end_x = cand_x2 - 1
-            while end_x > cand_x1 and gray.getpixel((end_x, mid_y)) >= 245:
-                end_x -= 1
+            while crop_x2 > crop_x1 + 30:
+                col_avg = sum((pix[(crop_x2 - 1, y)][0]*299 + pix[(crop_x2 - 1, y)][1]*587 + pix[(crop_x2 - 1, y)][2]*114)//1000 for y in range(crop_y1, crop_y2)) / (crop_y2 - crop_y1)
+                if col_avg > 244:
+                    crop_x2 -= 1
+                else:
+                    break
 
-            box_w = end_x - start_x
-            box_h = end_y - start_y
-            if box_w >= 40 and box_h >= 40:
-                cropped = page_img.crop((start_x, start_y, end_x + 1, end_y + 1))
-                return cropped
+            if crop_x2 - crop_x1 >= 30 and crop_y2 - crop_y1 >= 30:
+                return page_img.crop((crop_x1, crop_y1, crop_x2, crop_y2))
 
         except Exception as e:
             print(f"[Photo Extraction Warning] {e}", file=sys.stderr)

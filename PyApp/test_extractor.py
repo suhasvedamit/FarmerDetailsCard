@@ -19,7 +19,11 @@ from app import app
 class TestFarmerExtraction(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.sample_pdf = os.path.join(os.path.dirname(__file__), "data", "27_490_4187_555391_006318_261104222058.pdf")
+        base = os.path.dirname(__file__)
+        candidate = os.path.join(base, "data", "27_490_4187_555391_006318_261104222058.pdf")
+        if not os.path.exists(candidate):
+            candidate = os.path.join(base, "..", "data", "27_490_4187_555391_006318_261104222058.pdf")
+        cls.sample_pdf = os.path.abspath(candidate)
         cls.extractor = FarmerFormExtractor()
         cls.client = app.test_client()
 

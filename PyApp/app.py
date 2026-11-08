@@ -26,7 +26,7 @@ from PyApp.card_generator import generate_farmer_id_card_image, generate_farmer_
 # Setup directories
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
-DATA_FOLDER = os.path.join(BASE_DIR, "data")
+DATA_FOLDER = os.path.join(BASE_DIR, "data") if os.path.exists(os.path.join(BASE_DIR, "data")) else os.path.join(BASE_DIR, "..", "data")
 SAMPLE_PDF_PATH = os.path.join(DATA_FOLDER, "27_490_4187_555391_006318_261104222058.pdf")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 

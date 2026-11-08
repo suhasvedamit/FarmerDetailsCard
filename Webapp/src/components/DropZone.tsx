@@ -1,14 +1,24 @@
 import React, { useRef, useState } from 'react';
-import { UploadCloud, FileCheck2 } from 'lucide-react';
+import { UploadCloud, ExternalLink } from 'lucide-react';
 
 interface DropZoneProps {
   onFileSelected: (file: File) => void;
   isProcessing: boolean;
 }
 
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+
 export const DropZone: React.FC<DropZoneProps> = ({ onFileSelected, isProcessing }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (file: File) => {
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      alert('File size exceeds the 5 MB limit. Please upload a PDF under 5 MB.');
+      return;
+    }
+    onFileSelected(file);
+  };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -23,7 +33,7 @@ export const DropZone: React.FC<DropZoneProps> = ({ onFileSelected, isProcessing
     e.preventDefault();
     setIsDragOver(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      onFileSelected(e.dataTransfer.files[0]);
+      handleFile(e.dataTransfer.files[0]);
     }
   };
 
@@ -44,7 +54,7 @@ export const DropZone: React.FC<DropZoneProps> = ({ onFileSelected, isProcessing
         type="file"
         accept=".pdf,image/*"
         className="hidden"
-        onChange={e => e.target.files?.[0] && onFileSelected(e.target.files[0])}
+        onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
         disabled={isProcessing}
       />
       <div className="flex flex-col items-center justify-center space-y-2">
@@ -54,8 +64,19 @@ export const DropZone: React.FC<DropZoneProps> = ({ onFileSelected, isProcessing
         <div className="text-sm font-medium text-slate-700">
           <span className="text-emerald-700 font-semibold hover:underline">Click to upload</span> or drag and drop Farmer Registration PDF
         </div>
-        <p className="text-xs text-slate-400">
-          Processed locally in your browser with WebAssembly OCR (No files sent to any server)
+        <p className="text-xs text-slate-500">
+          Size limit 5 MB • Expecting fixed format (e.g.{' '}
+          <a
+            href="./sample_farmer_record.pdf"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            className="text-emerald-700 font-semibold underline hover:text-emerald-800 inline-flex items-center gap-0.5"
+          >
+            <span>example PDF</span>
+            <ExternalLink className="w-3 h-3" />
+          </a>
+          )
         </p>
       </div>
     </div>

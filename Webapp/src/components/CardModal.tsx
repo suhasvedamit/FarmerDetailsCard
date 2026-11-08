@@ -25,7 +25,7 @@ export const CardModal: React.FC<CardModalProps> = ({
           <div className="flex items-center space-x-2">
             <span className="text-xl">🪪</span>
             <h3 className="font-bold text-slate-800 text-base">
-              Generated Farmer ID Card
+              Generated Farmer Details Card
             </h3>
           </div>
           <button
@@ -41,7 +41,7 @@ export const CardModal: React.FC<CardModalProps> = ({
           {cardPreviewUrl ? (
             <img
               src={cardPreviewUrl}
-              alt="Farmer Card Preview"
+              alt="Farmer Details Card Preview"
               className="max-w-full rounded-xl shadow-lg border border-slate-200"
             />
           ) : (
@@ -52,21 +52,26 @@ export const CardModal: React.FC<CardModalProps> = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row items-center justify-end space-y-2 sm:space-y-0 sm:space-x-3 pt-2 border-t border-slate-100">
-          <button
-            onClick={() => downloadCardAsPng(record)}
-            className="w-full sm:w-auto px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg shadow transition flex items-center justify-center space-x-1.5"
-          >
-            <ImageIcon className="w-4 h-4" />
-            <span>Download High-Res PNG</span>
-          </button>
-          <button
-            onClick={() => downloadCardAsPdf(record)}
-            className="w-full sm:w-auto px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-lg shadow transition flex items-center justify-center space-x-1.5"
-          >
-            <FileText className="w-4 h-4 text-red-400" />
-            <span>Download CR80 Print PDF</span>
-          </button>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-slate-100">
+          <p className="text-xs text-slate-500 text-center sm:text-left">
+            This is for information purpose only and no official usage.
+          </p>
+          <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
+            <button
+              onClick={() => downloadCardAsPng(record)}
+              className="w-full sm:w-auto px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg shadow transition flex items-center justify-center space-x-1.5"
+            >
+              <ImageIcon className="w-4 h-4" />
+              <span>Download High-Res PNG</span>
+            </button>
+            <button
+              onClick={() => downloadCardAsPdf(record)}
+              className="w-full sm:w-auto px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-lg shadow transition flex items-center justify-center space-x-1.5"
+            >
+              <FileText className="w-4 h-4 text-red-400" />
+              <span>Download CR80 Print PDF</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

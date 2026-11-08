@@ -7,10 +7,16 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Dependencies
+# Dependencies & Builds
 node_modules
+dist
+dist/
+Webapp/dist
+Webapp/dist/
 dist-ssr
 *.local
+.vite
+.vite/
 
 # Editor directories and files
 .vscode/*

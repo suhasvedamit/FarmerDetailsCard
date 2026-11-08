@@ -1,10 +1,9 @@
-import QRCode from 'qrcode';
 import { jsPDF } from 'jspdf';
 import { FarmerRecord } from '../types';
 
 /**
- * Generates an official-grade, print-ready Farmer ID Card canvas (1050 x 660 px)
- * directly in the browser matching the AgriStack Government specification.
+ * Generates an unofficial, printable Farmer Details Card canvas (1050 x 660 px)
+ * directly in the browser for personal informational reference.
  */
 export async function generateCardCanvas(record: FarmerRecord): Promise<HTMLCanvasElement> {
   const canvas = document.createElement('canvas');
@@ -21,8 +20,7 @@ export async function generateCardCanvas(record: FarmerRecord): Promise<HTMLCanv
   ctx.fillRect(0, 0, w, h);
 
   // Outer Border & Rounded Corner Card Box
-  const cardGreen = '#0f5132'; // Govt Deep Green
-  const lightGreen = '#e8f5e9';
+  const cardGreen = '#0f5132'; // Deep Green
   const radius = 24;
 
   ctx.strokeStyle = cardGreen;
@@ -39,17 +37,10 @@ export async function generateCardCanvas(record: FarmerRecord): Promise<HTMLCanv
   ctx.fill();
   ctx.restore();
 
-  // Header Typography
+  // Header Typography - Farmer Details Card (No Government/Ministry details)
   ctx.fillStyle = '#ffffff';
-  ctx.font = '600 14px Inter, sans-serif';
-  ctx.fillText('GOVERNMENT OF INDIA • MINISTRY OF AGRICULTURE & FARMERS WELFARE', 28, 34);
-
-  ctx.font = '700 24px Inter, sans-serif';
-  ctx.fillText('FARMER ID CARD', 28, 72);
-
-  ctx.font = '600 14px Inter, sans-serif';
-  ctx.fillStyle = '#d1e7dd';
-  ctx.fillText('AGRISTACK REGISTRY', w - 215, 72);
+  ctx.font = '700 28px Inter, sans-serif';
+  ctx.fillText('FARMER DETAILS CARD', 28, 60);
 
   // Farmer Photo (Right Side Box matching template)
   const px = w - 235;
@@ -66,32 +57,29 @@ export async function generateCardCanvas(record: FarmerRecord): Promise<HTMLCanv
     try {
       const img = await loadImage(record.photo_url);
       ctx.save();
-      roundRect(ctx, px + 2, py + 2, pw - 4, ph - 4, 8);
+      const targetW = pw - 4;
+      const targetH = ph - 4;
+      roundRect(ctx, px + 2, py + 2, targetW, targetH, 8);
       ctx.clip();
-      ctx.drawImage(img, px + 2, py + 2, pw - 4, ph - 4);
+
+      // Proportional center-cover to ensure natural facial aspect ratio
+      const targetAspect = targetW / targetH;
+      const imgAspect = img.width / img.height;
+      let sx = 0, sy = 0, sw = img.width, sh = img.height;
+      if (imgAspect > targetAspect) {
+        sw = img.height * targetAspect;
+        sx = (img.width - sw) / 2;
+      } else {
+        sh = img.width / targetAspect;
+        sy = (img.height - sh) / 2;
+      }
+      ctx.drawImage(img, sx, sy, sw, sh, px + 2, py + 2, targetW, targetH);
       ctx.restore();
     } catch {
       drawPhotoPlaceholder(ctx, px, py, pw, ph);
     }
   } else {
     drawPhotoPlaceholder(ctx, px, py, pw, ph);
-  }
-
-  // QR Code below Photo
-  const qrx = w - 215;
-  const qry = 400;
-  const qrw = 155;
-  try {
-    const qrData = `AGRISTACK:ID=${record.farmer_id};NAME=${record.farmer_name};DOB=${record.dob};LAND=${record.land_detail?.summary || ''}`;
-    const qrDataUrl = await QRCode.toDataURL(qrData, { width: qrw, margin: 1 });
-    const qrImg = await loadImage(qrDataUrl);
-    ctx.drawImage(qrImg, qrx, qry, qrw, qrw);
-
-    ctx.fillStyle = cardGreen;
-    ctx.font = '600 12px Inter, sans-serif';
-    ctx.fillText('✓ Digitally Verified', qrx + 25, qry + qrw + 18);
-  } catch (err) {
-    console.error('QR code generation failed:', err);
   }
 
   // Farmer ID Pill Badge
@@ -202,8 +190,10 @@ export async function generateCardCanvas(record: FarmerRecord): Promise<HTMLCanv
   ctx.restore();
 
   ctx.fillStyle = '#4b5563';
-  ctx.font = '600 12px Inter, sans-serif';
-  ctx.fillText('Issued under Government of India AgriStack Farmer Registry | Valid Across India', 28, footerY + 26);
+  ctx.font = '600 13px Inter, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('This is for information purpose only and no official usage.', w / 2, footerY + 27);
+  ctx.textAlign = 'start';
 
   return canvas;
 }
@@ -211,7 +201,7 @@ export async function generateCardCanvas(record: FarmerRecord): Promise<HTMLCanv
 /**
  * Downloads the card as a PNG image.
  */
-export async function downloadCardAsPng(record: FarmerRecord, filename = 'farmer_id_card.png'): Promise<void> {
+export async function downloadCardAsPng(record: FarmerRecord, filename = 'farmer_details_card.png'): Promise<void> {
   const canvas = await generateCardCanvas(record);
   const dataUrl = canvas.toDataURL('image/png', 1.0);
   const a = document.createElement('a');
@@ -223,7 +213,7 @@ export async function downloadCardAsPng(record: FarmerRecord, filename = 'farmer
 /**
  * Generates and downloads a standard CR80 print-ready PDF card (85.6mm x 53.98mm).
  */
-export async function downloadCardAsPdf(record: FarmerRecord, filename = 'farmer_id_card.pdf'): Promise<void> {
+export async function downloadCardAsPdf(record: FarmerRecord, filename = 'farmer_details_card.pdf'): Promise<void> {
   const canvas = await generateCardCanvas(record);
   const imgData = canvas.toDataURL('image/png', 1.0);
 

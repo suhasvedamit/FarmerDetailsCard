@@ -1,85 +1,64 @@
-# AgriStack Farmer ID Extractor & Card Generator 🌾🇮🇳
+# Farmer ID Details Summary Card 🌾🇮🇳
 
-> **Production-ready, 100% Client-Side Web Application built for GitHub Pages with React, TypeScript, Tailwind CSS, PDF.js, and WebAssembly Tesseract OCR.**
+> **Client-Side Web Application & Tools for extracting and summarizing AgriStack Farmer Registration Records into official Kisan Pehchan Patra format.**
 
-Zero server costs, zero API subscriptions, 100% private (documents never leave the browser).
-
----
-
-## ⚡ Live on GitHub Pages
-
-This app is configured to deploy directly to **GitHub Pages** using the automated GitHub Actions workflow in [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
-
-### How to Enable on GitHub (in 30 seconds):
-1. Push this repository to your GitHub account.
-2. In your GitHub repository, navigate to **Settings** > **Pages**.
-3. Under **Build and deployment** > **Source**, select **GitHub Actions**.
-4. That's it! GitHub will automatically trigger the deployment workflow and give you a public URL (e.g. `https://<your-username>.github.io/<repo-name>/`).
+🌐 **Live GitHub Pages URL**: [https://suhasvedamit.github.io/FarmerDetailsCard/](https://suhasvedamit.github.io/FarmerDetailsCard/)
 
 ---
 
-## ✨ Features
+## 🚀 Live Demo & Web App
 
-- **10/10 Form Fields Extracted**:
-  1. Farmer ID
-  2. Farmer Name (English & Devanagari/Marathi)
-  3. Identifier Name (Father/Husband in English & Devanagari)
-  4. Date of Birth (DOB) & Age
-  5. Gender
-  6. Caste Category
-  7. Mobile Number
-  8. Land Details (Total Area, Gat/Survey No, Village, Sub-district, District, State)
-  9. Address
-  10. **Auto-Cropped Farmer Photo**
-- **100% In-Browser WebAssembly**:
-  - `pdfjs-dist`: High-resolution canvas rendering of PDF pages in browser memory.
-  - `tesseract.js`: WebAssembly OCR running inside client-side web workers with English + Marathi language packs.
-  - **Dynamic Photo Cropping**: Uses HTML5 Canvas pixel scanning to locate the photo bounding box below the "Farmer Photograph" header, trimming whitespace margins.
-- **Official Farmer ID Card Generator**:
-  - Matches the Government of India / AgriStack Kisan Pehchan Patra specification.
-  - Generates verified QR codes.
-  - Exports both **High-Resolution PNG** and **Print-Ready CR80 Vector PDF**.
+The React + TypeScript + WebAssembly web application is hosted on **GitHub Pages**:
+- **URL**: `https://suhasvedamit.github.io/FarmerDetailsCard/`
+- **100% Client-Side & Private**: Runs entirely in the user's browser using WebAssembly OCR (`tesseract.js`) and `pdfjs-dist`. Documents never leave the user's machine.
+- **Zero Backend Required**: Automated deployment via GitHub Actions on push to `main`.
+
+---
+
+## 📂 Project Structure
+
+```
+.
+├── Webapp/                 # React 18 + TypeScript + Vite + Tailwind CSS (GitHub Pages source)
+│   ├── src/                # UI components, PDF extraction engine, canvas card generator
+│   ├── public/             # Sample PDF documents and assets
+│   ├── package.json        # Dependencies (pdfjs-dist, tesseract.js, jspdf, qrcode)
+│   └── vite.config.ts      # Configured with relative base path './' for GitHub Pages
+├── PyApp/                  # Alternative Python / Flask backend application
+│   ├── app.py              # Flask server
+│   ├── extractor.py        # PDF extraction & OCR engine
+│   └── card_generator.py   # Card generation
+├── data/                   # Sample AgriStack Registration records
+└── .github/workflows/
+    └── deploy.yml          # GitHub Actions workflow for automated GitHub Pages deployment
+```
 
 ---
 
 ## 🛠️ Local Development
 
-### Prerequisites
-- Node.js 18+ & npm
+### Running the Web App
 
-### Setup & Run
 ```bash
-# 1. Install dependencies
+cd Webapp
 npm install
-
-# 2. Run local development server
 npm run dev
+```
 
-# 3. Build for production (outputs to /dist)
+To test the production build locally:
+
+```bash
 npm run build
+npm run preview
 ```
 
 ---
 
-## 📂 Repository Structure
+## ⚙️ GitHub Pages Deployment
 
-```
-├── .github/workflows/
-│   └── deploy.yml          # GitHub Actions deployment to GitHub Pages
-├── src/
-│   ├── components/         # React UI Components (Header, DropZone, Form, Modal)
-│   ├── lib/
-│   │   ├── pdfExtractor.ts # PDF.js + Tesseract.js WASM + Photo Cropper
-│   │   ├── cardGenerator.ts# Canvas ID Card Renderer (PNG + PDF)
-│   │   └── sampleData.ts   # Pre-embedded sample AgriStack record
-│   ├── App.tsx             # Main Application Logic
-│   └── types.ts            # TypeScript Definitions
-├── dist/                   # Compiled, production-ready static bundle
-├── data/                   # Sample AgriStack Registration PDF & Card Reference
-│   ├── 27_490_4187_555391_006318_261104222058.pdf
-│   └── image.png
-├── PyApp/                  # The Python / Flask / Docker backend version
-├── package.json
-└── vite.config.ts          # Configured with relative base './' for GitHub Pages
-```
+The repository includes an automated GitHub Actions workflow (`.github/workflows/deploy.yml`).
 
+### Enabling GitHub Pages:
+1. Go to **Settings** > **Pages** in this repository.
+2. Under **Build and deployment** > **Source**, select **GitHub Actions**.
+3. Any push to `main` will automatically build the web application and deploy it live.

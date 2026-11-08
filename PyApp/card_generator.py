@@ -16,7 +16,7 @@ import base64
 import argparse
 from typing import Dict, Any, Optional, Union
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 import qrcode
 import fitz  # PyMuPDF for native PDF generation
 
@@ -78,14 +78,10 @@ def generate_farmer_id_card_image(data: Dict[str, Any], photo_override: Optional
     draw.rounded_rectangle([(12, 12), (card_w - 12, 100)], radius=14, fill=(18, 94, 58))
     draw.rectangle([(12, 96), (card_w - 12, 102)], fill=(238, 120, 34))
 
-    # Header Typography (English Only)
-    f_hdr_top = FontManager.get_font(size=14, bold=False)
-    f_hdr_title = FontManager.get_font(size=24, bold=True)
-    f_hdr_gov = FontManager.get_font(size=14, bold=True)
+    # Header Typography (English Only) - Farmer Details Card (No Government/Ministry details)
+    f_hdr_title = FontManager.get_font(size=26, bold=True)
 
-    draw.text((32, 22), "MINISTRY OF AGRICULTURE & FARMERS WELFARE", font=f_hdr_top, fill=(240, 248, 242))
-    draw.text((32, 48), "FARMER IDENTITY CARD", font=f_hdr_title, fill=(255, 235, 120))
-    draw.text((card_w - 210, 52), "Government of India", font=f_hdr_gov, fill=(240, 245, 240))
+    draw.text((32, 42), "FARMER DETAILS CARD", font=f_hdr_title, fill=(255, 255, 255))
 
     # Fonts for Content
     f_pill = FontManager.get_font(size=16, bold=True)
@@ -185,33 +181,18 @@ def generate_farmer_id_card_image(data: Dict[str, Any], photo_override: Optional
     photo_y = 120
 
     if photo_img:
-        photo_resized = photo_img.resize((photo_box_w - 6, photo_box_h - 6), Image.Resampling.LANCZOS)
+        photo_box_inner_w = photo_box_w - 6
+        photo_box_inner_h = photo_box_h - 6
+        photo_fitted = ImageOps.fit(photo_img, (photo_box_inner_w, photo_box_inner_h), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
         draw.rounded_rectangle([(photo_x - 3, photo_y - 3), (photo_x + photo_box_w + 3, photo_y + photo_box_h + 3)], radius=8, outline=(18, 94, 58), width=3)
-        card.paste(photo_resized, (photo_x, photo_y))
+        card.paste(photo_fitted, (photo_x, photo_y))
     else:
         draw.rounded_rectangle([(photo_x, photo_y), (photo_x + photo_box_w, photo_y + photo_box_h)], radius=8, fill=(240, 240, 240), outline=(180, 180, 180), width=1)
         draw.text((photo_x + 35, photo_y + 95), "Farmer Photo", font=f_lbl, fill=(120, 120, 120))
 
-    # 11. Right Column: QR Code
-    qr_size = 150
-    qr_x = card_w - qr_size - 47
-    qr_y = photo_y + photo_box_h + 20
-
-    qr = qrcode.QRCode(box_size=3, border=1)
-    qr_payload = f"AGRISTACK|FID:{farmer_id}|NAME:{name}|MOB:{mobile}|LAND:{land_summary}"
-    qr.add_data(qr_payload)
-    qr.make(fit=True)
-    qr_img = qr.make_image(fill_color="black", back_color="white").resize((qr_size, qr_size))
-
-    draw.rounded_rectangle([(qr_x - 4, qr_y - 4), (qr_x + qr_size + 4, qr_y + qr_size + 4)], radius=8, outline=(210, 210, 210), width=1)
-    card.paste(qr_img, (qr_x, qr_y))
-
-    # Digital Verification Stamp under QR
-    draw.text((qr_x + 12, qr_y + qr_size + 8), "✓ Digitally Verified", font=f_ftr, fill=(18, 120, 50))
-
-    # 12. Footer Banner (English Only)
+    # 12. Footer Banner (Informational Purpose Only)
     draw.rounded_rectangle([(12, card_h - 45), (card_w - 12, card_h - 12)], radius=8, fill=(240, 245, 242))
-    draw.text((32, card_h - 35), "Department of Agriculture & Farmers Welfare, Government of India | Official Identity Card", font=f_ftr, fill=(50, 70, 60))
+    draw.text((32, card_h - 35), "This is for information purpose only and no official usage.", font=f_ftr, fill=(80, 80, 80))
 
     return card
 
