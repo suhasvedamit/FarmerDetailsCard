@@ -39,7 +39,6 @@ This app is configured to deploy directly to **GitHub Pages** using the automate
   - Matches the Government of India / AgriStack Kisan Pehchan Patra specification.
   - Generates verified QR codes.
   - Exports both **High-Resolution PNG** and **Print-Ready CR80 Vector PDF**.
-- **Instant Demo**: Click **"Try Sample Form"** on the site to test extraction and card generation in 1 click.
 
 ---
 

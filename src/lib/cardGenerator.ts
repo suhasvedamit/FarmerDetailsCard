@@ -109,7 +109,7 @@ export async function generateCardCanvas(record: FarmerRecord): Promise<HTMLCanv
 
   ctx.fillStyle = '#14532d';
   ctx.font = '700 16px Inter, sans-serif';
-  ctx.fillText(`Farmer ID: ${record.farmer_id || '77900535348'}`, badgeX + 16, badgeY + 26);
+  ctx.fillText(`Farmer ID: ${record.farmer_id || '--'}`, badgeX + 16, badgeY + 26);
 
   // Information Rows (Clean English Typography)
   let cy = 195;
@@ -123,7 +123,7 @@ export async function generateCardCanvas(record: FarmerRecord): Promise<HTMLCanv
   ctx.fillText('Farmer Name:', col1X, cy);
   ctx.fillStyle = '#111827';
   ctx.font = '700 17px Inter, sans-serif';
-  ctx.fillText(record.farmer_name || 'Ganesh Pandurang Shinde', col2X, cy);
+  ctx.fillText(record.farmer_name || '--', col2X, cy);
 
   // 2. Father / Spouse Name
   cy += rowGap;
@@ -132,7 +132,7 @@ export async function generateCardCanvas(record: FarmerRecord): Promise<HTMLCanv
   ctx.fillText('Father / Spouse:', col1X, cy);
   ctx.fillStyle = '#111827';
   ctx.font = '700 16px Inter, sans-serif';
-  ctx.fillText(record.identifier_name || 'Pandurang Shinde', col2X, cy);
+  ctx.fillText(record.identifier_name || '--', col2X, cy);
 
   // 3. DOB & Gender
   cy += rowGap;
@@ -141,14 +141,14 @@ export async function generateCardCanvas(record: FarmerRecord): Promise<HTMLCanv
   ctx.fillText('Date of Birth (DOB):', col1X, cy);
   ctx.fillStyle = '#111827';
   ctx.font = '700 16px Inter, sans-serif';
-  ctx.fillText(record.dob || '04/08/1987', col2X, cy);
+  ctx.fillText(record.dob || '--', col2X, cy);
 
   ctx.fillStyle = '#4b5563';
   ctx.font = '600 15px Inter, sans-serif';
   ctx.fillText('Gender:', col2X + 130, cy);
   ctx.fillStyle = '#111827';
   ctx.font = '700 16px Inter, sans-serif';
-  ctx.fillText(record.gender || 'Male', col2X + 205, cy);
+  ctx.fillText(record.gender || '--', col2X + 205, cy);
 
   // 4. Category & Mobile
   cy += rowGap;
@@ -157,14 +157,14 @@ export async function generateCardCanvas(record: FarmerRecord): Promise<HTMLCanv
   ctx.fillText('Caste Category:', col1X, cy);
   ctx.fillStyle = '#111827';
   ctx.font = '700 16px Inter, sans-serif';
-  ctx.fillText(record.caste_category || 'General', col2X, cy);
+  ctx.fillText(record.caste_category || '--', col2X, cy);
 
   ctx.fillStyle = '#4b5563';
   ctx.font = '600 15px Inter, sans-serif';
   ctx.fillText('Mobile:', col2X + 130, cy);
   ctx.fillStyle = '#111827';
   ctx.font = '700 16px Inter, sans-serif';
-  ctx.fillText(record.mobile_number || '9552533470', col2X + 205, cy);
+  ctx.fillText(record.mobile_number || '--', col2X + 205, cy);
 
   // 5. Land Details
   cy += rowGap;
@@ -173,7 +173,7 @@ export async function generateCardCanvas(record: FarmerRecord): Promise<HTMLCanv
   ctx.fillText('Land Details:', col1X, cy);
   ctx.fillStyle = '#111827';
   ctx.font = '600 14px Inter, sans-serif';
-  const landStr = record.land_detail?.summary || `${record.land_detail?.total_area_hectare || '0.72'} Hectare`;
+  const landStr = record.land_detail?.summary || (record.land_detail?.total_area_hectare ? `${record.land_detail.total_area_hectare} Hectare` : '--');
   ctx.fillText(truncateText(landStr, 52), col2X, cy);
   if (landStr.length > 52) {
     ctx.fillText(truncateText(landStr.substring(52), 52), col2X, cy + 20);
@@ -186,7 +186,7 @@ export async function generateCardCanvas(record: FarmerRecord): Promise<HTMLCanv
   ctx.fillText('Address:', col1X, cy);
   ctx.fillStyle = '#374151';
   ctx.font = '500 13px Inter, sans-serif';
-  const addr = record.address || '';
+  const addr = record.address || '--';
   ctx.fillText(truncateText(addr, 56), col2X, cy);
   if (addr.length > 56) {
     ctx.fillText(truncateText(addr.substring(56), 60), col2X, cy + 18);

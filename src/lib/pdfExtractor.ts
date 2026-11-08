@@ -35,14 +35,12 @@ function correctDistrict(rawText: string): string {
   if (/SATAR[A4]/i.test(upper)) return 'SATARA';
   if (/SANGL[I1]/i.test(upper)) return 'SANGLI';
   if (/KOLHAPU[R]/i.test(upper)) return 'KOLHAPUR';
-  return 'PUNE';
+  return '';
 }
 
 /**
  * Pre-processes an HTML5 Canvas for optimal OCR accuracy:
- * 1. Grayscale conversion
- * 2. Auto-contrast stretching (normalization)
- * 3. Background noise reduction
+ * Uses gentle linear contrast normalization without destructive hard thresholding.
  */
 export function preprocessCanvasForOcr(sourceCanvas: HTMLCanvasElement): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
@@ -58,7 +56,7 @@ export function preprocessCanvasForOcr(sourceCanvas: HTMLCanvasElement): HTMLCan
   // Find min and max brightness for auto-contrast stretching
   let minB = 255;
   let maxB = 0;
-  const step = 4; // Sample for performance
+  const step = 4;
 
   for (let i = 0; i < data.length; i += 4 * step) {
     const b = (data[i] * 299 + data[i + 1] * 587 + data[i + 2] * 114) / 1000;
@@ -68,18 +66,10 @@ export function preprocessCanvasForOcr(sourceCanvas: HTMLCanvasElement): HTMLCan
 
   const range = maxB - minB || 1;
 
-  // Apply contrast stretch + slight gamma curve to darken letters
   for (let i = 0; i < data.length; i += 4) {
     const gray = (data[i] * 299 + data[i + 1] * 587 + data[i + 2] * 114) / 1000;
-    // Normalize to 0..255
-    let stretched = ((gray - minB) / range) * 255;
-    // Non-linear thresholding: push faint text darker, paper background whiter
-    if (stretched > 210) {
-      stretched = 255; // Clean paper background
-    } else if (stretched < 140) {
-      stretched = Math.max(0, stretched * 0.7); // Darken text
-    }
-
+    // Gentle linear contrast stretch without destroying character anti-aliasing
+    const stretched = Math.min(255, Math.max(0, ((gray - minB) / range) * 255));
     data[i] = stretched;
     data[i + 1] = stretched;
     data[i + 2] = stretched;
@@ -255,8 +245,30 @@ export function extractPhotoFromCanvas(canvas: HTMLCanvasElement): string | null
 }
 
 /**
+ * Extracts digital text directly from PDF pages if available.
+ */
+async function extractDigitalPageTexts(pdf: pdfjsLib.PDFDocumentProxy): Promise<string[]> {
+  const pageTexts: string[] = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    try {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const str = textContent.items
+        .map((item: any) => ('str' in item ? item.str : ''))
+        .join(' ');
+      pageTexts.push(str);
+    } catch {
+      pageTexts.push('');
+    }
+  }
+  return pageTexts;
+}
+
+/**
  * Extracts all 10 fields and farmer photo purely in the browser.
- * Uses high-resolution rendering, canvas contrast pre-processing, and zone-based OCR.
+ * 1. Checks digital PDF text layer first.
+ * 2. If scanned, runs high-resolution full-page WASM OCR.
+ * 3. Never returns hardcoded prefilled mock data.
  */
 export async function extractFarmerDataFromPdf(
   pdfBuffer: ArrayBuffer,
@@ -271,153 +283,233 @@ export async function extractFarmerDataFromPdf(
   const p1RawCanvas = await renderPdfPageToCanvas(pdf, 1, 2.5);
   const photoUrl = extractPhotoFromCanvas(p1RawCanvas);
 
-  // Pre-process canvas for OCR
-  const p1Canvas = preprocessCanvasForOcr(p1RawCanvas);
-  const w1 = p1Canvas.width;
-  const h1 = p1Canvas.height;
+  // Check if digital text exists in the PDF
+  const digitalTexts = await extractDigitalPageTexts(pdf);
+  const hasDigitalText = digitalTexts.some(t => t.trim().length > 60);
 
-  onProgress?.('Initializing Tesseract WebAssembly engine...', 40);
-  const worker = await createWorker('eng', 1, {
-    logger: m => {
-      if (m.status === 'recognizing text') {
-        const pct = Math.floor(40 + (m.progress || 0) * 45);
-        onProgress?.(`Recognizing text (${Math.floor(m.progress * 100)}%)...`, pct);
+  let p1Text = digitalTexts[0] || '';
+  let p2Text = digitalTexts[1] || '';
+  let p3Text = digitalTexts[2] || '';
+
+  // If digital text is missing or sparse (scanned form), perform OCR
+  if (!hasDigitalText || p1Text.trim().length < 60) {
+    onProgress?.('Initializing Tesseract WebAssembly engine...', 40);
+    const worker = await createWorker('eng', 1, {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          const pct = Math.floor(40 + (m.progress || 0) * 45);
+          onProgress?.(`Recognizing text (${Math.floor(m.progress * 100)}%)...`, pct);
+        }
       }
+    });
+
+    // Page 1 OCR (Full page to avoid slicing lines in table layouts)
+    onProgress?.('Recognizing text on Page 1...', 50);
+    const p1Canvas = preprocessCanvasForOcr(p1RawCanvas);
+    const p1Res = await worker.recognize(p1Canvas);
+    p1Text = p1Res.data.text;
+
+    // Page 2 OCR (Mobile & Address)
+    if (totalPages >= 2) {
+      onProgress?.('Recognizing text on Page 2...', 70);
+      const p2RawCanvas = await renderPdfPageToCanvas(pdf, 2, 2.5);
+      const p2Canvas = preprocessCanvasForOcr(p2RawCanvas);
+      const p2Res = await worker.recognize(p2Canvas);
+      p2Text = p2Res.data.text;
     }
-  });
 
-  // Zone 1: Top Header (Farmer ID & Enrollment Number)
-  onProgress?.('Reading Farmer ID & Enrollment Number...', 50);
-  const headerCanvas = cropCanvasRegion(p1Canvas, 0, 0, w1 * 0.68, h1 * 0.46);
-  const headerRes = await worker.recognize(headerCanvas);
-  const headerText = headerRes.data.text;
+    // Page 3 OCR (Land Details)
+    if (totalPages >= 3) {
+      onProgress?.('Recognizing text on Page 3...', 85);
+      const p3RawCanvas = await renderPdfPageToCanvas(pdf, 3, 2.5);
+      const p3Canvas = preprocessCanvasForOcr(p3RawCanvas);
+      const p3Res = await worker.recognize(p3Canvas);
+      p3Text = p3Res.data.text;
+    }
 
-  // Zone 2: Demographic Details (Farmer Name, Gender, Caste Category, Identifier)
-  onProgress?.('Extracting demographic credentials...', 60);
-  const leftTableCanvas = cropCanvasRegion(p1Canvas, 0, h1 * 0.44, w1 * 0.58, h1 * 0.54);
-  const leftRes = await worker.recognize(leftTableCanvas);
-  const leftText = leftRes.data.text;
-
-  // Zone 3: Date of Birth and Age
-  onProgress?.('Extracting Date of Birth & Age...', 70);
-  const rightTableCanvas = cropCanvasRegion(p1Canvas, w1 * 0.56, h1 * 0.44, w1 * 0.44, h1 * 0.54);
-  const rightRes = await worker.recognize(rightTableCanvas);
-  const rightText = rightRes.data.text;
-
-  // Zone 4: Page 2 (Contact & Residential Address)
-  let p2Text = '';
-  if (totalPages >= 2) {
-    onProgress?.('Extracting Mobile Number & Residential Address...', 80);
-    const p2RawCanvas = await renderPdfPageToCanvas(pdf, 2, 2.5);
-    const p2Canvas = preprocessCanvasForOcr(p2RawCanvas);
-    const p2Res = await worker.recognize(p2Canvas);
-    p2Text = p2Res.data.text;
+    await worker.terminate();
   }
-
-  // Zone 5: Page 3 (Land Ownership Details)
-  let p3Text = '';
-  if (totalPages >= 3) {
-    onProgress?.('Extracting Land Details & Area measurements...', 88);
-    const p3RawCanvas = await renderPdfPageToCanvas(pdf, 3, 2.5);
-    const p3Canvas = preprocessCanvasForOcr(p3RawCanvas);
-    const p3Res = await worker.recognize(p3Canvas);
-    p3Text = p3Res.data.text;
-  }
-
-  await worker.terminate();
 
   onProgress?.('Validating and normalizing extracted fields...', 95);
 
+  const fullText = [p1Text, p2Text, p3Text].join('\n---\n');
+
   // 1. Farmer ID
   let farmerId = '';
-  const fidMatch = headerText.match(/Farmer\s*ID\s*:?\s*\n*([A-Za-z0-9_-]+)/i);
-  if (fidMatch) farmerId = fidMatch[1].trim();
-  else {
-    const genId = headerText.match(/\b([A-Z]{2}\d{10,14}|\d{11,14})\b/);
-    if (genId) farmerId = genId[1].trim();
+  const fidMatch = p1Text.match(/(?:Farmer\s*ID|Farmer\s*Id|FarmerID|Farmer\s*Identification)\s*[:\-\s]*\n*([A-Za-z0-9_-]{6,30})/i) ||
+                   fullText.match(/(?:Farmer\s*ID|Farmer\s*Id|FarmerID)\s*[:\-\s]*\n*([A-Za-z0-9_-]{6,30})/i);
+  if (fidMatch) {
+    farmerId = fidMatch[1].trim();
+  } else {
+    const idMatch = p1Text.match(/\b([A-Z]{2}\d{8,14}|\d{11,14})\b/);
+    if (idMatch) farmerId = idMatch[1].trim();
   }
 
   // Enrollment Number
   let enrollmentNo = '';
-  const enrMatch = headerText.match(/enrollment\s*number\s*:?[\s\S]*?([0-9_]{10,40})/i);
-  if (enrMatch) enrollmentNo = enrMatch[1].trim();
+  const enrMatch = p1Text.match(/(?:Enrol+ment|Registration)\s*(?:Number|No)?\s*[:\-\s]*\n*([0-9_]{10,45})/i) ||
+                   fullText.match(/(?:Enrol+ment|Registration)\s*(?:Number|No)?\s*[:\-\s]*\n*([0-9_]{10,45})/i);
+  if (enrMatch) {
+    enrollmentNo = enrMatch[1].trim();
+  } else {
+    const enrPattern = p1Text.match(/\b(\d{2}_\d{2,4}_\d{3,5}_\d{5,8}_\d{4,8}(?:_\d+)?)\b/);
+    if (enrPattern) enrollmentNo = enrPattern[1].trim();
+  }
 
-  // 2. Farmer Name (English)
+  // 2. Farmer Name
   let farmerName = '';
-  const nameMatch = leftText.match(/Farmer\s*Name[^\n]*English\s*([A-Za-z]+)[^\n]*\n+([A-Za-z\s]+?)(?=\n*\s*Gender|\n*\s*Caste|$)/i);
+  const nameMatch = p1Text.match(/(?:Farmer\s*Name|Name\s*of\s*Farmer)(?:\s*(?:In\s*English|\(English\)|English))?\s*[:\-\s]*\n*([A-Za-z\s\.\'\-]{2,45}?)(?=\n*\s*(?:Identifier|Father|Husband|Spouse|Gender|DOB|Date\s*of\s*Birth|Age|Caste|Category|Mobile|Address|Local|\d{2}\/)|$)/i);
   if (nameMatch) {
-    const p1 = nameMatch[1].trim();
-    const p2 = nameMatch[2].replace(/[^A-Za-z\s]/g, '').replace(/\s+[A-Za-z]$/, '').trim();
-    farmerName = `${p1} ${p2}`.trim();
+    let raw = nameMatch[1].replace(/^(?:In\s*English|English|Name|Farmer)\s*/i, '').trim();
+    raw = raw.replace(/[^A-Za-z\s\.\'\-]/g, '').trim();
+    if (raw.length >= 3 && !/^(Gender|Male|Female|Caste|Category|Identifier)$/i.test(raw)) {
+      farmerName = raw;
+    }
   }
   if (!farmerName) {
-    const altName = leftText.match(/Farmer\s*Name[^\n]*\n+([A-Za-z\s]{3,40})/i);
-    if (altName) farmerName = altName[1].replace(/[^A-Za-z\s]/g, '').trim();
-  }
-  if (!farmerName && /Ganesh/i.test(leftText)) {
-    farmerName = 'Ganesh Pandurang Shinde';
+    const lines = p1Text.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      if (/Farmer\s*Name/i.test(lines[i])) {
+        const colonIdx = lines[i].indexOf(':');
+        if (colonIdx !== -1) {
+          const after = lines[i].substring(colonIdx + 1).replace(/[^A-Za-z\s]/g, '').trim();
+          if (after.length >= 3 && !/^(English|Local)$/i.test(after)) {
+            farmerName = after;
+            break;
+          }
+        }
+        if (i + 1 < lines.length) {
+          const next = lines[i + 1].replace(/[^A-Za-z\s]/g, '').trim();
+          if (next.length >= 3 && !/^(Gender|Identifier|DOB|Date|Age|English|Local)/i.test(next)) {
+            farmerName = next;
+            break;
+          }
+        }
+      }
+    }
   }
 
-  // 3. Identifier Name (English)
+  // 3. Identifier Name (Father / Spouse)
   let identifierName = '';
-  const idMatch = leftText.match(/Identifier\s*Name\s*(?:In\s*English)?\s+([A-Za-z\s]+?)(?=\s+Identifier|\n|$)/i);
+  const idMatch = p1Text.match(/(?:Identifier\s*Name|Father(?:\'s)?\s*Name|Husband(?:\'s)?\s*Name|Spouse(?:\'s)?\s*Name)(?:\s*(?:In\s*English|\(English\)|English))?\s*[:\-\s]*\n*([A-Za-z\s\.\'\-]{2,45}?)(?=\n*\s*(?:Identifier\s*Type|Relationship|Gender|DOB|Date\s*of\s*Birth|Age|Caste|Category|Mobile|Address|Local|\d{2}\/)|$)/i);
   if (idMatch) {
-    identifierName = idMatch[1].replace(/[^A-Za-z\s]/g, '').replace(/\s+[A-Za-z]$/, '').trim();
+    let raw = idMatch[1].replace(/^(?:In\s*English|English|Name)\s*/i, '').trim();
+    raw = raw.replace(/[^A-Za-z\s\.\'\-]/g, '').trim();
+    if (raw.length >= 3 && !/^(Gender|Male|Female|Caste|Category|Identifier|Relationship)$/i.test(raw)) {
+      identifierName = raw;
+    }
   }
 
   // 4. DOB & Age
   let dob = '';
-  const dobMatch = rightText.match(/(\d{2}\/\d{2}\/\d{4})/) || headerText.match(/(\d{2}\/\d{2}\/\d{4})/);
-  if (dobMatch) dob = dobMatch[1].trim();
+  const dobMatch = p1Text.match(/(?:DOB|Date\s*of\s*Birth|Birth\s*Date)[^\d\n]*([0-3]?\d[\/\.\-][0-1]?\d[\/\.\-](?:19|20)\d{2})/i) ||
+                   fullText.match(/(?:DOB|Date\s*of\s*Birth|Birth\s*Date)[^\d\n]*([0-3]?\d[\/\.\-][0-1]?\d[\/\.\-](?:19|20)\d{2})/i);
+  if (dobMatch) {
+    dob = dobMatch[1].trim();
+  } else {
+    const genericDob = p1Text.match(/\b([0-3]\d[\/\.\-][0-1]\d[\/\.\-](?:19|20)\d{2})\b/);
+    if (genericDob) dob = genericDob[1].trim();
+  }
 
   let age = '';
-  const ageMatch = rightText.match(/Age\s*(\d{1,3})/i);
+  const ageMatch = p1Text.match(/(?:Age|Age\s*in\s*Years|Age\s*\(Years\))\s*[:\-\s]*(\d{1,3})/i) ||
+                   p1Text.match(/\b(\d{1,3})\s*(?:Years|Yrs)\b/i);
   if (ageMatch) age = ageMatch[1].trim();
 
   // 5. Gender
-  let gender = 'Male';
-  const genMatch = leftText.match(/Gender\s*([A-Za-z]+)/i);
+  let gender = '';
+  const genMatch = p1Text.match(/(?:Gender|Sex)\s*[:\-\s]*(Male|Female|Transgender)/i);
   if (genMatch) {
-    gender = genMatch[1].trim().toLowerCase() === 'female' ? 'Female' : 'Male';
+    gender = genMatch[1].trim();
+  } else {
+    const standaloneGen = p1Text.match(/\b(Female|Male|Transgender)\b/i);
+    if (standaloneGen) gender = standaloneGen[1].trim();
   }
 
   // 6. Caste Category
-  let casteCategory = 'General';
-  const casteMatch = leftText.match(/Caste\s*Category\s*([A-Za-z]+)/i);
-  if (casteMatch) casteCategory = casteMatch[1].trim();
+  let casteCategory = '';
+  const casteMatch = p1Text.match(/(?:Caste\s*Category|Social\s*Category|Category)\s*[:\-\s]*([A-Za-z]+)/i);
+  if (casteMatch) {
+    const c = casteMatch[1].trim();
+    if (/^(General|OBC|SC|ST|SEBC|Open|NT|VJNT)$/i.test(c)) {
+      casteCategory = c;
+    } else if (!/^(Mobile|Gender|Identifier|DOB)$/i.test(c)) {
+      casteCategory = c;
+    }
+  } else {
+    const standaloneCat = p1Text.match(/\b(General|OBC|SC|ST|SEBC|Open)\b/i);
+    if (standaloneCat) casteCategory = standaloneCat[1].trim();
+  }
 
-  // 7. Mobile Number (Strict 10 digits starting with 6, 7, 8, or 9)
+  // 7. Mobile Number
   let mobileNumber = '';
-  const mobMatch = p2Text.match(/Mobile\s*Number\s*(\d{10})/i) || p2Text.match(/\b([6-9]\d{9})\b/);
-  if (mobMatch) mobileNumber = mobMatch[1].trim();
+  const mobMatch = p2Text.match(/(?:Mobile|Phone|Contact)(?:\s*(?:Number|No))?\s*[:\-\s]*(?:\+?91[\s\-]*)?([6-9]\d{4}\s*\d{5}|[6-9]\d{9})\b/i) ||
+                   fullText.match(/(?:Mobile|Phone|Contact)(?:\s*(?:Number|No))?\s*[:\-\s]*(?:\+?91[\s\-]*)?([6-9]\d{4}\s*\d{5}|[6-9]\d{9})\b/i);
+  if (mobMatch) {
+    mobileNumber = mobMatch[1].replace(/\s+/g, '').trim();
+  } else {
+    const genMob = p2Text.match(/\b([6-9]\d{9})\b/) || fullText.match(/\b([6-9]\d{9})\b/);
+    if (genMob) mobileNumber = genMob[1].trim();
+  }
 
   // 8. Land Details
-  let totalArea = '0.72';
-  const areaMatch = p3Text.match(/Total\s*Land\s*Area\s*Owned\s*\(Hectare\)\s*([\d\.]+)/i);
+  let totalArea = '';
+  const areaMatch = (p3Text || fullText).match(/(?:Total\s*(?:Land)?\s*Area\s*(?:Owned)?|Land\s*Area)\s*(?:\([^\)]*\))?\s*[:\-\s]*([\d\.]+)/i);
   if (areaMatch) totalArea = areaMatch[1].trim();
 
-  let landCount = '1';
-  const countMatch = p3Text.match(/Number\s*of\s*Lands\s*Owned\s*(\d+)/i);
+  let landCount = '';
+  const countMatch = (p3Text || fullText).match(/(?:Number\s*of\s*Lands?\s*(?:Owned)?|Total\s*Plots?)\s*[:\-\s]*(\d+)/i);
   if (countMatch) landCount = countMatch[1].trim();
 
-  let surveyNo = '102 / 9';
-  const surMatch = p3Text.match(/(\d{2,4})\s+(\d{1,3})/);
-  if (surMatch) surveyNo = `${surMatch[1]} / ${surMatch[2]}`;
+  let surveyNo = '';
+  const surMatch = (p3Text || fullText).match(/(?:Survey|Gat|Khasra|Dag|Plot)\s*(?:No|Number)?\s*[:\-\s]*([A-Za-z0-9\s\/\-_]+?)(?=\n|Village|Area|$)/i);
+  if (surMatch) {
+    surveyNo = surMatch[1].replace(/\s+/g, ' ').trim();
+  } else {
+    const rawSurvey = (p3Text || fullText).match(/(\d{2,4})\s*[\/]\s*(\d{1,3})/);
+    if (rawSurvey) surveyNo = `${rawSurvey[1]} / ${rawSurvey[2]}`;
+  }
 
-  const district = correctDistrict(p3Text);
-  const state = 'MAHARASHTRA';
-  const subDistrict = /Junnar/i.test(p3Text) ? 'Junnar' : 'Junnar';
-  const village = /Shinde/i.test(p3Text) ? 'Shindewadi' : 'Shindewadi';
+  let village = '';
+  const vMatch = (p3Text || fullText).match(/(?:Village|Town)\s*[:\-\s]*([A-Za-z\s]+?)(?=\n|Taluka|Sub|District|$)/i);
+  if (vMatch) village = vMatch[1].trim();
 
-  const landSummary = `${totalArea} Hectare, Gat No: ${surveyNo}, ${village}, ${subDistrict}, ${district}, ${state}`;
+  let subDistrict = '';
+  const sdMatch = (p3Text || fullText).match(/(?:Sub\s*District|Taluka|Tahsil|Tehsil|Block)\s*[:\-\s]*([A-Za-z\s]+?)(?=\n|District|State|$)/i);
+  if (sdMatch) subDistrict = sdMatch[1].trim();
 
-  // 9. Address (English)
+  let district = '';
+  const distMatch = (p3Text || fullText).match(/(?:District)\s*[:\-\s]*([A-Za-z\s]+?)(?=\n|State|Pincode|$)/i);
+  if (distMatch) {
+    district = correctDistrict(distMatch[1]);
+  } else if (p3Text || fullText) {
+    district = correctDistrict(p3Text || fullText);
+  }
+
+  let state = '';
+  const stMatch = (p3Text || fullText).match(/(?:State)\s*[:\-\s]*([A-Za-z\s]+?)(?=\n|Pincode|Pin|$)/i);
+  if (stMatch) {
+    state = stMatch[1].trim();
+  } else if (/Maharashtra/i.test(fullText)) {
+    state = 'MAHARASHTRA';
+  }
+
+  const summaryParts: string[] = [];
+  if (totalArea) summaryParts.push(`${totalArea} Hectare`);
+  if (surveyNo) summaryParts.push(`Gat No: ${surveyNo}`);
+  if (village) summaryParts.push(village);
+  if (subDistrict) summaryParts.push(subDistrict);
+  if (district) summaryParts.push(district);
+  if (state) summaryParts.push(state);
+  const landSummary = summaryParts.join(', ');
+
+  // 9. Address
   let address = '';
-  const addrMatch = p2Text.match(/Address\s*In\s*English\s*([\s\S]+?)(?:Farmer\s*type|Occupations|Land Ownership|$)/i);
+  const addrMatch = (p2Text || fullText).match(/(?:Residential\s*Address|Address\s*(?:In\s*English|in\s*English)?)\s*[:\-\s]*\n*([\s\S]+?)(?=\n*\s*(?:Farmer\s*type|Occupations?|Land\s*Ownership|Crop|Bank|Declaration|Signature|Page|\f|$))/i);
   if (addrMatch) {
     const raw = addrMatch[1];
     const lines = raw.split('\n')
-      .map(l => l.replace(/\|\s*Address In.*/i, '').replace(/Local|Language/i, '').trim())
+      .map(l => l.replace(/\|\s*Address In.*/i, '').replace(/Local|Language|Address/i, '').trim())
       .filter(l => l.length > 0 && !/^(Address|In|English)$/i.test(l) && !/[\u0900-\u097F]/.test(l));
     address = lines.join(', ').replace(/[\s,]+,/g, ',').replace(/\s*,\s*/g, ', ').trim();
   }
@@ -425,15 +517,15 @@ export async function extractFarmerDataFromPdf(
   onProgress?.('Complete!', 100);
 
   return {
-    farmer_id: farmerId || '77900535348',
-    enrollment_no: enrollmentNo || '27_490_4187_555391_006318',
-    farmer_name: farmerName || 'Ganesh Pandurang Shinde',
-    identifier_name: identifierName || 'Pandurang Shinde',
-    dob: dob || '04/08/1987',
-    age: age || '39',
-    gender: gender || 'Male',
-    caste_category: casteCategory || 'General',
-    mobile_number: mobileNumber || '9552533470',
+    farmer_id: farmerId,
+    enrollment_no: enrollmentNo,
+    farmer_name: farmerName,
+    identifier_name: identifierName,
+    dob: dob,
+    age: age,
+    gender: gender,
+    caste_category: casteCategory,
+    mobile_number: mobileNumber,
     land_detail: {
       total_area_hectare: totalArea,
       number_of_lands: landCount,
@@ -444,7 +536,7 @@ export async function extractFarmerDataFromPdf(
       state,
       summary: landSummary,
     },
-    address: address || 'Gat No- 1193/8, Flat No- 1001, Parshwa Platinum, Radha Swami Ashram Road, Opposite Imperial Hospital',
+    address: address,
     photo_url: photoUrl || undefined,
   };
 }

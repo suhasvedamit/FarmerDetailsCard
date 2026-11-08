@@ -9,8 +9,7 @@ import { CardModal } from './components/CardModal';
 import { FarmerRecord } from './types';
 import { extractFarmerDataFromPdf } from './lib/pdfExtractor';
 import { generateCardCanvas } from './lib/cardGenerator';
-import { SAMPLE_FARMER_RECORD } from './lib/sampleData';
-import { CreditCard, Copy, Download, Check, Sparkles } from 'lucide-react';
+import { CreditCard, Copy, Download, Check } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [data, setData] = useState<FarmerRecord | null>(null);
@@ -20,24 +19,6 @@ export const App: React.FC = () => {
   const [cardModalOpen, setCardModalOpen] = useState(false);
   const [cardPreviewUrl, setCardPreviewUrl] = useState('');
   const [copied, setCopied] = useState(false);
-
-  // Load Built-in Sample Form instantly
-  const handleLoadSample = () => {
-    setIsProcessing(true);
-    setProgressMsg('Loading pre-verified AgriStack sample document...');
-    setProgressPct(30);
-
-    setTimeout(() => {
-      setProgressMsg('Extracting 10 fields & cropping farmer photograph...');
-      setProgressPct(75);
-
-      setTimeout(() => {
-        setData(SAMPLE_FARMER_RECORD);
-        setIsProcessing(false);
-        setProgressPct(100);
-      }, 400);
-    }, 300);
-  };
 
   // Upload custom PDF file
   const handleFileSelected = async (file: File) => {
@@ -95,7 +76,7 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800">
-      <Header onLoadSample={handleLoadSample} isProcessing={isProcessing} />
+      <Header />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Upload Zone */}
