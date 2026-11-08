@@ -6,9 +6,11 @@ import { PhotoCard } from './components/PhotoCard';
 import { FarmerForm } from './components/FarmerForm';
 import { CardModal } from './components/CardModal';
 import { DisclaimerModal } from './components/DisclaimerModal';
+import { PhotoEditorModal } from './components/PhotoEditorModal';
 import { FarmerRecord } from './types';
 import { extractFarmerDataFromPdf } from './lib/pdfExtractor';
 import { generateCardCanvas } from './lib/cardGenerator';
+import { saveExtractedRecord, saveGeneratedRecord } from './lib/supabase';
 import { CreditCard } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -16,11 +18,14 @@ export const App: React.FC = () => {
   const [hasAcceptedDisclaimer, setHasAcceptedDisclaimer] = useState(false);
 
   const [data, setData] = useState<FarmerRecord | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [originalExtractedData, setOriginalExtractedData] = useState<FarmerRecord | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
   const [progressPct, setProgressPct] = useState(0);
   const [cardModalOpen, setCardModalOpen] = useState(false);
   const [cardPreviewUrl, setCardPreviewUrl] = useState('');
+  const [isPhotoEditorOpen, setIsPhotoEditorOpen] = useState(false);
 
   // Upload custom PDF file
   const handleFileSelected = async (file: File) => {
@@ -39,7 +44,21 @@ export const App: React.FC = () => {
         setProgressMsg(msg);
         setProgressPct(pct);
       });
+
+      const newSessionId = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+      setSessionId(newSessionId);
+      setOriginalExtractedData(extracted);
       setData(extracted);
+
+      // Non-blocking background sync (never interrupts user experience if offline/blocked)
+      try {
+        saveExtractedRecord(extracted, newSessionId, file.name).catch(() => { });
+      } catch (logErr) {
+        console.warn('[Supabase] Non-fatal background sync error:', logErr);
+      }
     } catch (err: any) {
       console.error('Extraction error:', err);
       alert(`Extraction failed: ${err.message || err}`);
@@ -55,6 +74,15 @@ export const App: React.FC = () => {
       const canvas = await generateCardCanvas(data);
       setCardPreviewUrl(canvas.toDataURL('image/png'));
       setCardModalOpen(true);
+
+      // Non-blocking background sync (never interrupts user experience if offline/blocked)
+      if (sessionId) {
+        try {
+          saveGeneratedRecord(data, sessionId, originalExtractedData).catch(() => { });
+        } catch (logErr) {
+          console.warn('[Supabase] Non-fatal background sync error:', logErr);
+        }
+      }
     } catch (err) {
       console.error('Failed to generate card:', err);
       alert('Card generation failed');
@@ -72,8 +100,8 @@ export const App: React.FC = () => {
       {/* Main page content is completely hidden until user accepts and proceeds */}
       <div
         className={`min-h-screen flex flex-col bg-slate-50 text-slate-800 transition-opacity duration-300 ${!hasAcceptedDisclaimer
-            ? 'invisible pointer-events-none select-none max-h-screen overflow-hidden'
-            : 'opacity-100'
+          ? 'invisible pointer-events-none select-none max-h-screen overflow-hidden'
+          : 'opacity-100'
           }`}
         aria-hidden={!hasAcceptedDisclaimer}
       >
@@ -91,7 +119,28 @@ export const App: React.FC = () => {
             <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-fadeIn">
               {/* Left Column: Photo, Actions */}
               <div className="lg:col-span-4 space-y-4">
-                <PhotoCard photoUrl={data.photo_url} />
+                <PhotoCard
+                  photoUrl={data.photo_url}
+                  rawPhotoUrl={data.raw_photo_url}
+                  photoTransform={data.photo_transform}
+                  onOpenEditor={() => setIsPhotoEditorOpen(true)}
+                  onPhotoUploaded={(rawUrl) => {
+                    setData({
+                      ...data,
+                      photo_url: rawUrl,
+                      raw_photo_url: rawUrl,
+                      photo_transform: undefined,
+                    });
+                    setIsPhotoEditorOpen(true);
+                  }}
+                  onResetToOriginal={() => {
+                    setData({
+                      ...data,
+                      photo_url: data.raw_photo_url,
+                      photo_transform: undefined,
+                    });
+                  }}
+                />
 
                 {/* Action Buttons */}
                 <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-4">
@@ -120,6 +169,36 @@ export const App: React.FC = () => {
             onClose={() => setCardModalOpen(false)}
             record={data}
             cardPreviewUrl={cardPreviewUrl}
+          />
+        )}
+
+        {/* Photo Editor & Cropper Modal */}
+        {data && (
+          <PhotoEditorModal
+            isOpen={isPhotoEditorOpen}
+            onClose={() => setIsPhotoEditorOpen(false)}
+            imageUrl={data.photo_url}
+            originalImageUrl={data.raw_photo_url || data.photo_url}
+            pdfPageImageUrl={data.pdf_page_image_url}
+            photoBBox={data.photo_bbox}
+            initialTransform={data.photo_transform}
+            farmerName={data.farmer_name}
+            farmerId={data.farmer_id}
+            onSave={(croppedUrl, rawUrl, transform) => {
+              setData({
+                ...data,
+                photo_url: croppedUrl,
+                raw_photo_url: rawUrl,
+                photo_transform: transform,
+              });
+            }}
+            onResetOriginal={() => {
+              setData({
+                ...data,
+                photo_url: data.raw_photo_url,
+                photo_transform: undefined,
+              });
+            }}
           />
         )}
 

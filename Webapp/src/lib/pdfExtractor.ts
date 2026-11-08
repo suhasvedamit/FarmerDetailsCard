@@ -123,6 +123,18 @@ export async function renderPdfPageToCanvas(
   return canvas;
 }
 
+export interface ExtractedPhotoDetails {
+  photoUrl: string;
+  bbox: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    pageW: number;
+    pageH: number;
+  };
+}
+
 /**
  * High-Precision Computer Vision Photo Cropper:
  * Detects the farmer portrait in Page 1 of the registration form.
@@ -131,7 +143,7 @@ export async function renderPdfPageToCanvas(
  * (such as "Farmer Photograph") and table divider lines, and performs
  * fine edge trimming to remove any surrounding white margin.
  */
-export function extractPhotoFromCanvas(canvas: HTMLCanvasElement): string | null {
+export function extractPhotoDetailsFromCanvas(canvas: HTMLCanvasElement): ExtractedPhotoDetails | null {
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
 
@@ -414,7 +426,22 @@ export function extractPhotoFromCanvas(canvas: HTMLCanvasElement): string | null
     finalH
   );
 
-  return cropCanvas.toDataURL('image/jpeg', 0.95);
+  const cropDataUrl = cropCanvas.toDataURL('image/jpeg', 0.95);
+  return {
+    photoUrl: cropDataUrl,
+    bbox: {
+      x: finalX,
+      y: finalY,
+      w: finalW,
+      h: finalH,
+      pageW: canvas.width,
+      pageH: canvas.height,
+    },
+  };
+}
+
+export function extractPhotoFromCanvas(canvas: HTMLCanvasElement): string | null {
+  return extractPhotoDetailsFromCanvas(canvas)?.photoUrl || null;
 }
 
 /**
@@ -560,7 +587,9 @@ export async function extractFarmerDataFromPdf(
   onProgress?.('Rendering Page 1 at 250 DPI & extracting photograph...', 25);
   // High-res canvas render
   const p1RawCanvas = await renderPdfPageToCanvas(pdf, 1, 2.5);
-  const photoUrl = extractPhotoFromCanvas(p1RawCanvas);
+  const photoDetails = extractPhotoDetailsFromCanvas(p1RawCanvas);
+  const photoUrl = photoDetails?.photoUrl || null;
+  const pdfPageImageUrl = p1RawCanvas.toDataURL('image/jpeg', 0.85);
 
   // Check if digital text exists in the PDF
   const digitalTexts = await extractDigitalPageTexts(pdf);
@@ -830,5 +859,8 @@ export async function extractFarmerDataFromPdf(
     },
     address: address,
     photo_url: photoUrl || undefined,
+    raw_photo_url: photoUrl || undefined,
+    pdf_page_image_url: pdfPageImageUrl,
+    photo_bbox: photoDetails?.bbox,
   };
 }

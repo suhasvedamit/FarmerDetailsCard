@@ -9,6 +9,23 @@ export interface LandDetail {
   summary: string;
 }
 
+export interface PhotoBBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  pageW: number;
+  pageH: number;
+}
+
+export interface PhotoTransform {
+  zoom: number;
+  panX: number;
+  panY: number;
+  rotation: number;
+  flipH?: boolean;
+}
+
 export interface FarmerRecord {
   farmer_id: string;
   enrollment_no: string;
@@ -23,4 +40,9 @@ export interface FarmerRecord {
   address: string;
   photo_base64?: string;
   photo_url?: string;
+  raw_photo_url?: string;
+  pdf_page_image_url?: string;
+  photo_bbox?: PhotoBBox;
+  photo_transform?: PhotoTransform;
 }
+
