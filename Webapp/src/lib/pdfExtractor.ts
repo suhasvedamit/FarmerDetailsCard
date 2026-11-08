@@ -438,6 +438,112 @@ async function extractDigitalPageTexts(pdf: pdfjsLib.PDFDocumentProxy): Promise<
 }
 
 /**
+ * Cleans extracted address text by stripping OCR table artifacts,
+ * secondary column headers (e.g. "Address In Local Language", "Local", "Language"),
+ * Devanagari OCR ghost misreads (e.g. "HITT STOT", "Tle UigeT fae"),
+ * and subsequent table field labels (e.g. "Farmer type", "Occupations").
+ */
+export function cleanExtractedAddress(rawText: string): string {
+  if (!rawText) return '';
+
+  const lines = rawText.split(/\r?\n/);
+  const cleanedLines: string[] = [];
+
+  const isStopLine = (line: string): boolean => {
+    return /^(?:Farmer[\s\-_]*type|Occupations?|Land[\s\-_]*Ownership|State\s*[\/-]?\s*UT|Annexure)\b/i.test(line.trim());
+  };
+
+  const isHeaderOnlyLine = (line: string): boolean => {
+    const t = line.trim();
+    return (
+      /^(?:Address\s*In\s*Local\s*Language|Address\s*In\s*Local|Address\s*In|Local\s*Language|Local|Language|Address\s*In\s*English|Address)$/i.test(t) ||
+      /^(?:Farmer\s*Residential\s*Details|Contact\s*Details|Email\s*Address)$/i.test(t)
+    );
+  };
+
+  const isPureGhostLine = (line: string): boolean => {
+    const t = line.trim();
+    // Known Devanagari OCR misreads produced by English Tesseract (e.g. 'HITT STOT')
+    return /^(?:(?:HITT|STOT|TATT|FITT|SFTAT|UigeT|fae|Tle|Tae)[\s,.\-|/]*)+$/i.test(t);
+  };
+
+  for (let line of lines) {
+    line = line.trim();
+    if (!line) continue;
+
+    // Stop if we reached subsequent form sections
+    if (isStopLine(line)) break;
+
+    // If we already collected the English address, and we hit the bottom of the right-column header ('Language'),
+    // stop so any subsequent lines belonging to the local language column (like 'HITT STOT') are ignored.
+    if (/^(?:Language|Local\s*Language)\s*$/i.test(line)) {
+      if (cleanedLines.length > 0) {
+        break;
+      }
+      continue;
+    }
+
+    // Discard non-English / Devanagari lines (from the local language column)
+    if (/[\u0900-\u097F]/.test(line)) continue;
+
+    // Discard standalone header artifacts
+    if (isHeaderOnlyLine(line)) continue;
+
+    // Discard lines that are purely OCR ghost noise from the local language column
+    if (isPureGhostLine(line)) continue;
+
+    // If there is a table column separator (|), keep only the English address column (left)
+    if (line.includes('|')) {
+      line = line.split('|')[0].trim();
+    }
+
+    // Strip leading 'Address In English' if present
+    line = line.replace(/^\s*Address\s*In\s*English\s*[:\-\s]*/i, '');
+
+    // Strip right-column header fragments attached at the end of the line
+    line = line.replace(/\bAddress\s*In(?:\s*Local)?(?:\s*Language)?\s*$/i, '');
+    line = line.replace(/\bLocal\s*Language\s*$/i, '');
+    line = line.replace(/(?:,\s*|\s+)(?:Local|Language)\s*$/i, '');
+    line = line.replace(/^\s*(?:Local|Language)(?:,\s*|\s+)/i, '');
+
+    // Strip any ghost words from the end of the line
+    line = line.replace(/\b(?:HITT|STOT|TATT|FITT|SFTAT|UigeT|fae|Tle|Tae)\b.*$/i, '');
+    line = line.trim();
+
+    if (line && !isHeaderOnlyLine(line) && !isPureGhostLine(line)) {
+      cleanedLines.push(line);
+    }
+  }
+
+  // Join lines with comma, then collapse redundant commas
+  let address = cleanedLines.join(', ');
+
+  // Post-processing cleanup for any residual artifacts
+  address = address
+    .replace(/\b(?:HITT|STOT|TATT|FITT|SFTAT|UigeT|fae|Tle|Tae)\b/gi, '')
+    .replace(/\bAddress\s*In\s*(?:Local\s*)?(?:Language)?\b/gi, '')
+    .replace(/\bAddress\s*In\s*English\b/gi, '')
+    .replace(/\bAddress\s*In\b/gi, '')
+    .replace(/\bLocal\s*Language\b/gi, '')
+    .replace(/\bLanguage\b/gi, '')
+    .replace(/(?:,\s*|\s+)Local(?:\s*,|\s+|$)/gi, (m) => (m.includes(',') ? ', ' : ' '))
+    .replace(/\bLocal\b/gi, '')
+    .replace(/\bFarmer[\s\-_]*type[\s\S]*/i, '')
+    .replace(/\bOccupations?[\s\S]*/i, '')
+    .replace(/\bLand[\s\-_]*Ownership[\s\S]*/i, '')
+    .replace(/\bLand\s*owning\s*FarmerAgriculture\b/gi, '')
+    // Normalize commas and whitespace
+    .replace(/\s*,\s*/g, ', ')
+    .replace(/(?:,\s*)+/g, ', ')
+    .replace(/^[\s,.\-|/]+/, '')
+    .replace(/[\s,.\-|/]+$/, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  return address;
+}
+
+/**
  * Extracts all 10 fields and farmer photo purely in the browser.
  * 1. Checks digital PDF text layer first.
  * 2. If scanned, runs high-resolution full-page WASM OCR.
@@ -686,16 +792,18 @@ export async function extractFarmerDataFromPdf(
 
   // 9. Address
   let address = '';
-  const addrMatch = fullText.match(/Address\s*In\s*English\s*([\s\S]+?)(?=\n*\s*(?:Farmer\s*type|Occupations?|Land\s*Ownership|State\/UT|$))/i);
+  const targetAddressText = p2Text ? `${p2Text}\n---\n${fullText}` : fullText;
+  const addrMatch =
+    targetAddressText.match(/(?:Address\s*In\s*Eng(?:lish)?|Address\s*In\s*English)\s*[:\-\s]*([\s\S]+?)(?=\n*\s*(?:Farmer[\s\-_]*type|Occupations?|Land[\s\-_]*Ownership|State\s*[\/-]?\s*UT|Annexure|$))/i) ||
+    targetAddressText.match(/(?:Farmer\s*Residential\s*Details[\s\S]*?)?Address\s*[:\-\s]*([\s\S]+?)(?=\n*\s*(?:Farmer[\s\-_]*type|Occupations?|Land[\s\-_]*Ownership|State\s*[\/-]?\s*UT|Annexure|$))/i);
+
   if (addrMatch) {
-    address = addrMatch[1].split('\n')
-      .map(line => line.replace(/\|\s*Address\s*In.*/i, '').replace(/Local\s*Language.*/i, '').trim())
-      .filter(line => line.length > 0 && !/[\u0900-\u097F]/.test(line))
-      .join(' ')
-      .replace(/^,\s*/, '')
-      .replace(/\s*,\s*/g, ', ')
-      .replace(/,\s*$/, '')
-      .trim();
+    address = cleanExtractedAddress(addrMatch[1]);
+  } else if (p2Text) {
+    const fallbackMatch = p2Text.match(/Address[^\n:]*[:\n]\s*([^\n\r]{10,200})/i);
+    if (fallbackMatch) {
+      address = cleanExtractedAddress(fallbackMatch[1]);
+    }
   }
 
   onProgress?.('Complete!', 100);

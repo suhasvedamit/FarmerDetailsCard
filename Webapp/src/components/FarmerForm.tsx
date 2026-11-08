@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, User, Phone, MapPin, Calendar, Users, Award, FileText } from 'lucide-react';
+import { User, Phone, MapPin, Calendar, Users, Award, FileText } from 'lucide-react';
 import { FarmerRecord } from '../types';
 
 interface FarmerFormProps {
@@ -22,32 +22,11 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({ data, onChange }) => {
     });
   };
 
-  const fieldsToCheck = [
-    data.farmer_id,
-    data.farmer_name,
-    data.identifier_name,
-    data.dob,
-    data.gender,
-    data.caste_category,
-    data.mobile_number,
-    data.land_detail?.summary || data.land_detail?.total_area_hectare,
-    data.address,
-    data.photo_url
-  ];
-  const filledCount = fieldsToCheck.filter(f => Boolean(f && String(f).trim().length > 0)).length;
-
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-3 border-b border-slate-100 mb-4 gap-2">
-        <div>
-          <h2 className="text-base font-bold text-slate-800">Farmer Details</h2>
-          <p className="text-xs text-slate-500">Extracted from attached Registration Form</p>
-        </div>
-        <span className={`px-2.5 py-1 rounded-md text-xs font-semibold flex items-center ${filledCount >= 8 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-          }`}>
-          <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-          {filledCount}/10 Fields Detected
-        </span>
+      <div className="pb-3 border-b border-slate-100 mb-4">
+        <h2 className="text-base font-bold text-slate-800">Farmer Details</h2>
+        <p className="text-xs text-slate-500">Extracted from attached Registration Form</p>
       </div>
 
       <form className="space-y-4" onSubmit={e => e.preventDefault()}>

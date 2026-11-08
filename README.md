@@ -62,3 +62,4 @@ The repository includes an automated GitHub Actions workflow (`.github/workflows
 1. Go to **Settings** > **Pages** in this repository.
 2. Under **Build and deployment** > **Source**, select **GitHub Actions**.
 3. Any push to `main` will automatically build the web application and deploy it live.
+

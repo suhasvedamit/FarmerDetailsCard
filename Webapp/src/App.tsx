@@ -9,7 +9,7 @@ import { DisclaimerModal } from './components/DisclaimerModal';
 import { FarmerRecord } from './types';
 import { extractFarmerDataFromPdf } from './lib/pdfExtractor';
 import { generateCardCanvas } from './lib/cardGenerator';
-import { CreditCard, Copy, Download, Check } from 'lucide-react';
+import { CreditCard } from 'lucide-react';
 
 export const App: React.FC = () => {
   // Disclaimer state: resets on every page load/refresh
@@ -21,7 +21,6 @@ export const App: React.FC = () => {
   const [progressPct, setProgressPct] = useState(0);
   const [cardModalOpen, setCardModalOpen] = useState(false);
   const [cardPreviewUrl, setCardPreviewUrl] = useState('');
-  const [copied, setCopied] = useState(false);
 
   // Upload custom PDF file
   const handleFileSelected = async (file: File) => {
@@ -62,26 +61,6 @@ export const App: React.FC = () => {
     }
   };
 
-  // Copy JSON to clipboard
-  const handleCopyJson = () => {
-    if (!data) return;
-    navigator.clipboard.writeText(JSON.stringify(data, null, 2));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  // Export JSON file
-  const handleDownloadJson = () => {
-    if (!data) return;
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `farmer_${data.farmer_id || 'record'}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   return (
     <>
       {/* Mandatory Disclaimer Modal on every page load */}
@@ -115,30 +94,14 @@ export const App: React.FC = () => {
                 <PhotoCard photoUrl={data.photo_url} />
 
                 {/* Action Buttons */}
-                <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-4 space-y-2">
+                <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-4">
                   <button
                     onClick={handleGenerateCard}
                     className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg shadow transition flex items-center justify-center space-x-2"
                   >
                     <CreditCard className="w-4 h-4" />
-                    <span>Generate Farmer Details Card</span>
+                    <span>Review Changes and Generate Card</span>
                   </button>
-                  <div className="grid grid-cols-2 gap-2 pt-1">
-                    <button
-                      onClick={handleCopyJson}
-                      className="py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition flex items-center justify-center space-x-1.5"
-                    >
-                      {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copied ? 'Copied!' : 'Copy JSON'}</span>
-                    </button>
-                    <button
-                      onClick={handleDownloadJson}
-                      className="py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition flex items-center justify-center space-x-1.5"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Export JSON</span>
-                    </button>
-                  </div>
                 </div>
               </div>
 

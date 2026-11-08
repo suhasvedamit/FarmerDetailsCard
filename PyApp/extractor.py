@@ -308,44 +308,96 @@ class FarmerFormExtractor:
         record.land_detail = land_info
 
         # 9. Address (English)
-        addr_lines = []
-        lines = text.splitlines()
-        capturing = False
-        for l in lines:
-            if "Address In English" in l:
-                capturing = True
-                cleaned = re.sub(r"Address In English", "", l, flags=re.I)
-                cleaned = re.sub(r"\|\s*Address In.*", "", cleaned, flags=re.I).strip(" ,|")
-                if cleaned:
-                    addr_lines.append(cleaned)
-            elif capturing:
-                if any(k in l for k in ["Farmer type", "Occupations", "Land Ownership", "Sub-District", "Annexure"]):
-                    # Check if address continuation is misplaced
-                    if "Radha Swami" in l or "Hospital" in l or "Platinum" in l:
-                        cleaned = re.sub(r"\|\s*Address In.*", "", l, flags=re.I).strip(" ,|")
-                        if cleaned and cleaned not in addr_lines:
-                            addr_lines.append(cleaned)
-                    capturing = False
-                else:
-                    if not re.search(r"^\s*(Local|Language)\s*$", l, re.I):
-                        cleaned = re.sub(r"\|\s*Address In.*", "", l, flags=re.I).strip(" ,|")
-                        if cleaned and cleaned not in addr_lines:
-                            addr_lines.append(cleaned)
-            elif "Radha Swami" in l or "Imperial Hospital" in l:
-                cleaned = re.sub(r"\|\s*Address In.*", "", l, flags=re.I).strip(" ,|")
-                if cleaned and cleaned not in addr_lines:
-                    addr_lines.append(cleaned)
-
-        if addr_lines:
-            address_str = ", ".join(addr_lines)
-            address_str = re.sub(r"\s*,\s*", ", ", address_str).strip(", ")
-            record.address = address_str
+        addr_match = re.search(
+            r"(?:Address\s*In\s*English|Address\s*In\s*Eng)\s*[:\-\s]*([\s\S]+?)(?=\n*\s*(?:Farmer[\s\-_]*type|Occupations?|Land[\s\-_]*Ownership|State\s*[\/-]?\s*UT|Annexure|$))",
+            text,
+            re.I,
+        ) or re.search(
+            r"(?:Farmer\s*Residential\s*Details[\s\S]*?)?Address\s*[:\-\s]*([\s\S]+?)(?=\n*\s*(?:Farmer[\s\-_]*type|Occupations?|Land[\s\-_]*Ownership|State\s*[\/-]?\s*UT|Annexure|$))",
+            text,
+            re.I,
+        )
+        if addr_match:
+            record.address = self._clean_address(addr_match.group(1))
         else:
-            gen_addr = re.search(r"Address[^\n:]*[:\n]\s*([^\n\r]{10,120})", text, re.I)
+            gen_addr = re.search(r"Address[^\n:]*[:\n]\s*([^\n\r]{10,200})", text, re.I)
             if gen_addr:
-                record.address = gen_addr.group(1).strip()
+                record.address = self._clean_address(gen_addr.group(1))
 
         return record
+
+    def _clean_address(self, raw_text: str) -> str:
+        """Cleans extracted address text by stripping OCR table artifacts and headers."""
+        if not raw_text:
+            return ""
+
+        cleaned_lines = []
+        for line in raw_text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+
+            if re.match(r"^(?:Farmer[\s\-_]*type|Occupations?|Land[\s\-_]*Ownership|State\s*[\/-]?\s*UT|Annexure)\b", line, re.I):
+                break
+
+            # If we already collected the English address, and we hit the right-column header ('Language'),
+            # stop so any subsequent lines from the local language column (like 'HITT STOT') are ignored.
+            if re.match(r"^(?:Language|Local\s*Language)\s*$", line, re.I):
+                if cleaned_lines:
+                    break
+                continue
+
+            if re.search(r"[\u0900-\u097F]", line):
+                continue
+
+            if re.match(r"^(?:Address\s*In\s*Local\s*Language|Address\s*In\s*Local|Address\s*In|Local\s*Language|Local|Language|Address\s*In\s*English|Address)$", line, re.I):
+                continue
+            if re.match(r"^(?:Farmer\s*Residential\s*Details|Contact\s*Details|Email\s*Address)$", line, re.I):
+                continue
+
+            # Discard lines that are purely OCR ghost noise from the local language column
+            if re.match(r"^(?:(?:HITT|STOT|TATT|FITT|SFTAT|UigeT|fae|Tle|Tae)[\s,.\-|/]*)+$", line, re.I):
+                continue
+
+            if "|" in line:
+                line = line.split("|")[0].strip()
+
+            # Strip leading 'Address In English' if present
+            line = re.sub(r"^\s*Address\s*In\s*English\s*[:\-\s]*", "", line, flags=re.I)
+
+            # Strip right-column header fragments attached at the end of the line
+            line = re.sub(r"\bAddress\s*In(?:\s*Local)?(?:\s*Language)?\s*$", "", line, flags=re.I)
+            line = re.sub(r"\bLocal\s*Language\s*$", "", line, flags=re.I)
+            line = re.sub(r"(?:,\s*|\s+)(?:Local|Language)\s*$", "", line, flags=re.I)
+            line = re.sub(r"^\s*(?:Local|Language)(?:,\s*|\s+)", "", line, flags=re.I)
+
+            # Strip any ghost words from the end of the line
+            line = re.sub(r"\b(?:HITT|STOT|TATT|FITT|SFTAT|UigeT|fae|Tle|Tae)\b.*$", "", line, flags=re.I)
+            line = line.strip()
+
+            if line and not re.match(r"^(?:Local|Language|Address\s*In)$", line, re.I):
+                cleaned_lines.append(line)
+
+        address = ", ".join(cleaned_lines)
+
+        address = re.sub(r"\b(?:HITT|STOT|TATT|FITT|SFTAT|UigeT|fae|Tle|Tae)\b", "", address, flags=re.I)
+        address = re.sub(r"\bAddress\s*In\s*(?:Local\s*)?(?:Language)?\b", "", address, flags=re.I)
+        address = re.sub(r"\bAddress\s*In\s*English\b", "", address, flags=re.I)
+        address = re.sub(r"\bAddress\s*In\b", "", address, flags=re.I)
+        address = re.sub(r"\bLocal\s*Language\b", "", address, flags=re.I)
+        address = re.sub(r"\bLanguage\b", "", address, flags=re.I)
+        address = re.sub(r"\bLocal\b", "", address, flags=re.I)
+        address = re.sub(r"\bFarmer[\s\-_]*type[\s\S]*", "", address, flags=re.I)
+        address = re.sub(r"\bOccupations?[\s\S]*", "", address, flags=re.I)
+        address = re.sub(r"\bLand[\s\-_]*Ownership[\s\S]*", "", address, flags=re.I)
+        address = re.sub(r"\bLand\s*owning\s*FarmerAgriculture\b", "", address, flags=re.I)
+
+        address = re.sub(r"\s*,\s*", ", ", address)
+        address = re.sub(r"(?:,\s*)+", ", ", address)
+        address = re.sub(r"^[\s,.\-|/]+", "", address)
+        address = re.sub(r"[\s,.\-|/]+$", "", address)
+        address = re.sub(r"\s{2,}", " ", address)
+        return address.strip()
 
     def _extract_photo(self, page_img: Image.Image) -> Optional[Image.Image]:
         """Locates and extracts the farmer photograph from the first registration form page using spatial computer vision."""

@@ -167,21 +167,45 @@ export async function generateCardCanvas(record: FarmerRecord): Promise<HTMLCanv
     ctx.fillText(truncateText(landStr.substring(52), 52), col2X, cy + 20);
   }
 
+  // Footer Disclaimer Bar position
+  const footerY = h - 48;
+
   // 6. Address
   cy += rowGap + (landStr.length > 52 ? 12 : 0);
   ctx.fillStyle = '#4b5563';
   ctx.font = '600 15px Inter, sans-serif';
   ctx.fillText('Address:', col1X, cy);
+
   ctx.fillStyle = '#374151';
-  ctx.font = '500 13px Inter, sans-serif';
-  const addr = record.address || '--';
-  ctx.fillText(truncateText(addr, 56), col2X, cy);
-  if (addr.length > 56) {
-    ctx.fillText(truncateText(addr.substring(56), 60), col2X, cy + 18);
+  let addrFontSize = 13;
+  let addrLineHeight = 19;
+  ctx.font = `500 ${addrFontSize}px Inter, sans-serif`;
+
+  const addr = record.address?.trim() || '--';
+  const maxAddrWidth = 780;
+  const maxBottomY = footerY - 14;
+  const availableHeight = maxBottomY - cy;
+
+  let addrLines = wrapTextToLines(ctx, addr, maxAddrWidth);
+
+  // If text is unusually long, scale down slightly so all lines fit comfortably
+  if (addrLines.length * addrLineHeight > availableHeight) {
+    addrFontSize = 11.5;
+    addrLineHeight = 15;
+    ctx.font = `500 ${addrFontSize}px Inter, sans-serif`;
+    addrLines = wrapTextToLines(ctx, addr, maxAddrWidth);
   }
 
+  // Draw wrapped address lines
+  addrLines.forEach((line, index) => {
+    const lineY = cy + index * addrLineHeight;
+    if (lineY <= maxBottomY) {
+      const isLastFittingLine = (lineY + addrLineHeight > maxBottomY) && (index < addrLines.length - 1);
+      ctx.fillText(isLastFittingLine ? truncateText(line, 85) : line, col2X, lineY);
+    }
+  });
+
   // Footer Disclaimer Bar
-  const footerY = h - 48;
   ctx.save();
   ctx.beginPath();
   roundRect(ctx, 4, footerY, w - 8, 44, { tl: 0, tr: 0, bl: radius, br: radius });
@@ -211,9 +235,9 @@ export async function downloadCardAsPng(record: FarmerRecord, filename = 'farmer
 }
 
 /**
- * Generates and downloads a standard CR80 print-ready PDF card (85.6mm x 53.98mm).
+ * Creates the jsPDF document for the card.
  */
-export async function downloadCardAsPdf(record: FarmerRecord, filename = 'farmer_details_card.pdf'): Promise<void> {
+export async function createCardPdf(record: FarmerRecord): Promise<jsPDF> {
   const canvas = await generateCardCanvas(record);
   const imgData = canvas.toDataURL('image/png', 1.0);
 
@@ -225,7 +249,60 @@ export async function downloadCardAsPdf(record: FarmerRecord, filename = 'farmer
   });
 
   pdf.addImage(imgData, 'PNG', 0, 0, 85.6, 54);
+  return pdf;
+}
+
+/**
+ * Generates and downloads a standard CR80 print-ready PDF card (85.6mm x 53.98mm).
+ */
+export async function downloadCardAsPdf(record: FarmerRecord, filename = 'farmer_details_card.pdf'): Promise<void> {
+  const pdf = await createCardPdf(record);
   pdf.save(filename);
+}
+
+/**
+ * Shares the card PDF via WhatsApp:
+ * - On Mobile (Web Share API supported): Opens native share directly with the PDF file attached to send to WhatsApp.
+ * - On Desktop / Fallback: Downloads the PDF card file and opens WhatsApp Web with a pre-filled summary message.
+ */
+export async function shareCardPdfViaWhatsApp(record: FarmerRecord): Promise<{ sharedDirectly: boolean }> {
+  const cleanName = (record.farmer_name || 'Farmer').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const filename = `${cleanName}_Farmer_Card.pdf`;
+  const pdf = await createCardPdf(record);
+
+  const shareText = `🌾 Farmer Details Card\n👤 Name: ${record.farmer_name || 'N/A'}\n🆔 Farmer ID: ${record.farmer_id || 'N/A'}\n📍 Village/Dist: ${record.land_detail?.village || record.land_detail?.district || 'N/A'}`;
+
+  // Check if Web Share API with file support is available (Mobile Chrome / Safari / Edge)
+  const pdfBlob = pdf.output('blob');
+  const file = new File([pdfBlob], filename, { type: 'application/pdf' });
+
+  if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({
+        files: [file],
+        title: `${record.farmer_name || 'Farmer'} - Details Card`,
+        text: shareText,
+      });
+      return { sharedDirectly: true };
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        // User closed the share sheet
+        return { sharedDirectly: true };
+      }
+      console.warn('Web Share failed, falling back to WhatsApp link:', err);
+    }
+  }
+
+  // Desktop / unsupported browser fallback:
+  // 1. Download the PDF to the user's computer
+  pdf.save(filename);
+
+  // 2. Open WhatsApp Web / App with pre-filled message
+  const waMsg = encodeURIComponent(
+    `${shareText}\n\n📎 (Card PDF has been saved to your downloads — please attach it here)`
+  );
+  window.open(`https://api.whatsapp.com/send?text=${waMsg}`, '_blank');
+  return { sharedDirectly: false };
 }
 
 // Helpers
@@ -242,6 +319,60 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 function truncateText(text: string, maxLen: number): string {
   if (!text) return '';
   return text.length > maxLen ? text.substring(0, maxLen - 3) + '...' : text;
+}
+
+function wrapTextToLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number
+): string[] {
+  if (!text || !text.trim()) return ['--'];
+
+  const paragraphs = text.split(/\r?\n/);
+  const resultLines: string[] = [];
+
+  for (const paragraph of paragraphs) {
+    const trimmed = paragraph.trim();
+    if (!trimmed) continue;
+
+    const words = trimmed.split(/\s+/);
+    let currentLine = '';
+
+    for (const word of words) {
+      const candidate = currentLine ? `${currentLine} ${word}` : word;
+      if (ctx.measureText(candidate).width <= maxWidth) {
+        currentLine = candidate;
+      } else {
+        if (currentLine) {
+          resultLines.push(currentLine);
+          currentLine = '';
+        }
+
+        // If a single word is wider than maxWidth, split it character-by-character
+        if (ctx.measureText(word).width > maxWidth) {
+          let partial = '';
+          for (let i = 0; i < word.length; i++) {
+            const char = word[i];
+            if (ctx.measureText(partial + char).width <= maxWidth) {
+              partial += char;
+            } else {
+              resultLines.push(partial);
+              partial = char;
+            }
+          }
+          currentLine = partial;
+        } else {
+          currentLine = word;
+        }
+      }
+    }
+
+    if (currentLine) {
+      resultLines.push(currentLine);
+    }
+  }
+
+  return resultLines.length > 0 ? resultLines : ['--'];
 }
 
 function drawPhotoPlaceholder(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
