@@ -53,3 +53,4 @@ export const LandCard: React.FC<LandCardProps> = ({ land }) => {
     </div>
   );
 };
+

@@ -25,3 +25,4 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({ message, percent }) =>
     </div>
   );
 };
+

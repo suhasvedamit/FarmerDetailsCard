@@ -26,3 +26,4 @@ export interface FarmerRecord {
   photo_base64?: string;
   photo_url?: string;
 }
+

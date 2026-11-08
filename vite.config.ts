@@ -15,3 +15,4 @@ export default defineConfig({
     include: ['pdfjs-dist', 'tesseract.js', 'qrcode', 'jspdf']
   }
 });
+

@@ -35,3 +35,4 @@ export const PhotoCard: React.FC<PhotoCardProps> = ({ photoUrl }) => {
     </div>
   );
 };
+

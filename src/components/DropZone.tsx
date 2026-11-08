@@ -61,3 +61,4 @@ export const DropZone: React.FC<DropZoneProps> = ({ onFileSelected, isProcessing
     </div>
   );
 };
+

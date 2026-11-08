@@ -72,3 +72,4 @@ export const CardModal: React.FC<CardModalProps> = ({
     </div>
   );
 };
+
