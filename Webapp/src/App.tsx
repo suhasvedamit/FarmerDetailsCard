@@ -9,7 +9,7 @@ import { DisclaimerModal } from './components/DisclaimerModal';
 import { PhotoEditorModal } from './components/PhotoEditorModal';
 import { FarmerRecord } from './types';
 import { extractFarmerDataFromPdf } from './lib/pdfExtractor';
-import { generateFrontCardCanvas, generateBackCardCanvas } from './lib/cardGenerator';
+import { generateFrontCardCanvas, generateBackCardCanvas, addWatermarkToCanvas } from './lib/cardGenerator';
 import { saveExtractedRecord, saveGeneratedRecord } from './lib/supabase';
 import { CreditCard } from 'lucide-react';
 
@@ -76,8 +76,8 @@ export const App: React.FC = () => {
         generateFrontCardCanvas(data),
         generateBackCardCanvas(data),
       ]);
-      setFrontPreviewUrl(frontCanvas.toDataURL('image/png'));
-      setBackPreviewUrl(backCanvas.toDataURL('image/png'));
+      setFrontPreviewUrl(addWatermarkToCanvas(frontCanvas).toDataURL('image/png'));
+      setBackPreviewUrl(addWatermarkToCanvas(backCanvas).toDataURL('image/png'));
       setCardModalOpen(true);
 
       // Non-blocking background sync (never interrupts user experience if offline/blocked)

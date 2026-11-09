@@ -23,6 +23,14 @@ export const EMPTY_FARMER_RECORD: FarmerRecord = {
     state: '',
     summary: '',
   },
+  land_records: [
+    {
+      survey_no: '',
+      village: '',
+      owner_type: '',
+      area: '',
+    },
+  ],
   bank_detail: {
     bank_name_branch: '',
     account_no: '',

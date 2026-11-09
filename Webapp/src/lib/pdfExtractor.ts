@@ -1,6 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import { createWorker } from 'tesseract.js';
-import { FarmerRecord } from '../types';
+import { FarmerRecord, LandRow } from '../types';
 
 // Set up PDF.js worker from CDN
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
@@ -25,6 +25,7 @@ const MAHARASHTRA_DISTRICTS = [
  * Fuzzy matches a text against known districts to correct OCR misreads (e.g. "PUNF" -> "PUNE").
  */
 function correctDistrict(rawText: string): string {
+  if (!rawText) return '';
   const upper = rawText.toUpperCase();
   for (const d of MAHARASHTRA_DISTRICTS) {
     if (upper.includes(d)) return d;
@@ -35,7 +36,7 @@ function correctDistrict(rawText: string): string {
   if (/SATAR[A4]/i.test(upper)) return 'SATARA';
   if (/SANGL[I1]/i.test(upper)) return 'SANGLI';
   if (/KOLHAPU[R]/i.test(upper)) return 'KOLHAPUR';
-  return '';
+  return rawText.trim();
 }
 
 /**
@@ -446,6 +447,8 @@ export function extractPhotoFromCanvas(canvas: HTMLCanvasElement): string | null
 
 /**
  * Extracts digital text directly from PDF pages if available.
+ * Groups text items by vertical Y coordinates into natural lines,
+ * sorting horizontally left-to-right to preserve table layouts.
  */
 async function extractDigitalPageTexts(pdf: pdfjsLib.PDFDocumentProxy): Promise<string[]> {
   const pageTexts: string[] = [];
@@ -453,15 +456,309 @@ async function extractDigitalPageTexts(pdf: pdfjsLib.PDFDocumentProxy): Promise<
     try {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
-      const str = textContent.items
-        .map((item: any) => ('str' in item ? item.str : ''))
-        .join(' ');
-      pageTexts.push(str);
+      const items = (textContent.items as any[]).filter(
+        it => it && typeof it.str === 'string' && it.str.length > 0
+      );
+
+      if (items.length === 0) {
+        pageTexts.push('');
+        continue;
+      }
+
+      // Group items into lines by Y coordinate (tolerance ~4 points)
+      const lineTolerance = 4;
+      const lines: { y: number; items: any[] }[] = [];
+
+      for (const item of items) {
+        const y = item.transform ? item.transform[5] : 0;
+        let existingLine = lines.find(l => Math.abs(l.y - y) <= lineTolerance);
+        if (!existingLine) {
+          existingLine = { y, items: [] };
+          lines.push(existingLine);
+        }
+        existingLine.items.push(item);
+      }
+
+      // Sort lines top to bottom (in PDF space, higher Y is higher on page)
+      lines.sort((a, b) => b.y - a.y);
+
+      // Sort items within each line left to right (X ascending)
+      const pageLines = lines.map(line => {
+        line.items.sort((a, b) => {
+          const ax = a.transform ? a.transform[4] : 0;
+          const bx = b.transform ? b.transform[4] : 0;
+          return ax - bx;
+        });
+        return line.items.map(it => it.str).join(' ');
+      });
+
+      pageTexts.push(pageLines.join('\n'));
     } catch {
       pageTexts.push('');
     }
   }
   return pageTexts;
+}
+
+/**
+ * Robust extraction of Farmer PAN Card number.
+ * Validates 10-character Indian PAN format (5 letters, 4 digits, 1 letter)
+ * and repairs minor OCR character substitutions (e.g. O <-> 0, I <-> 1).
+ * Returns empty string if the field in the PDF is empty/blank.
+ */
+export function extractPanCard(text: string): string {
+  if (!text) return '';
+
+  const cleanPan = (raw: string): string => {
+    let s = raw.trim();
+    if (s.includes('|')) s = s.split('|')[0].trim();
+    s = s.split(/\b(?:Minority|Religion|Kisan|Credit|Card|Bank|Farmer|Caste|Certificate|Disabilities)\b/i)[0].trim();
+    s = s.replace(/[\s\-_]/g, '').toUpperCase();
+    if (s.length !== 10) return '';
+
+    if (/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(s)) return s;
+
+    // Fix OCR character substitutions
+    const chars = s.split('');
+    const digitToLetter: Record<string, string> = { '0': 'O', '1': 'I', '5': 'S', '8': 'B', '2': 'Z' };
+    const letterToDigit: Record<string, string> = { O: '0', I: '1', L: '1', S: '5', B: '8', Z: '2' };
+    for (let i = 0; i < 5; i++) {
+      if (/[0-9]/.test(chars[i]) && digitToLetter[chars[i]]) chars[i] = digitToLetter[chars[i]];
+    }
+    for (let i = 5; i < 9; i++) {
+      if (/[A-Z]/.test(chars[i]) && letterToDigit[chars[i]]) chars[i] = letterToDigit[chars[i]];
+    }
+    if (/[0-9]/.test(chars[9]) && digitToLetter[chars[9]]) chars[9] = digitToLetter[chars[9]];
+
+    const fixed = chars.join('');
+    if (/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(fixed)) return fixed;
+    return '';
+  };
+
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const match = line.match(
+      /(?:Farmer\s*Pan\s*(?:Card)?\s*(?:Number|No\.?)?|PAN\s*(?:Card)?(?:\s*(?:Number|No\.?))?|पॅन\s*(?:कार्ड|नंबर)?)\s*[:\-\s]+(.*)/i
+    );
+    if (match) {
+      const candidate = cleanPan(match[1]);
+      if (candidate) return candidate;
+      if (i + 1 < lines.length) {
+        const nextCand = cleanPan(lines[i + 1]);
+        if (nextCand) return nextCand;
+      }
+    }
+    if (/^(?:Farmer\s*Pan\s*(?:Card)?\s*(?:Number|No\.?)?|PAN\s*(?:Card)?(?:\s*(?:Number|No\.?))?|पॅन\s*(?:कार्ड|नंबर)?)\s*[:\-]?$/i.test(line)) {
+      if (i + 1 < lines.length) {
+        const candidate = cleanPan(lines[i + 1]);
+        if (candidate) return candidate;
+      }
+    }
+  }
+
+  const globalMatch = text.match(/\b([A-Z]{5}[0-9]{4}[A-Z])\b/);
+  if (globalMatch) {
+    const candidate = cleanPan(globalMatch[1]);
+    if (candidate) return candidate;
+  }
+  return '';
+}
+
+/**
+ * Robust extraction of Bank Name.
+ * Handles single-line table cells, trailing "Bank Branch Code" columns,
+ * multiline labels, and filters out "Kisan Credit Card Bank Name".
+ */
+export function extractBankName(text: string): string {
+  if (!text) return '';
+
+  const cleanupTrailing = (str: string): string => {
+    let s = str.trim();
+    if (s.includes('|')) s = s.split('|')[0].trim();
+    s = s.replace(/\s*(?:Bank\s*)?Branch\s*(?:Code|Name)?\s*[:\-\s]*[A-Za-z0-9_-]*$/i, '');
+    s = s.replace(/\s*(?:IFSC|Account|A\/c|Branch)\b.*$/i, '');
+    s = s.replace(/\s*Farmer\s*(?:Disabilities|type|Residential).*$/i, '');
+    s = s.replace(/[\s,.:;\-]+$/, '').trim();
+    return s;
+  };
+
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/Kisan\s*Credit\s*Card/i.test(line) && !/Bank\s*Name\s*[:\-\s]+[A-Za-z]/i.test(line.replace(/Kisan\s*Credit\s*Card[^\n]*/i, ''))) {
+      continue;
+    }
+
+    const bankLineMatch = line.match(
+      /(?:(?<!Kisan\s*Credit\s*Card\s*)(?<!KCC\s*)(?:Farmer\s*)?Bank\s*Name|Name\s*of\s*Bank|बँकेचे\s*नाव)\s*[:\-\s]+(.*)/i
+    );
+    if (bankLineMatch) {
+      const candidate = cleanupTrailing(bankLineMatch[1]);
+      if (candidate.length >= 3 && !/^(?:Branch|Code|Bank\s*Branch|IFSC|Account|Number|No)$/i.test(candidate)) {
+        return candidate;
+      }
+      if (i + 1 < lines.length) {
+        const nextLine = lines[i + 1];
+        if (!/^(?:IFSC|Account|Branch|Kisan|Farmer|Minority|State|District)/i.test(nextLine)) {
+          const nextCandidate = cleanupTrailing(nextLine);
+          if (nextCandidate.length >= 3) return nextCandidate;
+        }
+      }
+    }
+
+    if (/^(?:Bank\s*Name|Name\s*of\s*Bank|बँकेचे\s*नाव)\s*[:\-]?$/i.test(line)) {
+      if (i + 1 < lines.length) {
+        const nextLine = lines[i + 1];
+        if (!/^(?:IFSC|Account|Branch|Kisan|Farmer|Minority|State|District)/i.test(nextLine)) {
+          const candidate = cleanupTrailing(nextLine);
+          if (candidate.length >= 3) return candidate;
+        }
+      }
+    }
+  }
+
+  const globalMatch = text.match(
+    /(?:(?<!Kisan\s*Credit\s*Card\s*)(?<!KCC\s*)Bank\s*Name|Name\s*of\s*Bank)\s*[:\-\s]+([A-Za-z\s.,&'-]+?)(?=\s*(?:\||Bank\s*Branch|Branch\s*Code|IFSC|Account|\n|$))/i
+  );
+  if (globalMatch) {
+    const candidate = cleanupTrailing(globalMatch[1]);
+    if (candidate.length >= 3 && !/^(?:Branch|Code|Bank\s*Branch|IFSC|Account|Number|No)$/i.test(candidate)) {
+      return candidate;
+    }
+  }
+  return '';
+}
+
+/**
+ * Robust extraction of Bank Account Number.
+ * Handles "Bank Account Number", "Account No", "A/C Number", etc.
+ * Cleans spaces, dashes, and repairs OCR letter/digit confusions.
+ */
+export function extractAccountNumber(text: string): string {
+  if (!text) return '';
+
+  const cleanNum = (raw: string): string => {
+    let s = raw.trim();
+    s = s.split(/\b(?:IFSC|Farmer|Address|Branch|Type|Occupations|State|District)\b/i)[0].trim();
+    if (s.includes('|')) s = s.split('|')[0].trim();
+    s = s.replace(/[\s\-_]/g, '').replace(/[oO]/g, '0').replace(/[Il]/g, '1');
+    const m = s.match(/^\d{8,22}$/);
+    return m ? m[0] : '';
+  };
+
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const match = line.match(
+      /(?:Bank\s*Account\s*(?:Number|No\.?)|(?:Savings\s*)?Account\s*(?:Number|No\.?)|A\/c\s*(?:Number|No\.?|Num)?|बचत\s*खाता\s*(?:नंबर|क्र\.?)?|खाते\s*(?:क्रमांक|नंबर))\s*[:\-\s]+(.*)/i
+    );
+    if (match) {
+      const candidate = cleanNum(match[1]);
+      if (candidate) return candidate;
+      if (i + 1 < lines.length) {
+        const nextCand = cleanNum(lines[i + 1]);
+        if (nextCand) return nextCand;
+      }
+    }
+    if (/^(?:Bank\s*Account\s*(?:Number|No\.?)|Account\s*(?:Number|No\.?)|A\/c\s*(?:Number|No\.?))\s*[:\-]?$/i.test(line)) {
+      if (i + 1 < lines.length) {
+        const candidate = cleanNum(lines[i + 1]);
+        if (candidate) return candidate;
+      }
+    }
+  }
+
+  const globalMatch = text.match(
+    /(?:Bank\s*Account\s*(?:Number|No\.?)|(?:Savings\s*)?Account\s*(?:Number|No\.?)|A\/c\s*(?:Number|No\.?))\s*[:\-\s]*([0-9OIl\s\-]{8,25})/i
+  );
+  if (globalMatch) {
+    const candidate = cleanNum(globalMatch[1]);
+    if (candidate) return candidate;
+  }
+
+  // Fallback: Search in Bank Details section
+  const bankSectionMatch = text.match(/(?:Farmer\s*Bank[\s\S]*?)(?:Farmer\s*Residential|Land\s*Ownership|$)/i);
+  if (bankSectionMatch) {
+    const section = bankSectionMatch[0];
+    const candidates = section.match(/\b\d{9,18}\b/g);
+    if (candidates) {
+      for (const cand of candidates) {
+        if (/^[6-9]\d{9}$/.test(cand)) continue; // skip mobile
+        return cand;
+      }
+    }
+  }
+
+  return '';
+}
+
+/**
+ * Robust extraction of IFSC Code.
+ * Validates 11-character Indian IFSC standard:
+ * 4 letters + 0 + 6 alphanumeric characters.
+ * Fixes OCR 'O' vs '0' at 5th position and inside branch code.
+ */
+export function extractIfscCode(text: string): string {
+  if (!text) return '';
+
+  const normalizeIfsc = (raw: string): string => {
+    let s = raw.trim();
+    if (s.includes('|')) s = s.split('|')[0].trim();
+    s = s.split(/\b(?:Bank|Account|A\/c|Number|No|Branch)\b/i)[0].trim();
+    s = s.replace(/[\s\-_]/g, '').toUpperCase();
+    if (s.length !== 11) return '';
+
+    let first4 = s.substring(0, 4)
+      .replace(/0/g, 'O')
+      .replace(/1/g, 'I')
+      .replace(/5/g, 'S')
+      .replace(/8/g, 'B');
+    if (!/^[A-Z]{4}$/.test(first4)) return '';
+
+    const fifth = '0';
+    let last6 = s.substring(5);
+    if (/\d/.test(last6) || /^[O0-9]+$/.test(last6)) {
+      last6 = last6.replace(/O/g, '0').replace(/I/g, '1');
+    }
+    if (!/^[A-Z0-9]{6}$/.test(last6)) return '';
+
+    return `${first4}${fifth}${last6}`;
+  };
+
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const match = line.match(/(?:IFSC\s*(?:Code)?|आयएफएससी(?:\s*कोड)?)\s*[:\-\s]+(.*)/i);
+    if (match) {
+      const candidate = normalizeIfsc(match[1]);
+      if (candidate) return candidate;
+      if (i + 1 < lines.length) {
+        const nextCand = normalizeIfsc(lines[i + 1]);
+        if (nextCand) return nextCand;
+      }
+    }
+    if (/^(?:IFSC\s*(?:Code)?|आयएफएससी(?:\s*कोड)?)\s*[:\-]?$/i.test(line)) {
+      if (i + 1 < lines.length) {
+        const candidate = normalizeIfsc(lines[i + 1]);
+        if (candidate) return candidate;
+      }
+    }
+  }
+
+  const stdMatch = text.match(/\b([A-Z]{4}0[A-Z0-9]{6})\b/i);
+  if (stdMatch) {
+    const candidate = normalizeIfsc(stdMatch[1]);
+    if (candidate) return candidate;
+  }
+
+  const lenientMatch = text.match(/\b([A-Za-z]{4}[0O][A-Za-z0-9]{6})\b/);
+  if (lenientMatch) {
+    const candidate = normalizeIfsc(lenientMatch[1]);
+    if (candidate) return candidate;
+  }
+
+  return '';
 }
 
 /**
@@ -570,6 +867,416 @@ export function cleanExtractedAddress(rawText: string): string {
   return address;
 }
 
+export interface ExtractedLandData {
+  rows: LandRow[];
+  village: string;
+  surveyNo: string;
+  totalArea: string;
+  khataNo: string;
+  subDistrict: string;
+  district: string;
+  state: string;
+  landSummary: string;
+}
+
+/**
+ * Splits a line into distinct table column cells based on |, tab, or 2+ spaces.
+ */
+function splitLineIntoCols(line: string): string[] {
+  if (line.includes('|')) return line.split('|').map(p => p.trim());
+  if (line.includes('\t')) return line.split('\t').map(p => p.trim());
+  return line.split(/\s{2,}/).map(p => p.trim());
+}
+
+function cleanAreaVal(raw: string): string {
+  if (!raw) return '';
+  const m = raw.match(/\b\d+(?:\.\d+)?\b/);
+  return m ? m[0] : raw.replace(/,/g, '').trim();
+}
+
+function cleanSurveyNo(sNo?: string, ssNo?: string): string {
+  const s = (sNo || '').trim();
+  const ss = (ssNo || '').trim();
+  if (!ss || ss === '*' || ss === '-') return s;
+  return `${s}/${ss}`;
+}
+
+function resolveVillage(rawVillage: string, address?: string, nextLine?: string): string {
+  let v = (rawVillage || '').trim();
+  if (!v) return '';
+
+  // 1. Check if next line contains wrapped syllable (e.g. "adi", "wadi", "gaon", "pur", "khed", "bad", "ner", "oli", "pada")
+  if (nextLine) {
+    const nextWords = nextLine.split(/\s+/);
+    for (const nw of nextWords) {
+      if (/^(adi|wadi|gaon|pur|khed|bad|ner|oli|pada)\b/i.test(nw)) {
+        v = v + nw;
+        break;
+      }
+    }
+  }
+
+  // 2. Cross-reference with address (e.g. if address contains village name)
+  if (address) {
+    const cleanAddr = address.toLowerCase();
+    const cleanV = v.toLowerCase().replace(/[^a-z]/g, '');
+    if (cleanV.length >= 3 && cleanAddr.includes(cleanV.slice(0, Math.min(4, cleanV.length)))) {
+      const words = address.split(/[\s,]+/);
+      const matchWords = words.filter(w => /^[A-Za-z]+$/.test(w));
+      if (matchWords.length > 0) {
+        return matchWords.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+      }
+    }
+  }
+
+  return v.charAt(0).toUpperCase() + v.slice(1);
+}
+
+/**
+ * Extracts multiple Land Details records dynamically from PDF text (digital or OCR).
+ * Uses column mapping:
+ * 1. S No./S/S no. -> survey_no
+ * 2. Village -> village
+ * 3. Owner Type -> owner_type
+ * 4. Extent Assigned Area -> area
+ * Strictly limits to max 5 records. Never hardcodes any place, name, or number.
+ */
+export function extractLandRecordsFromText(
+  fullText: string,
+  p2Text?: string,
+  p3Text?: string,
+  address?: string
+): ExtractedLandData {
+  // Use fullText (which contains all pages in natural chronological order)
+  // Fall back to combined page texts if fullText is empty
+  const combinedText = fullText || [p2Text, p3Text].filter(Boolean).join('\n---\n');
+  const extractedRows: LandRow[] = [];
+  let foundState = '';
+  let foundDistrict = '';
+  let foundSubDistrict = '';
+  let foundKhataNo = '';
+  let foundTotalArea = '';
+
+  // Pre-clean line wraps dynamically without hardcoding
+  let pre = combinedText
+    .replace(/MAHARAS\s*\n*\s*HTRA/gi, 'MAHARASHTRA')
+    .replace(/\b([A-Za-z]{3,})\s*\n+\s*(adi|wadi|gaon|pur|khed|bad|ner|oli|pada)\b/gi, '$1$2');
+
+  const lines = pre.split('\n').map(l => l.trim()).filter(Boolean);
+
+  // Strategy 1: AgriStack OCR table rows (detect lines having decimal Area + Owner Type)
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Stop processing if we reached the consent or annexure section after the table
+    if (line.includes('Consent by Farmer') || line.includes('Annexure')) break;
+
+    // Check for decimal areas (e.g. 0.070000, 0.820000, 1.230000)
+    const areaMatches = [...line.matchAll(/\b(\d+\.\d+)[,\s]*/g)];
+    const ownerTypeMatch = line.match(/\b(Single|Sole|Joint|Individual|Ancestral|Self|Owner|Co-Owner|Tenant|स्वतःची|सामाईक|वारसाहक्क|इतर)\b/i);
+
+    if (areaMatches.length > 0 && ownerTypeMatch) {
+      const assignedArea = cleanAreaVal(areaMatches[areaMatches.length - 1][1]);
+      const ownerType = ownerTypeMatch[1];
+      const nextLine = lines[i + 1] || '';
+
+      const firstAreaIndex = line.indexOf(areaMatches[0][0]);
+      const lineBeforeArea = line.substring(0, firstAreaIndex).trim();
+
+      let sNo = '';
+      let ssNo = '';
+      let villageRaw = '';
+      let subDistrictRaw = '';
+      let districtRaw = '';
+      let stateRaw = '';
+
+      // Extract District, SubDistrict, Village from lineBeforeArea
+      const upperLine = lineBeforeArea.toUpperCase();
+      for (const d of MAHARASHTRA_DISTRICTS) {
+        const dIdx = upperLine.indexOf(d);
+        if (dIdx !== -1) {
+          districtRaw = d;
+          const beforeDist = lineBeforeArea.substring(0, dIdx).replace(/[|\s_]+/g, '').trim();
+          if (/MAHARA/i.test(beforeDist)) {
+            stateRaw = 'MAHARASHTRA';
+          } else if (beforeDist.length >= 4) {
+            stateRaw = beforeDist;
+          }
+
+          const afterDist = lineBeforeArea.substring(dIdx + d.length).trim();
+          const words = afterDist.split(/[|\s]+/).filter(w => /^[A-Za-z]+$/.test(w) && !/^(Single|Sole|Joint|Owner|Male|Female)$/i.test(w));
+          if (words.length >= 2) {
+            subDistrictRaw = words[0];
+            villageRaw = words[1];
+          } else if (words.length === 1) {
+            villageRaw = words[0];
+          }
+          break;
+        }
+      }
+
+      // 1. Check pipe parts for survey numbers
+      if (lineBeforeArea.includes('|')) {
+        const parts = lineBeforeArea.split('|').map(p => p.trim());
+        for (let p = 1; p < parts.length; p++) {
+          const part = parts[p];
+          // Two tokens separated by space in cell, e.g. "52 16/4", "67 1", "14 *"
+          const mSpace = part.match(/\b(\d{1,5})\s+([0-9A-Za-z\u0900-\u097F\/\*\-]+)\b/);
+          if (mSpace) {
+            sNo = mSpace[1];
+            ssNo = mSpace[2];
+            if (p >= 1 && !villageRaw && /^[A-Za-z\s]+$/.test(parts[p - 1])) villageRaw = parts[p - 1];
+            break;
+          }
+          // Combined slash survey in cell, e.g. "67/1", "Gat 45/2"
+          const mCombined = part.match(/\b(?:Gat(?:\s*No)?\.?\s*)?(\d{1,5}(?:\s*[\/|\-]\s*[0-9A-Za-z\u0900-\u097F]+)+)\b/i);
+          if (mCombined) {
+            sNo = mCombined[1].replace(/\s+/g, '');
+            if (p >= 1 && !villageRaw && /^[A-Za-z\s]+$/.test(parts[p - 1])) villageRaw = parts[p - 1];
+            break;
+          }
+          // Single number in cell p, and sub-survey in cell p+1
+          const mSingle = part.match(/^\d{1,5}$/);
+          if (mSingle) {
+            sNo = mSingle[0];
+            if (parts[p + 1] && /^[0-9A-Za-z\u0900-\u097F\/\*\-]+$/.test(parts[p + 1])) {
+              ssNo = parts[p + 1];
+            }
+            if (p >= 1 && !villageRaw && /^[A-Za-z\s]+$/.test(parts[p - 1])) villageRaw = parts[p - 1];
+            break;
+          }
+        }
+      }
+
+      // 2. If not found via pipes, check lineBeforeArea directly
+      if (!sNo) {
+        const mSlash = lineBeforeArea.match(/\b(?:Gat(?:\s*No)?\.?\s*)?(\d{1,5}(?:\s*[\/|\-]\s*[0-9A-Za-z\u0900-\u097F]+)+)\b/i);
+        if (mSlash) {
+          sNo = mSlash[1].replace(/\s+/g, '');
+        } else {
+          const mSpace = lineBeforeArea.match(/\b(\d{1,5})\s+([0-9A-Za-z\u0900-\u097F\/\*\-]+)\b/);
+          if (mSpace) {
+            sNo = mSpace[1];
+            ssNo = mSpace[2];
+          } else {
+            const mSingle = lineBeforeArea.match(/\b(\d{1,5})\b/);
+            if (mSingle) sNo = mSingle[1];
+          }
+        }
+      }
+
+      if (sNo) {
+        const surveyFinal = cleanSurveyNo(sNo, ssNo);
+        let villageFinal = resolveVillage(villageRaw, address, nextLine);
+        if (!villageFinal && extractedRows.length > 0) {
+          villageFinal = extractedRows[extractedRows.length - 1].village;
+        }
+
+        // Deduplicate rows with identical survey_no and area
+        const isDuplicate = extractedRows.some(
+          r => r.survey_no === surveyFinal && r.area === assignedArea
+        );
+
+        if (!isDuplicate) {
+          extractedRows.push({
+            survey_no: surveyFinal,
+            village: villageFinal,
+            owner_type: ownerType,
+            area: assignedArea,
+          });
+
+          if (!foundDistrict && districtRaw) foundDistrict = correctDistrict(districtRaw);
+          if (!foundSubDistrict && subDistrictRaw) foundSubDistrict = subDistrictRaw;
+          if (!foundState && stateRaw) foundState = stateRaw;
+        }
+      }
+
+      if (extractedRows.length >= 5) break;
+    }
+  }
+
+  // Strategy 2: Generic Pipe-delimited or Tab-delimited table with column headers
+  if (extractedRows.length === 0) {
+    let headerCols: {
+      village: number;
+      survey: number;
+      owner: number;
+      area: number;
+      khata: number;
+      subDistrict: number;
+      district: number;
+      state: number;
+    } | null = null;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.includes('Consent by Farmer') || line.includes('Annexure')) break;
+
+      const parts = splitLineIntoCols(line);
+      if (parts.length < 3) continue;
+
+      const lower = parts.map(p => p.toLowerCase());
+      const hasVillage = lower.some(p => p.includes('village') || p.includes('गाव'));
+      const hasSurvey = lower.some(p => /s\s*no|s\/s|survey|gat|सर्व्हे/i.test(p));
+      const hasArea = lower.some(p => /extent|assigned\s*area|area|क्षेत्र/i.test(p));
+
+      if (!headerCols && (hasVillage || (hasSurvey && hasArea))) {
+        headerCols = {
+          village: lower.findIndex(p => p.includes('village') || p.includes('गाव')),
+          survey: lower.findIndex(p => /s\s*no|s\/s|survey|gat|सर्व्हे/i.test(p)),
+          owner: lower.findIndex(p => /owner\s*type|मालकी\s*प्रकार/i.test(p)) >= 0
+            ? lower.findIndex(p => /owner\s*type|मालकी\s*प्रकार/i.test(p))
+            : lower.findIndex(p => p.includes('owner') && !p.includes('name') && !p.includes('share')),
+          area: lower.findIndex(p => /extent|assigned\s*area|area|क्षेत्र/i.test(p)),
+          khata: lower.findIndex(p => p.includes('khata') || p.includes('खाते')),
+          subDistrict: lower.findIndex(p => /sub\s*district|taluk|tehsil|तालुका/i.test(p)),
+          district: lower.findIndex(p => p.includes('district') && !p.includes('sub')),
+          state: lower.findIndex(p => p.includes('state')),
+        };
+        continue;
+      }
+
+      if (headerCols) {
+        if (/(?:Total\s*Land|Annexure|Signature|Consent|Declaration)/i.test(line)) break;
+
+        const v = headerCols.village >= 0 ? parts[headerCols.village] : '';
+        const s = headerCols.survey >= 0 ? parts[headerCols.survey] : '';
+        const o = headerCols.owner >= 0 ? parts[headerCols.owner] : '';
+        const a = headerCols.area >= 0 ? parts[headerCols.area] : '';
+
+        const cleanS = cleanSurveyNo(s);
+        const cleanA = cleanAreaVal(a);
+
+        // A valid land record MUST have a Survey Number OR an Area!
+        // If both are empty, this is a cell continuation/wrapped line, NOT a new row!
+        if (!cleanS && !cleanA) {
+          if (v && extractedRows.length > 0) {
+            const lastRow = extractedRows[extractedRows.length - 1];
+            if (lastRow.village && !lastRow.village.toLowerCase().includes(v.toLowerCase())) {
+              lastRow.village = resolveVillage(lastRow.village + v, address);
+            }
+          }
+          continue;
+        }
+
+        let ownerType = o;
+        for (const part of parts) {
+          const oM = part.match(/\b(Single|Sole|Joint|Individual|Ancestral|Self|Owner|Co-Owner|Tenant|स्वतःची|सामाईक|वारसाहक्क|इतर)\b/i);
+          if (oM) {
+            ownerType = oM[1];
+            break;
+          }
+        }
+
+        const surveyFinal = cleanS;
+        let villageFinal = resolveVillage(v, address);
+        if (!villageFinal && extractedRows.length > 0) {
+          villageFinal = extractedRows[extractedRows.length - 1].village;
+        }
+
+        const isDuplicate = extractedRows.some(
+          r => r.survey_no === surveyFinal && r.area === cleanA
+        );
+
+        if (!isDuplicate) {
+          extractedRows.push({
+            survey_no: surveyFinal,
+            village: villageFinal,
+            owner_type: ownerType,
+            area: cleanA,
+          });
+
+          if (!foundState && headerCols.state >= 0) foundState = parts[headerCols.state];
+          if (!foundDistrict && headerCols.district >= 0) foundDistrict = correctDistrict(parts[headerCols.district]);
+          if (!foundSubDistrict && headerCols.subDistrict >= 0) foundSubDistrict = parts[headerCols.subDistrict];
+          if (!foundKhataNo && headerCols.khata >= 0) foundKhataNo = parts[headerCols.khata];
+        }
+
+        if (extractedRows.length >= 5) break;
+      }
+    }
+  }
+
+  // Strategy 3: Fallback for 4-column space-separated lines
+  if (extractedRows.length === 0) {
+    const spaceRegex = /^([A-Za-z\s]+?)\s+([0-9]+(?:\s*[\/|\*\\-]\s*[A-Za-z0-9\u0900-\u097F]+)*)\s+(Single|Sole|Joint|Individual|Ancestral|Self|Owner|Co-Owner|Tenant|स्वतःची|सामाईक|वारसाहक्क|इतर)\s+([\d\.]+)/i;
+    for (const line of lines) {
+      if (line.includes('Consent by Farmer') || line.includes('Annexure')) break;
+      const sm = line.match(spaceRegex);
+      if (sm) {
+        extractedRows.push({
+          village: resolveVillage(sm[1], address),
+          survey_no: sm[2].trim(),
+          owner_type: sm[3].trim(),
+          area: cleanAreaVal(sm[4]),
+        });
+        if (extractedRows.length >= 5) break;
+      }
+    }
+  }
+
+  // Fallbacks for District, SubDistrict, State, Khata, Total Area
+  if (!foundDistrict) {
+    const dMatch = pre.match(/District\s*[:\-\s]*([A-Za-z\s]+?)(?=\n|State|Pincode|$)/i);
+    if (dMatch) foundDistrict = correctDistrict(dMatch[1]);
+  }
+
+  if (!foundSubDistrict) {
+    const sdMatch = pre.match(/(?:Sub\s*District|Taluka|Tahsil|Tehsil|Block)\s*[:\-\s]*([A-Za-z\s]+?)(?=\n|District|State|$)/i);
+    if (sdMatch) foundSubDistrict = sdMatch[1].trim();
+  }
+
+  if (!foundState) {
+    const stMatch = pre.match(/(?:State(?:\s*\/\s*UT)?)\s*[:\-]\s*([A-Za-z\s]{3,20})(?=\s*[|\n]|District|Pincode|Pin|$)/i);
+    if (stMatch) {
+      const candidate = stMatch[1].trim();
+      if (!/(Government|Registry|Project|Department|Authority|Consent|Transfer)/i.test(candidate)) {
+        foundState = candidate;
+      }
+    }
+    if (!foundState && /MAHARASHTRA|Maharashtra/i.test(pre)) {
+      foundState = 'MAHARASHTRA';
+    }
+  }
+
+  if (!foundTotalArea) {
+    const areaMatch = pre.match(/(?:Total\s*Land\s*Area\s*Owned\s*\(Hectare\)|Extent\s*Total\s*Area|Extent\s*Assigned\s*Area)\s*[:\-\s]*([\d\.]+)/i);
+    if (areaMatch) foundTotalArea = cleanAreaVal(areaMatch[1]);
+    else if (extractedRows[0]?.area) foundTotalArea = extractedRows[0].area;
+  }
+
+  // Guarantee at least 1 row and strictly max 5 records
+  const finalRows: LandRow[] = extractedRows.length > 0
+    ? extractedRows.slice(0, 5)
+    : [{
+        survey_no: '',
+        village: '',
+        owner_type: '',
+        area: '',
+      }];
+
+  const primaryRow = finalRows[0];
+
+  const summaryParts: string[] = [];
+  if (foundTotalArea) summaryParts.push(`${foundTotalArea} Hectare`);
+  if (primaryRow.survey_no) summaryParts.push(`Gat No: ${primaryRow.survey_no}`);
+  if (primaryRow.village) summaryParts.push(primaryRow.village);
+  if (foundSubDistrict) summaryParts.push(foundSubDistrict);
+  if (foundDistrict) summaryParts.push(foundDistrict);
+  if (foundState) summaryParts.push(foundState);
+
+  return {
+    rows: finalRows,
+    village: primaryRow.village || '',
+    surveyNo: primaryRow.survey_no || '',
+    totalArea: foundTotalArea,
+    khataNo: foundKhataNo,
+    subDistrict: foundSubDistrict,
+    district: foundDistrict,
+    state: foundState,
+    landSummary: summaryParts.join(', '),
+  };
+}
+
 /**
  * Extracts all 10 fields and farmer photo purely in the browser.
  * 1. Checks digital PDF text layer first.
@@ -659,14 +1366,15 @@ export async function extractFarmerDataFromPdf(
     if (idMatch) farmerId = idMatch[1].trim();
   }
 
-  // Enrollment Number
-  let enrollmentNo = '';
-  const enrPattern = fullText.match(/\b(\d{2}_\d{2,4}_\d{3,5}_\d{5,8}_\d{4,8}(?:_\d+)?)\b/);
-  if (enrPattern) {
-    enrollmentNo = enrPattern[1].trim();
-  } else {
-    const enrMatch = fullText.match(/(?:Enrol+ment|Registration)\s*(?:Number|No)?[^\n]*\n+[\s\S]*?([0-9_]{10,45})/i);
-    if (enrMatch) enrollmentNo = enrMatch[1].trim();
+  // PM किसान नंबर: Do NOT auto-populate enrollment_no / Farmer enrollment number into PM किसान नंबर.
+  // Only extract if explicitly designated as PM Kisan (or leave blank for manual entry).
+  let pmKisanNo = '';
+  const pmKisanMatch = fullText.match(/(?:PM[\s\-_]*Kisan|PMKisan)\s*(?:Samman\s*Nidhi)?\s*(?:Registration|Reg|ID|No|Number)\s*[:\-\s]*([A-Za-z0-9_-]{6,30})/i);
+  if (pmKisanMatch) {
+    const candidate = pmKisanMatch[1].trim();
+    if (!/^(?:Bank|Branch|Credit|Card|Farmer|Name|Address)$/i.test(candidate)) {
+      pmKisanNo = candidate;
+    }
   }
 
   // 2. Farmer Name
@@ -763,98 +1471,9 @@ export async function extractFarmerDataFromPdf(
   }
 
   // PAN Card
-  let panCard = '';
-  const panMatch = fullText.match(/(?:PAN|PAN\s*Card)(?:\s*(?:Number|No))?\s*[:\-\s]*([A-Z]{5}[0-9]{4}[A-Z])/i) ||
-    fullText.match(/\b([A-Z]{5}[0-9]{4}[A-Z])\b/);
-  if (panMatch) {
-    panCard = panMatch[1].trim();
-  }
+  const panCard = extractPanCard(fullText);
 
-  // 8. Land Details
-  let khataNo = '';
-  const khataMatch = fullText.match(/(?:Khata|Khate|Khata\s*No|Khate\s*Kramank)\s*[:\-\s]*([A-Za-z0-9\/\-]+)/i);
-  if (khataMatch && !/^(Number|No|Gat|Survey)$/i.test(khataMatch[1])) {
-    khataNo = khataMatch[1].trim();
-  }
-
-  let totalArea = '';
-  const areaMatch = fullText.match(/Total\s*Land\s*Area\s*Owned\s*\(Hectare\)\s*([\d\.]+)/i);
-  if (areaMatch) totalArea = areaMatch[1].trim();
-
-  let landCount = '';
-  const countMatch = fullText.match(/Number\s*of\s*Lands\s*Owned\s*(\d+)/i);
-  if (countMatch) landCount = countMatch[1].trim();
-
-  let surveyNo = '';
-  const surMatch = fullText.match(/(?:Gat|Survey|Plot|Khasra|Dag)\s*(?:No|Number)?\s*[:\-\s]*([A-Za-z0-9\s\/\-_]+?)(?=\n|Village|Area|$)/i);
-  if (surMatch) {
-    surveyNo = surMatch[1].trim();
-  } else if (p3Text) {
-    const p3Lines = p3Text.split('\n').map(l => l.trim()).filter(Boolean);
-    for (const line of p3Lines) {
-      if (/^\d{1,4}(?:\s*[\/]\s*\d{1,3})?$/.test(line)) {
-        surveyNo = line;
-        break;
-      }
-    }
-  }
-
-  let village = '';
-  if (/Shinde\s*wadi/i.test(fullText)) {
-    village = 'Shindewadi';
-  } else {
-    const vMatch = fullText.match(/Village\s*[:\-\s]*([A-Za-z\s]+?)(?=\n|Taluka|Sub|District|$)/i);
-    if (vMatch) village = vMatch[1].trim();
-  }
-
-  let subDistrict = '';
-  if (/Junnar/i.test(fullText)) {
-    subDistrict = 'Junnar';
-  } else {
-    const sdMatch = fullText.match(/(?:Sub\s*District|Taluka|Tahsil|Tehsil|Block)\s*[:\-\s]*([A-Za-z\s]+?)(?=\n|District|State|$)/i);
-    if (sdMatch) subDistrict = sdMatch[1].trim();
-  }
-
-  let district = '';
-  if (/PUNE/i.test(fullText)) {
-    district = 'PUNE';
-  } else {
-    const dMatch = fullText.match(/District\s*[:\-\s]*([A-Za-z\s]+?)(?=\n|State|Pincode|$)/i);
-    if (dMatch) district = correctDistrict(dMatch[1]);
-  }
-
-  let state = '';
-  if (/MAHARA\s*SHTRA|Maharashtra/i.test(fullText)) {
-    state = 'MAHARASHTRA';
-  } else {
-    const stMatch = fullText.match(/State\s*[:\-\s]*([A-Za-z\s]+?)(?=\n|Pincode|Pin|$)/i);
-    if (stMatch) state = stMatch[1].trim();
-  }
-
-  const summaryParts: string[] = [];
-  if (totalArea) summaryParts.push(`${totalArea} Hectare`);
-  if (surveyNo) summaryParts.push(`Gat No: ${surveyNo}`);
-  if (village) summaryParts.push(village);
-  if (subDistrict) summaryParts.push(subDistrict);
-  if (district) summaryParts.push(district);
-  if (state) summaryParts.push(state);
-  const landSummary = summaryParts.join(', ');
-
-  // Bank Details
-  let bankNameBranch = '';
-  const bMatch = fullText.match(/(?:Bank\s*Name|Name\s*of\s*Bank)\s*[:\-\s]*([A-Za-z\s,]+?)(?=\n|Account|Branch|IFSC|$)/i);
-  if (bMatch) bankNameBranch = bMatch[1].trim();
-
-  let accountNo = '';
-  const accMatch = fullText.match(/(?:Account\s*No|A\/C\s*No|Account\s*Number)\s*[:\-\s]*([0-9X]{8,20})/i);
-  if (accMatch) accountNo = accMatch[1].trim();
-
-  let ifscCode = '';
-  const ifscMatch = fullText.match(/(?:IFSC|IFSC\s*Code)\s*[:\-\s]*([A-Z]{4}0[A-Z0-9]{6})/i) ||
-    fullText.match(/\b([A-Z]{4}0[A-Z0-9]{6})\b/);
-  if (ifscMatch) ifscCode = ifscMatch[1].trim();
-
-  // 9. Address
+  // Address (Extract before landData so village resolution can cross-reference address)
   let address = '';
   const targetAddressText = p2Text ? `${p2Text}\n---\n${fullText}` : fullText;
   const addrMatch =
@@ -870,11 +1489,19 @@ export async function extractFarmerDataFromPdf(
     }
   }
 
+  // 8. Land Details & Records (dynamic multi-row extraction, limit to 5)
+  const landData = extractLandRecordsFromText(fullText, p2Text, p3Text, address);
+
+  // Bank Details
+  const bankName = extractBankName(fullText);
+  const accountNo = extractAccountNumber(fullText);
+  const ifscCode = extractIfscCode(fullText);
+
   onProgress?.('Complete!', 100);
 
   return {
     farmer_id: farmerId,
-    enrollment_no: enrollmentNo,
+    enrollment_no: pmKisanNo,
     farmer_name: farmerName,
     identifier_name: identifierName,
     dob: dob,
@@ -885,18 +1512,20 @@ export async function extractFarmerDataFromPdf(
     aadhaar_number: aadhaarNumber,
     pan_card: panCard,
     land_detail: {
-      khata_no: khataNo,
-      total_area_hectare: totalArea,
-      number_of_lands: landCount,
-      survey_gat_no: surveyNo,
-      village,
-      sub_district: subDistrict,
-      district,
-      state,
-      summary: landSummary,
+      khata_no: landData.khataNo,
+      total_area_hectare: landData.totalArea,
+      number_of_lands: String(landData.rows.length),
+      survey_gat_no: landData.surveyNo,
+      village: landData.village,
+      sub_district: landData.subDistrict,
+      district: landData.district,
+      state: landData.state,
+      summary: landData.landSummary,
     },
+    land_records: landData.rows,
     bank_detail: {
-      bank_name_branch: bankNameBranch,
+      bank_name_branch: bankName,
+      bank_name: bankName,
       account_no: accountNo,
       ifsc_code: ifscCode,
     },

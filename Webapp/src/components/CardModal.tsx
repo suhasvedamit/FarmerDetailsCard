@@ -1,14 +1,26 @@
-import React, { useState, useEffect } from 'react';
-import { X, FileText, Image as ImageIcon, Printer, Share2, Layers, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  X,
+  FileText,
+  Image as ImageIcon,
+  Printer,
+  Layers,
+  RefreshCw,
+  ShieldAlert,
+  ShieldCheck,
+  Lock,
+  ArrowDown,
+} from 'lucide-react';
 import { FarmerRecord } from '../types';
+import logoImg from '../assets/logo.png';
 import {
   downloadCardAsPng,
   downloadCardAsPdf,
   downloadCardPrintSheetPdf,
-  shareCardPdfViaWhatsApp,
   generateFrontCardCanvas,
   generateBackCardCanvas,
   generateBothCardsCanvas,
+  addWatermarkToCanvas,
 } from '../lib/cardGenerator';
 
 interface CardModalProps {
@@ -18,17 +30,6 @@ interface CardModalProps {
   frontPreviewUrl?: string;
   backPreviewUrl?: string;
 }
-
-const WhatsAppIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
-  <svg
-    className={className}
-    viewBox="0 0 24 24"
-    fill="currentColor"
-    aria-hidden="true"
-  >
-    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-  </svg>
-);
 
 export const CardModal: React.FC<CardModalProps> = ({
   isOpen,
@@ -42,10 +43,59 @@ export const CardModal: React.FC<CardModalProps> = ({
   const [backUrl, setBackUrl] = useState<string>(initialBackUrl || '');
   const [bothUrl, setBothUrl] = useState<string>('');
   const [isLoadingPreviews, setIsLoadingPreviews] = useState<boolean>(false);
-  const [isSharing, setIsSharing] = useState(false);
-  const [shareNotice, setShareNotice] = useState<string | null>(null);
+  const [copyNotice, setCopyNotice] = useState<string | null>(null);
+  const [highlightButtons, setHighlightButtons] = useState<boolean>(false);
 
-  // Generate missing previews whenever modal opens or record changes
+  const noticeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleCopyAttempt = (reason: 'right-click' | 'drag' | 'copy' | 'save' | 'click') => {
+    let msg = '🔒 इमेज थेट कॉपी करता येणार नाही. अधिकृत कार्डसाठी खालील बटणांचा वापर करा.';
+    if (reason === 'right-click') {
+      msg = '🔒 राइट-क्लिक कॉपी करणे प्रतिबंधित आहे. कृपया अधिकृत कार्डसाठी खालील डाऊनलोड बटणांचा वापर करा.';
+    } else if (reason === 'drag') {
+      msg = '🔒 इमेज ड्रॅग करून सेव्ह करता येणार नाही. कृपया खालील डाऊनलोड बटणे वापरा.';
+    } else if (reason === 'save' || reason === 'copy') {
+      msg = '🔒 कॉपी/सेव्ह शॉर्टकट ब्लॉक आहेत. कृपया खालील डाऊनलोड बटणांचा वापर करा.';
+    }
+
+    setCopyNotice(msg);
+    setHighlightButtons(true);
+
+    if (noticeTimeoutRef.current) clearTimeout(noticeTimeoutRef.current);
+    noticeTimeoutRef.current = setTimeout(() => {
+      setCopyNotice(null);
+      setHighlightButtons(false);
+    }, 3800);
+  };
+
+  // Block Ctrl+C / Cmd+C / Ctrl+S / Cmd+S while modal is active
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+C / Cmd+C
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+        const activeTag = (document.activeElement?.tagName || '').toUpperCase();
+        if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
+          e.preventDefault();
+          handleCopyAttempt('copy');
+        }
+      }
+      // Ctrl+S / Cmd+S
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        handleCopyAttempt('save');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      if (noticeTimeoutRef.current) clearTimeout(noticeTimeoutRef.current);
+    };
+  }, [isOpen]);
+
+  // Generate missing watermarked previews whenever modal opens or record changes
   useEffect(() => {
     if (!isOpen) return;
 
@@ -61,13 +111,13 @@ export const CardModal: React.FC<CardModalProps> = ({
 
         if (!isMounted) return;
 
-        if (fCanvas) setFrontUrl(fCanvas.toDataURL('image/png'));
+        if (fCanvas) setFrontUrl(addWatermarkToCanvas(fCanvas).toDataURL('image/png'));
         else if (initialFrontUrl) setFrontUrl(initialFrontUrl);
 
-        if (bCanvas) setBackUrl(bCanvas.toDataURL('image/png'));
+        if (bCanvas) setBackUrl(addWatermarkToCanvas(bCanvas).toDataURL('image/png'));
         else if (initialBackUrl) setBackUrl(initialBackUrl);
 
-        if (bothCanvas) setBothUrl(bothCanvas.toDataURL('image/png'));
+        if (bothCanvas) setBothUrl(addWatermarkToCanvas(bothCanvas).toDataURL('image/png'));
       } catch (err) {
         console.error('Failed to generate card previews:', err);
       } finally {
@@ -84,36 +134,41 @@ export const CardModal: React.FC<CardModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleShareWhatsApp = async () => {
-    try {
-      setIsSharing(true);
-      setShareNotice(null);
-      const result = await shareCardPdfViaWhatsApp(record);
-      if (!result.sharedDirectly) {
-        setShareNotice('PDF downloaded! WhatsApp opened in a new tab — attach the downloaded PDF to your chat.');
-        setTimeout(() => setShareNotice(null), 8000);
-      }
-    } catch (err) {
-      console.error('Failed to share via WhatsApp:', err);
-      alert('Failed to share on WhatsApp');
-    } finally {
-      setIsSharing(false);
-    }
-  };
-
   const currentPreview =
     activeSide === 'both' ? bothUrl || frontUrl : activeSide === 'back' ? backUrl : frontUrl;
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl max-w-5xl w-full p-4 sm:p-6 shadow-2xl space-y-4 my-auto">
+    <div
+      className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto select-none"
+      onCopy={(e) => {
+        e.preventDefault();
+        handleCopyAttempt('copy');
+      }}
+    >
+      <div className="bg-white rounded-2xl max-w-5xl w-full p-4 sm:p-6 shadow-2xl space-y-4 my-auto relative">
+        {/* Floating Copy Protection Warning Banner */}
+        {copyNotice && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-950/95 text-white px-4 py-2.5 rounded-xl shadow-2xl border border-amber-400/60 flex items-center space-x-2.5 text-xs font-semibold backdrop-blur-md animate-bounce max-w-[92%] sm:max-w-xl text-center">
+            <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+            <div className="flex-1 text-left">
+              <span>{copyNotice}</span>
+              <span className="block text-[11px] text-amber-300 font-normal">
+                (Right-click and direct copy are disabled. Please use the download buttons below.)
+              </span>
+            </div>
+            <ArrowDown className="w-4 h-4 text-emerald-400 animate-pulse shrink-0" />
+          </div>
+        )}
+
         {/* Modal Top Bar */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-1">
           <div className="flex items-center space-x-2.5">
-            <span className="text-2xl">🪪</span>
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center p-1 shadow-sm">
+              <img src={logoImg} alt="Logo" className="w-full h-full object-contain pointer-events-none select-none" />
+            </div>
             <div>
               <h3 className="font-bold text-slate-800 text-base leading-tight">
-                AgriCard - मेरा किसान कार्ड
+                माझे किसान कार्ड
               </h3>
               <p className="text-xs text-slate-500">
                 Front & Back Side Printable ID Card
@@ -172,7 +227,17 @@ export const CardModal: React.FC<CardModalProps> = ({
         </div>
 
         {/* Card Live Preview Container */}
-        <div className="relative flex flex-col items-center justify-center p-3 bg-gradient-to-b from-slate-100 to-slate-200 rounded-xl min-h-[300px] border border-slate-200 overflow-hidden">
+        <div
+          className="relative flex flex-col items-center justify-center p-3 bg-gradient-to-b from-slate-100 to-slate-200 rounded-xl min-h-[300px] border border-slate-200 overflow-hidden select-none"
+          onContextMenu={(e) => {
+            e.preventDefault();
+            handleCopyAttempt('right-click');
+          }}
+          onDragStart={(e) => {
+            e.preventDefault();
+            handleCopyAttempt('drag');
+          }}
+        >
           {isLoadingPreviews ? (
             <div className="flex flex-col items-center justify-center py-16 space-y-2 text-slate-500">
               <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin" />
@@ -180,11 +245,86 @@ export const CardModal: React.FC<CardModalProps> = ({
             </div>
           ) : currentPreview ? (
             <div className="w-full flex justify-center">
-              <img
-                src={currentPreview}
-                alt={`Farmer ID Card - ${activeSide} view`}
-                className="max-h-[60vh] max-w-full rounded-xl shadow-xl border border-slate-300 object-contain"
-              />
+              {/* Preview Wrapper with Security Shield & Overlaid Watermark */}
+              <div
+                className="relative inline-block max-w-full rounded-xl overflow-hidden shadow-2xl border border-slate-300 select-none group"
+                style={{
+                  WebkitTouchCallout: 'none',
+                  WebkitUserSelect: 'none',
+                  userSelect: 'none',
+                }}
+              >
+                {/* The Canvas-Watermarked Image */}
+                <img
+                  src={currentPreview}
+                  alt={`Farmer ID Card - ${activeSide} view`}
+                  className="max-h-[58vh] max-w-full rounded-xl object-contain pointer-events-none select-none block"
+                  draggable={false}
+                  style={{
+                    WebkitTouchCallout: 'none',
+                    WebkitUserSelect: 'none',
+                    userSelect: 'none',
+                  }}
+                />
+
+                {/* Protective Security Shield (blocks right-click, dragging, long-press) */}
+                <div
+                  className="absolute inset-0 z-10 select-none cursor-default"
+                  style={{
+                    WebkitTouchCallout: 'none',
+                    WebkitUserSelect: 'none',
+                    userSelect: 'none',
+                  }}
+                  title="पूर्वावलोकन सुरक्षित आहे. कार्ड डाऊनलोड करण्यासाठी खालील बटणे वापरा."
+                  onClick={() => handleCopyAttempt('click')}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    handleCopyAttempt('right-click');
+                  }}
+                  onDragStart={(e) => {
+                    e.preventDefault();
+                    handleCopyAttempt('drag');
+                  }}
+                >
+                  {/* Top-Right Protected Badge */}
+                  <div className="absolute top-2.5 right-2.5 bg-slate-900/85 backdrop-blur-md text-amber-300 border border-amber-400/40 px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center space-x-1.5 shadow-lg select-none pointer-events-none">
+                    <Lock className="w-3 h-3 text-amber-400" />
+                    <span>वॉटरमार्क नमुना प्रत (Preview Only)</span>
+                  </div>
+
+                  {/* DOM-Level Repeating Diagonal Watermark Grid */}
+                  <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-20 select-none flex items-center justify-center">
+                    <div
+                      className="w-[170%] h-[170%] flex flex-col justify-around rotate-[-26deg] select-none text-slate-900 text-xs sm:text-sm font-black tracking-widest uppercase pointer-events-none"
+                      style={{ textShadow: '0 0 2px rgba(255,255,255,0.9)' }}
+                    >
+                      <div className="flex justify-around whitespace-nowrap">
+                        <span>PREVIEW ONLY • नमुना प्रत • DO NOT COPY</span>
+                        <span>PREVIEW ONLY • नमुना प्रत • DO NOT COPY</span>
+                      </div>
+                      <div className="flex justify-around whitespace-nowrap">
+                        <span>USE DOWNLOAD BUTTONS • अधिकृत डाऊनलोड</span>
+                        <span>USE DOWNLOAD BUTTONS • अधिकृत डाऊनलोड</span>
+                      </div>
+                      <div className="flex justify-around whitespace-nowrap">
+                        <span>PREVIEW ONLY • नमुना प्रत • DO NOT COPY</span>
+                        <span>PREVIEW ONLY • नमुना प्रत • DO NOT COPY</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bottom Security Notice Bar */}
+                  <div className="absolute bottom-2 inset-x-3 bg-slate-900/80 backdrop-blur-md text-white border border-white/20 rounded-lg py-1 px-3 text-[11px] flex items-center justify-between shadow-lg pointer-events-none select-none">
+                    <div className="flex items-center space-x-1.5 text-amber-300 font-semibold truncate">
+                      <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">पूर्वावलोकन सुरक्षित आहे • मूळ प्रत डाऊनलोड करण्यासाठी खालील बटणे वापरा</span>
+                    </div>
+                    <span className="text-[10px] text-slate-300 hidden md:inline ml-2">
+                      (Use download buttons below for official card)
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           ) : (
             <div className="w-full h-64 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400">
@@ -193,42 +333,32 @@ export const CardModal: React.FC<CardModalProps> = ({
           )}
         </div>
 
-        {/* Share Notice Banner */}
-        {shareNotice && (
-          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-3.5 py-2.5 rounded-lg flex items-center justify-between shadow-sm animate-fadeIn">
-            <span>{shareNotice}</span>
-            <button
-              onClick={() => setShareNotice(null)}
-              className="text-emerald-700 hover:text-emerald-900 ml-2 font-bold text-sm"
-            >
-              ✕
-            </button>
+        {/* Action Buttons Toolbar with Dynamic Highlight / Guidance */}
+        <div
+          className={`flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100 rounded-xl p-2.5 transition-all duration-300 ${highlightButtons
+            ? 'bg-emerald-50/80 ring-2 ring-emerald-500 ring-offset-2 shadow-lg animate-pulse'
+            : ''
+            }`}
+        >
+          <div className="flex items-center space-x-2 text-center sm:text-left">
+            <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 hidden sm:block" />
+            <div>
+              <p className="text-xs font-bold text-slate-800 leading-tight flex items-center justify-center sm:justify-start space-x-1">
+                <span>अधिकृत वॉटरमार्क नसलेली प्रत डाउनलोड करा</span>
+                {highlightButtons && <ArrowDown className="w-3.5 h-3.5 text-emerald-600 animate-bounce" />}
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Buttons provide 100% clean, unwatermarked high-resolution card
+              </p>
+            </div>
           </div>
-        )}
-
-        {/* Action Buttons Toolbar */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100">
-          <p className="text-xs text-slate-500 text-center sm:text-left">
-            This card is strictly for personal reference & informational reference.
-          </p>
 
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
-            {/* Share on WhatsApp */}
-            <button
-              onClick={handleShareWhatsApp}
-              disabled={isSharing}
-              className="px-3.5 py-2 bg-[#25D366] hover:bg-[#20ba5a] text-white text-xs font-bold rounded-lg shadow transition flex items-center space-x-1.5 disabled:opacity-50"
-              title="Share card PDF via WhatsApp"
-            >
-              <WhatsAppIcon className="w-4 h-4 text-white" />
-              <span>{isSharing ? 'Sharing...' : 'WhatsApp'}</span>
-            </button>
-
             {/* Single Image Download Button (downloads current active view: Front, Back, or Both) */}
             <button
               onClick={() => downloadCardAsPng(record, activeSide)}
-              className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg shadow transition flex items-center space-x-1.5"
-              title={`Download ${activeSide === 'both' ? 'Both sides' : activeSide === 'back' ? 'Back side' : 'Front side'} image as PNG`}
+              className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 active:scale-95 text-white text-xs font-bold rounded-lg shadow-sm hover:shadow transition flex items-center space-x-1.5"
+              title={`Download clean ${activeSide === 'both' ? 'Both sides' : activeSide === 'back' ? 'Back side' : 'Front side'} image as PNG`}
             >
               <ImageIcon className="w-3.5 h-3.5 text-white" />
               <span>
@@ -239,7 +369,7 @@ export const CardModal: React.FC<CardModalProps> = ({
             {/* Download A4 Print Sheet */}
             <button
               onClick={() => downloadCardPrintSheetPdf(record)}
-              className="px-3 py-2 bg-sky-700 hover:bg-sky-600 text-white text-xs font-bold rounded-lg shadow transition flex items-center space-x-1.5"
+              className="px-3.5 py-2 bg-sky-700 hover:bg-sky-600 active:scale-95 text-white text-xs font-bold rounded-lg shadow-sm hover:shadow transition flex items-center space-x-1.5"
               title="Printable A4 sheet with Front & Back side-by-side ready to cut"
             >
               <Printer className="w-3.5 h-3.5" />
@@ -249,7 +379,7 @@ export const CardModal: React.FC<CardModalProps> = ({
             {/* Download 2-Page CR80 PDF */}
             <button
               onClick={() => downloadCardAsPdf(record)}
-              className="px-3.5 py-2 bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow transition flex items-center space-x-1.5"
+              className="px-3.5 py-2 bg-emerald-800 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-lg shadow-sm hover:shadow transition flex items-center space-x-1.5"
               title="Standard CR80 2-page duplex PDF (Page 1 Front, Page 2 Back)"
             >
               <FileText className="w-3.5 h-3.5 text-emerald-200" />

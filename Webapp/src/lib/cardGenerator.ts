@@ -1,6 +1,14 @@
 import { jsPDF } from 'jspdf';
 import QRCode from 'qrcode';
 import { FarmerRecord } from '../types';
+import { LOGO_DATA_URL } from '../assets/logoData';
+
+let cachedLogoImg: HTMLImageElement | null = null;
+async function getLogoImage(): Promise<HTMLImageElement> {
+  if (cachedLogoImg) return cachedLogoImg;
+  cachedLogoImg = await loadImage(LOGO_DATA_URL);
+  return cachedLogoImg;
+}
 
 /**
  * High-resolution canvas dimensions matching standard CR80 ID Card aspect ratio (85.6 x 54 mm).
@@ -236,7 +244,7 @@ const LANDSCAPE_TRACTOR_SVG = `
 /**
  * Draws the shared ID Card base:
  * - Card rounded border
- * - Top Header: "AgriCard" logo, "मेरा किसान कार्ड" + floral diamond ornament, foliage with dew drops
+ * - Top Header: "MyAgriCard" logo, "माझे  किसान कार्ड" + floral diamond ornament, foliage with dew drops
  * - Bottom Background Landscape: rolling hills, tractor, birds
  * - Bottom Footer Bar: Dark green bar with disclaimer & "फार्मर आईडी"
  */
@@ -274,23 +282,23 @@ async function drawCardBase(ctx: CanvasRenderingContext2D, w: number, h: number)
   ctx.stroke();
   ctx.restore();
 
-  // 5. Header: "AgriCard" Logo (Top-Left)
-  drawAgriCardLogo(ctx, 36, 45);
+  // 5. Header: Logo (Top-Left)
+  await drawCardLogo(ctx, 36, 16);
 
-  // 6. Header: "मेरा किसान कार्ड" (Top-Center)
+  // 6. Header: "माझे  किसान कार्ड" (Top-Center)
   const centerX = w / 2;
   ctx.save();
   ctx.textAlign = 'center';
   ctx.fillStyle = '#c2410c'; // Warm terracotta / rust red
-  ctx.font = '700 28px "Noto Sans Devanagari", Inter, sans-serif';
-  ctx.fillText('मेरा किसान कार्ड', centerX, 52);
+  ctx.font = '700 46px "Noto Sans Devanagari", Inter, sans-serif';
+  ctx.fillText('माझे  किसान कार्ड', centerX, 52);
 
-  // Ornamental motif below "मेरा किसान कार्ड"
-  drawHeaderMotif(ctx, centerX, 68);
+  // Ornamental motif below "माझे  किसान कार्ड"
+  drawHeaderMotif(ctx, centerX, 74);
   ctx.restore();
 
   // 7. Footer Bar (Dark Green Banner at Bottom)
-  const footerH = 52;
+  const footerH = 54;
   const footerY = h - footerH - 4;
 
   ctx.save();
@@ -299,75 +307,59 @@ async function drawCardBase(ctx: CanvasRenderingContext2D, w: number, h: number)
   ctx.fillStyle = '#064e3b'; // Deep emerald forest green
   ctx.fill();
 
-  // Left Disclaimer Text
+  // Left Disclaimer Text (Double / Enhanced readable font)
   ctx.fillStyle = '#ffffff';
-  ctx.font = '600 13px Inter, -apple-system, sans-serif';
+  ctx.font = '600 20px Inter, -apple-system, sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText('This card is only for personal use not for Govt. issue card.  ——', 36, footerY + 31);
+  ctx.fillText('This card is only for personal use not for Govt. issue card.  ——', 36, footerY + 34);
 
   // Vertical Divider
-  const divX = w - 245;
+  const divX = w - 265;
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(divX, footerY + 12);
-  ctx.lineTo(divX, footerY + footerH - 12);
+  ctx.moveTo(divX, footerY + 10);
+  ctx.lineTo(divX, footerY + footerH - 10);
   ctx.stroke();
 
-  // Right Badge Text: "फार्मर आईडी"
+  // Right Badge Text: "फार्मर आईडी" (Enhanced large readable font)
   ctx.fillStyle = '#a3e635'; // Vibrant bright lime
-  ctx.font = '700 22px "Noto Sans Devanagari", Inter, sans-serif';
+  ctx.font = '700 32px "Noto Sans Devanagari", Inter, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('फार्मर आईडी', divX + 115, footerY + 34);
+  ctx.fillText('फार्मर आईडी', divX + 128, footerY + 37);
   ctx.restore();
 }
 
 /**
- * Draws the "AgriCard" logo with green sprout icon.
+ * Draws the official logo emblem and "MyAgriCard" branding at top-left of the card.
  */
-function drawAgriCardLogo(ctx: CanvasRenderingContext2D, x: number, y: number) {
+async function drawCardLogo(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  const logoSize = 60;
+  try {
+    const logoImg = await getLogoImage();
+    ctx.drawImage(logoImg, x, y, logoSize, logoSize);
+  } catch (err) {
+    console.warn('Could not draw logo image on card:', err);
+  }
+
+  // Brand Name "MyAgriCard"
   ctx.save();
-  // "Agri" in dark green
-  ctx.fillStyle = '#15803d';
-  ctx.font = '800 30px Inter, -apple-system, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText('Agri', x, y);
+  const textX = x + logoSize + 10;
+  const textY = y + 42;
 
-  const agriW = ctx.measureText('Agri').width;
+  // // "Agri" in dark green
+  // ctx.fillStyle = '#15803d';
+  // ctx.font = '800 36px Inter, -apple-system, sans-serif';
+  // ctx.textAlign = 'left';
+  // ctx.fillText('MyAgri', textX, textY);
 
-  // Sprout icon in between
-  const iconX = x + agriW + 4;
-  const iconY = y - 10;
+  // const agriW = ctx.measureText('MyAgri').width;
 
-  // Stem
-  ctx.strokeStyle = '#15803d';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.moveTo(iconX + 6, iconY + 14);
-  ctx.lineTo(iconX + 6, iconY + 2);
-  ctx.stroke();
-
-  // Left leaf
-  ctx.fillStyle = '#22c55e';
-  ctx.beginPath();
-  ctx.moveTo(iconX + 6, iconY + 6);
-  ctx.quadraticCurveTo(iconX - 5, iconY - 3, iconX - 7, iconY + 5);
-  ctx.quadraticCurveTo(iconX - 3, iconY + 8, iconX + 6, iconY + 6);
-  ctx.fill();
-
-  // Right leaf
-  ctx.fillStyle = '#16a34a';
-  ctx.beginPath();
-  ctx.moveTo(iconX + 6, iconY + 3);
-  ctx.quadraticCurveTo(iconX + 14, iconY - 5, iconX + 16, iconY + 2);
-  ctx.quadraticCurveTo(iconX + 12, iconY + 6, iconX + 6, iconY + 3);
-  ctx.fill();
-
-  // "Card" in warm rust orange
-  ctx.fillStyle = '#ea580c';
-  ctx.font = '800 30px Inter, -apple-system, sans-serif';
-  ctx.fillText('Card', iconX + 18, y);
-  ctx.restore();
+  // // "Card" in warm rust orange
+  // ctx.fillStyle = '#ea580c';
+  // ctx.font = '800 36px Inter, -apple-system, sans-serif';
+  // ctx.fillText('Card', textX + agriW, textY);
+  // ctx.restore();
 }
 
 /**
@@ -377,10 +369,10 @@ function drawHeaderMotif(ctx: CanvasRenderingContext2D, cx: number, cy: number) 
   ctx.save();
   ctx.fillStyle = '#16a34a';
   ctx.strokeStyle = '#16a34a';
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 2;
 
   // Center 4-pointed sparkle
-  const s = 6;
+  const s = 8;
   ctx.beginPath();
   ctx.moveTo(cx, cy - s);
   ctx.quadraticCurveTo(cx, cy, cx + s, cy);
@@ -393,29 +385,29 @@ function drawHeaderMotif(ctx: CanvasRenderingContext2D, cx: number, cy: number) 
   // Center tiny core dot
   ctx.fillStyle = '#ca8a04';
   ctx.beginPath();
-  ctx.arc(cx, cy, 1.5, 0, Math.PI * 2);
+  ctx.arc(cx, cy, 2, 0, Math.PI * 2);
   ctx.fill();
 
   // Left line and dot
   ctx.strokeStyle = '#16a34a';
   ctx.beginPath();
-  ctx.moveTo(cx - 14, cy);
-  ctx.lineTo(cx - 55, cy);
+  ctx.moveTo(cx - 16, cy);
+  ctx.lineTo(cx - 65, cy);
   ctx.stroke();
 
   ctx.fillStyle = '#16a34a';
   ctx.beginPath();
-  ctx.arc(cx - 58, cy, 2.5, 0, Math.PI * 2);
+  ctx.arc(cx - 69, cy, 3, 0, Math.PI * 2);
   ctx.fill();
 
   // Right line and dot
   ctx.beginPath();
-  ctx.moveTo(cx + 14, cy);
-  ctx.lineTo(cx + 55, cy);
+  ctx.moveTo(cx + 16, cy);
+  ctx.lineTo(cx + 65, cy);
   ctx.stroke();
 
   ctx.beginPath();
-  ctx.arc(cx + 58, cy, 2.5, 0, Math.PI * 2);
+  ctx.arc(cx + 69, cy, 3, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
@@ -443,7 +435,7 @@ export async function generateFrontCardCanvas(record: FarmerRecord): Promise<HTM
 
   // 1. Photo Frame (Left side matching template)
   const px = 36;
-  const py = 100;
+  const py = 125;
   const pw = 190;
   const ph = 240;
   const photoRadius = 16;
@@ -486,71 +478,100 @@ export async function generateFrontCardCanvas(record: FarmerRecord): Promise<HTM
 
   // 2. Information Fields List (Middle Section)
   // Matching the Marathi labels in the PDF:
-  // नाव, जन्म दिनांक, लिंग, मोबाईल नंबर, पॅन कार्ड, किसान रजिस्टर नंबर, आधार नंबर, फार्मर नंबर
+  // नाव, जन्म दिनांक, लिंग, मोबाईल नंबर, पॅन कार्ड, PM किसान नंबर, आधार नंबर, फार्मर नंबर
   const fields = [
     { label: 'नाव', value: record.farmer_name || '--' },
     { label: 'जन्म दिनांक', value: record.dob || '--' },
     { label: 'लिंग', value: formatGender(record.gender) },
     { label: 'मोबाईल नंबर', value: record.mobile_number || '--' },
     { label: 'पॅन कार्ड', value: record.pan_card || '--' },
-    { label: 'किसान रजिस्टर नंबर', value: record.enrollment_no || '--' },
+    { label: 'PM किसान नंबर', value: record.enrollment_no || '' },
     { label: 'आधार नंबर', value: formatAadhaar(record.aadhaar_number) },
     { label: 'फार्मर नंबर', value: record.farmer_id || '--' },
   ];
 
-  let cy = 126;
-  const rowGap = 34;
-  const labelColX = 250;
-  const colonColX = 420;
-  const valColX = 435;
+  let cy = 139;
+  const rowGap = 37;
+  const labelColX = 236;
+  const colonColX = 490;
+  const valColX = 508;
 
-  fields.forEach(field => {
-    // Label in Devanagari
+  fields.forEach((field, idx) => {
+    // Label in Devanagari (Enhanced 30px font)
     ctx.fillStyle = '#0f172a';
-    ctx.font = '700 15px "Noto Sans Devanagari", Inter, sans-serif';
+    ctx.font = '700 30px "Noto Sans Devanagari", Inter, sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(field.label, labelColX, cy);
 
-    // Separator colon
+    // Separator colon (Enhanced 30px font)
     ctx.fillStyle = '#64748b';
-    ctx.font = '700 15px Inter, sans-serif';
+    ctx.font = '700 30px Inter, sans-serif';
     ctx.fillText(':', colonColX, cy);
 
-    // Value
+    // Value (Enhanced 30px font, auto-scaled if long, NEVER cropped!)
+    // Rows 0-2 (नाव, जन्म दिनांक, लिंग) are above QR code and have 495px width
+    // Rows 3-7 have 325px width before QR code at x = 835
+    const availableValW = idx < 3 ? 495 : 325;
+    const valText = field.value !== undefined ? field.value : '--';
+
     ctx.fillStyle = '#1e293b';
-    ctx.font = '600 15px Inter, "Noto Sans Devanagari", sans-serif';
-    const maxValW = 340;
-    const truncated = truncateToWidth(ctx, field.value, maxValW);
-    ctx.fillText(truncated, valColX, cy);
+    let valFontSize = 30;
+    ctx.font = `600 ${valFontSize}px Inter, "Noto Sans Devanagari", sans-serif`;
+
+    // Scale font size down if text exceeds width so ALL text is shown without cropping
+    while (valFontSize > 16 && ctx.measureText(valText).width > availableValW) {
+      valFontSize -= 1;
+      ctx.font = `600 ${valFontSize}px Inter, "Noto Sans Devanagari", sans-serif`;
+    }
+
+    // Draw full value without truncation
+    ctx.fillText(valText, valColX, cy);
 
     cy += rowGap;
   });
 
-  // 3. Address (पत्ता)
+  // 3. Address (पत्ता) (Enhanced 28px/25px font, full text, never cropped)
   const addrY = cy + 12;
   ctx.fillStyle = '#0f172a';
-  ctx.font = '700 15px "Noto Sans Devanagari", Inter, sans-serif';
+  ctx.font = '700 28px "Noto Sans Devanagari", Inter, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText('पत्ता', labelColX, addrY);
 
   ctx.fillStyle = '#64748b';
+  ctx.font = '700 28px Inter, sans-serif';
   ctx.fillText(':', colonColX, addrY);
 
   const rawAddress = record.address?.trim() || '--';
-  ctx.fillStyle = '#334155';
-  ctx.font = '500 13px Inter, "Noto Sans Devanagari", sans-serif';
+  const footerY = CARD_HEIGHT - 54 - 4; // Footer top boundary
+  const maxAvailableH = footerY - addrY - 6;
 
-  const maxAddrW = 340;
-  const addrLines = wrapTextToLines(ctx, rawAddress, maxAddrW);
-  addrLines.slice(0, 3).forEach((line, i) => {
-    ctx.fillText(line, valColX, addrY + i * 19);
+  // Wide wrapping width (500px) allowing address to display in full
+  const maxAddrW = 500;
+  let addrFontSize = 25;
+  let addrLineH = 30;
+  ctx.font = `500 ${addrFontSize}px Inter, "Noto Sans Devanagari", sans-serif`;
+
+  let addrLines = wrapTextToLines(ctx, rawAddress, maxAddrW);
+
+  // If address has many lines, auto-adjust font size & line height so ALL lines fit above the footer
+  if (addrLines.length * addrLineH > maxAvailableH) {
+    addrFontSize = Math.max(16, Math.floor(maxAvailableH / addrLines.length) - 2);
+    addrLineH = addrFontSize + 4;
+    ctx.font = `500 ${addrFontSize}px Inter, "Noto Sans Devanagari", sans-serif`;
+    addrLines = wrapTextToLines(ctx, rawAddress, maxAddrW);
+  }
+
+  // Draw ALL address lines without slicing or cropping
+  ctx.fillStyle = '#1e293b';
+  addrLines.forEach((line, i) => {
+    ctx.fillText(line, valColX, addrY + i * addrLineH);
   });
 
-  // 4. Scannable QR Code (Right Side Box matching template)
-  const qx = 795;
-  const qy = 255;
-  const qw = 185;
-  const qh = 185;
+  // 4. Scannable QR Code (Right Side Box in Vertical Center of Card)
+  const qw = 175;
+  const qh = 175;
+  const qx = 835;
+  const qy = 230; // Positioned 30px higher for better vertical balance and spacing
   const qRadius = 12;
 
   // Outer QR container box
@@ -568,13 +589,13 @@ export async function generateFrontCardCanvas(record: FarmerRecord): Promise<HTM
     const qrPayload = [
       `Name: ${record.farmer_name || '--'}`,
       `Farmer ID: ${record.farmer_id || '--'}`,
-      `Enrollment: ${record.enrollment_no || '--'}`,
+      `PM Kisan: ${record.enrollment_no || '--'}`,
       `DOB: ${record.dob || '--'}`,
       `Mobile: ${record.mobile_number || '--'}`,
       `Aadhaar: ${record.aadhaar_number || '--'}`,
       `PAN: ${record.pan_card || '--'}`,
-      `Gat No: ${record.land_detail?.survey_gat_no || '--'}`,
-      `Village: ${record.land_detail?.village || '--'}`,
+      `Gat No: ${record.land_records?.[0]?.survey_no || record.land_detail?.survey_gat_no || '--'}`,
+      `Village: ${record.land_records?.[0]?.village || record.land_detail?.village || '--'}`,
       `District: ${record.land_detail?.district || '--'}`,
     ].join('\n');
 
@@ -598,10 +619,39 @@ export async function generateFrontCardCanvas(record: FarmerRecord): Promise<HTM
 }
 
 /**
+ * Draws text centered at (centerX, y), dynamically reducing font size if it exceeds maxW,
+ * and gracefully truncating with an ellipsis if it still exceeds maxW.
+ */
+function drawFittedText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  centerX: number,
+  y: number,
+  maxW: number,
+  baseFontSize: number,
+  fontFamily: string = 'Inter, "Noto Sans Devanagari", sans-serif'
+) {
+  let size = baseFontSize;
+  ctx.font = `700 ${size}px ${fontFamily}`;
+  while (size > 13 && ctx.measureText(text).width > maxW) {
+    size -= 1;
+    ctx.font = `700 ${size}px ${fontFamily}`;
+  }
+  let display = text;
+  if (ctx.measureText(display).width > maxW) {
+    while (display.length > 2 && ctx.measureText(display + '…').width > maxW) {
+      display = display.slice(0, -1);
+    }
+    display = display + '…';
+  }
+  ctx.fillText(display, centerX, y);
+}
+
+/**
  * Generates BACK SIDE ID Card Canvas.
  * Matches the layout from the attached PDF:
- * - Top Header: AgriCard, मेरा किसान कार्ड, leaves with dew drops
- * - Section 1: जमिनीचा तपशील (खाता नंबर, सर्वे नंबर, एकूण क्षेत्र)
+ * - Top Header: MyAgriCard, माझे  किसान कार्ड, leaves with dew drops
+ * - Section 1: जमिनीचा तपशील (1 to 5 rows: Survay Number, Village, Owner Type, Area)
  * - Section 2: बँक तपशील (बँकचे नाव आणि शाखा, बचत खाता नंबर, IFSC CODE)
  * - Bottom Landscape: rolling hills, tractor, birds
  * - Bottom Footer: "This card is only for personal use not for Govt. issue card. —— | फार्मर आईडी"
@@ -627,96 +677,134 @@ export async function generateBackCardCanvas(record: FarmerRecord): Promise<HTML
 
   // ==========================================
   // SECTION 1: जमिनीचा तपशील (Land Details)
+  // Unified Table UI for 1 to 5 records (Always in sync)
+  // Columns: Survay Number, Village, Owner Type, Area
   // ==========================================
-  const s1Y = 145;
+  const col1X = 165; // Survay Number (सर्वे नंबर)
+  const col2X = 405; // Village (गाव)
+  const col3X = 655; // Owner Type (मालकी प्रकार)
+  const col4X = 895; // Area (क्षेत्र)
+
+  const landRows = (record.land_records && record.land_records.length > 0)
+    ? record.land_records.slice(0, 5)
+    : [{
+      survey_no: record.land_detail?.survey_gat_no || '--',
+      village: record.land_detail?.village || '--',
+      owner_type: '--',
+      area: record.land_detail?.total_area_hectare
+        ? `${record.land_detail.total_area_hectare} Ha`
+        : (record.land_detail?.summary || '--'),
+    }];
+  const numRows = landRows.length;
+
   ctx.save();
-  ctx.fillStyle = '#0f172a';
-  ctx.font = '700 20px "Noto Sans Devanagari", Inter, sans-serif';
   ctx.textAlign = 'center';
+
+  // Dynamic layout metrics that keep the table UI completely unified and in sync
+  const s1Y = numRows <= 1 ? 154 : numRows <= 2 ? 150 : numRows <= 3 ? 146 : 142;
+  const headerPillH = numRows <= 2 ? 34 : 30;
+  const headerFontSize = numRows <= 2 ? 23 : 21;
+  const rowHeight = numRows <= 1 ? 42 : numRows === 2 ? 38 : numRows === 3 ? 32 : numRows === 4 ? 28 : 26;
+  const valFontSize = numRows <= 1 ? 26 : numRows === 2 ? 24 : numRows === 3 ? 21 : numRows === 4 ? 19 : 18;
+
+  // Title: जमिनीचा तपशील
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '700 34px "Noto Sans Devanagari", Inter, sans-serif';
   ctx.fillText('जमिनीचा तपशील', centerX, s1Y);
 
-  // 3 Columns:
-  // 1. खाता नंबर (Khata Number)
-  // 2. सर्वे नंबर (Survey Number)
-  // 3. एकूण क्षेत्र (Total Area)
-  const col1X = 230;
-  const col2X = 525;
-  const col3X = 820;
-
-  const tableHeaderY = s1Y + 45;
+  // Table Header (No background, clean text)
+  const tableHeaderY = s1Y + 38;
   ctx.fillStyle = '#1e293b';
-  ctx.font = '700 17px "Noto Sans Devanagari", Inter, sans-serif';
-  ctx.fillText('खाता नंबर', col1X, tableHeaderY);
-  ctx.fillText('सर्वे नंबर', col2X, tableHeaderY);
-  ctx.fillText('एकूण क्षेत्र', col3X, tableHeaderY);
+  ctx.font = `700 ${headerFontSize}px "Noto Sans Devanagari", Inter, sans-serif`;
+  ctx.fillText('सर्वे नंबर', col1X, tableHeaderY);
+  ctx.fillText('गाव', col2X, tableHeaderY);
+  ctx.fillText('मालकी प्रकार', col3X, tableHeaderY);
+  ctx.fillText('क्षेत्र', col4X, tableHeaderY);
 
-  // Values row
-  const tableValY = tableHeaderY + 38;
-  ctx.fillStyle = '#047857'; // Deep emerald green for clean data contrast
-  ctx.font = '700 17px Inter, "Noto Sans Devanagari", sans-serif';
+  // Divider line between table header and table body
+  const tableDividerY = tableHeaderY + 12;
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(70, tableDividerY);
+  ctx.lineTo(CARD_WIDTH - 70, tableDividerY);
+  ctx.stroke();
 
-  const khataVal = record.land_detail?.khata_no || '--';
-  const surveyVal = record.land_detail?.survey_gat_no || '--';
-  const areaVal = record.land_detail?.total_area_hectare
-    ? `${record.land_detail.total_area_hectare} हेक्टर / Ha`
-    : (record.land_detail?.summary || '--');
+  // Table Data Rows
+  const startRowY = tableDividerY + (numRows <= 1 ? 32 : 24);
 
-  ctx.fillText(khataVal, col1X, tableValY);
-  ctx.fillText(surveyVal, col2X, tableValY);
-  ctx.fillText(areaVal, col3X, tableValY);
+  landRows.forEach((row, i) => {
+    const rY = startRowY + (i * rowHeight);
 
-  // Optional village/district subtitle if available
-  const locParts = [
-    record.land_detail?.village ? `गाव: ${record.land_detail.village}` : '',
-    record.land_detail?.sub_district ? `तालुका: ${record.land_detail.sub_district}` : '',
-    record.land_detail?.district ? `जिल्हा: ${record.land_detail.district}` : '',
-  ].filter(Boolean);
+    // Subtle alternating striping for multi-rows
+    if (numRows > 1 && i % 2 === 1) {
+      ctx.fillStyle = 'rgba(240, 253, 244, 0.55)';
+      roundRect(ctx, 60, rY - valFontSize + 2, CARD_WIDTH - 120, rowHeight, 4);
+      ctx.fill();
+    }
 
-  if (locParts.length > 0) {
-    ctx.fillStyle = '#64748b';
-    ctx.font = '500 13px Inter, "Noto Sans Devanagari", sans-serif';
-    ctx.fillText(locParts.join('   |   '), centerX, tableValY + 28);
-  }
+    ctx.fillStyle = '#047857';
+    drawFittedText(ctx, row.survey_no || '--', col1X, rY, 210, valFontSize);
+    drawFittedText(ctx, row.village || '--', col2X, rY, 230, valFontSize);
+    drawFittedText(ctx, row.owner_type || '--', col3X, rY, 230, valFontSize);
+    drawFittedText(ctx, row.area || '--', col4X, rY, 210, valFontSize);
+  });
+
+  const tableBottomY = startRowY + ((numRows - 1) * rowHeight) + (numRows <= 1 ? 16 : 10);
+  const separatorY = Math.max(292, tableBottomY + 12);
+  const s2Y = separatorY + 34;
 
   // Subtle separator line
   ctx.strokeStyle = '#e2e8f0';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(80, 275);
-  ctx.lineTo(CARD_WIDTH - 80, 275);
+  ctx.moveTo(80, separatorY);
+  ctx.lineTo(CARD_WIDTH - 80, separatorY);
   ctx.stroke();
 
   // ==========================================
   // SECTION 2: बँक तपशील (Bank Details)
+  // Same unified table styling as Land Details
   // ==========================================
-  const s2Y = 315;
+  const bankHeaderFontSize = numRows <= 2 ? 24 : 22;
+  const bankValFontSize = numRows <= 2 ? 26 : 24;
+
   ctx.fillStyle = '#0f172a';
-  ctx.font = '700 20px "Noto Sans Devanagari", Inter, sans-serif';
+  ctx.font = '700 34px "Noto Sans Devanagari", Inter, sans-serif';
   ctx.fillText('बँक तपशील', centerX, s2Y);
 
-  // 3 Columns:
-  // 1. बँकचे नाव आणि शाखा (Bank Name and Branch)
-  // 2. बचत खाता नंबर (Savings Account Number)
-  // 3. IFSC CODE (IFSC Code)
-  const bankHeaderY = s2Y + 45;
+  const bankCol1X = 230;
+  const bankCol2X = 525;
+  const bankCol3X = 820;
+
+  // Bank Header (No background, clean text)
+  const bankHeaderY = s2Y + (numRows <= 2 ? 36 : 34);
   ctx.fillStyle = '#1e293b';
-  ctx.font = '700 17px "Noto Sans Devanagari", Inter, sans-serif';
-  ctx.fillText('बँकचे नाव आणि शाखा', col1X, bankHeaderY);
-  ctx.fillText('बचत खाता नंबर', col2X, bankHeaderY);
-  ctx.fillText('IFSC CODE', col3X, bankHeaderY);
+  ctx.font = `700 ${bankHeaderFontSize}px "Noto Sans Devanagari", Inter, sans-serif`;
+  ctx.fillText('बँकचे नाव आणि शाखा', bankCol1X, bankHeaderY);
+  ctx.fillText('बचत खाता नंबर', bankCol2X, bankHeaderY);
+  ctx.fillText('IFSC CODE', bankCol3X, bankHeaderY);
+
+  // Divider line between bank header and bank values
+  const bankDividerY = bankHeaderY + 12;
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(70, bankDividerY);
+  ctx.lineTo(CARD_WIDTH - 70, bankDividerY);
+  ctx.stroke();
 
   // Bank Values row
-  const bankValY = bankHeaderY + 38;
+  const bankValY = bankDividerY + (numRows <= 2 ? 28 : 25);
   ctx.fillStyle = '#047857';
-  ctx.font = '700 16px Inter, "Noto Sans Devanagari", sans-serif';
 
   const bankNameVal = record.bank_detail?.bank_name_branch || '--';
   const accountVal = record.bank_detail?.account_no || '--';
   const ifscVal = record.bank_detail?.ifsc_code || '--';
 
-  ctx.fillText(truncateToWidth(ctx, bankNameVal, 300), col1X, bankValY);
-  ctx.fillText(accountVal, col2X, bankValY);
-  ctx.fillText(ifscVal, col3X, bankValY);
+  drawFittedText(ctx, bankNameVal, bankCol1X, bankValY, 340, bankValFontSize);
+  drawFittedText(ctx, accountVal, bankCol2X, bankValY, 280, bankValFontSize);
+  drawFittedText(ctx, ifscVal, bankCol3X, bankValY, 220, bankValFontSize);
   ctx.restore();
 
   return canvas;
@@ -765,6 +853,121 @@ export async function generateBothCardsCanvas(record: FarmerRecord): Promise<HTM
   ctx.drawImage(backCanvas, padding + frontCanvas.width + gap, padding);
 
   return canvas;
+}
+
+/**
+ * Applies a visible, tamper-resistant watermark to a card canvas for preview display.
+ * Creates a new canvas clone so the original remains completely pristine for official downloads.
+ */
+export function addWatermarkToCanvas(sourceCanvas: HTMLCanvasElement): HTMLCanvasElement {
+  const w = sourceCanvas.width;
+  const h = sourceCanvas.height;
+
+  const watermarkedCanvas = document.createElement('canvas');
+  watermarkedCanvas.width = w;
+  watermarkedCanvas.height = h;
+
+  const ctx = watermarkedCanvas.getContext('2d');
+  if (!ctx) return sourceCanvas;
+
+  // 1. Draw original card contents
+  ctx.drawImage(sourceCanvas, 0, 0);
+
+  // 2. Draw repeating diagonal watermark ribbons
+  ctx.save();
+  ctx.translate(w / 2, h / 2);
+  ctx.rotate((-28 * Math.PI) / 180);
+  ctx.translate(-w / 2, -h / 2);
+
+  const isBoth = w > 1500;
+  const fontSize = isBoth ? 36 : 30;
+  ctx.font = `800 ${fontSize}px "Noto Sans Devanagari", Inter, -apple-system, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  const line1 = 'PREVIEW ONLY  •  नमुना प्रत  •  DO NOT COPY  •  PREVIEW ONLY';
+  const line2 = 'USE DOWNLOAD BUTTON  •  माझे किसान कार्ड  •  SAMPLE ONLY';
+
+  const stepY = isBoth ? 130 : 105;
+  const stepX = isBoth ? 700 : 560;
+  const startY = -h * 1.5;
+  const endY = h * 2.5;
+  const startX = -w * 1.5;
+  const endX = w * 2.5;
+
+  let lineIdx = 0;
+  for (let y = startY; y < endY; y += stepY) {
+    lineIdx++;
+    const text = lineIdx % 2 === 0 ? line2 : line1;
+    const isLine2 = lineIdx % 2 === 0;
+
+    for (let x = startX; x < endX; x += stepX) {
+      const offsetX = (Math.floor(y / stepY) % 2 === 0) ? 0 : stepX / 2;
+
+      // Soft white outline for readability over dark background sections
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.fillText(text, x + offsetX + 1, y + 1);
+
+      // Main watermark fill (semi-transparent slate/crimson tint)
+      ctx.fillStyle = isLine2
+        ? 'rgba(185, 28, 28, 0.22)'
+        : 'rgba(30, 41, 59, 0.20)';
+      ctx.fillText(text, x + offsetX, y);
+    }
+  }
+  ctx.restore();
+
+  // 3. Draw Security Stamp / Badge
+  const drawStamp = (cx: number, cy: number, badgeW: number, badgeH: number) => {
+    ctx.save();
+    // Translucent dark slate badge
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.70)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 6]);
+
+    const rx = cx - badgeW / 2;
+    const ry = cy - badgeH / 2;
+    const radius = 16;
+
+    ctx.beginPath();
+    if (typeof ctx.roundRect === 'function') {
+      ctx.roundRect(rx, ry, badgeW, badgeH, radius);
+    } else {
+      ctx.rect(rx, ry, badgeW, badgeH);
+    }
+    ctx.fill();
+    ctx.stroke();
+
+    // Text shadow for high contrast
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 2;
+
+    // Line 1: Header
+    ctx.font = '800 28px "Noto Sans Devanagari", Inter, -apple-system, sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🔒 PREVIEW ONLY • नमुना प्रत', cx, cy - 22);
+
+    // Line 2: Action prompt
+    ctx.font = '700 17px Inter, -apple-system, sans-serif';
+    ctx.fillStyle = '#fde047';
+    ctx.fillText('USE DOWNLOAD BUTTONS BELOW', cx, cy + 22);
+
+    ctx.restore();
+  };
+
+  if (isBoth) {
+    drawStamp(545, h / 2, 540, 115);
+    drawStamp(1625, h / 2, 540, 115);
+  } else {
+    drawStamp(w / 2, h / 2, 540, 115);
+  }
+
+  return watermarkedCanvas;
 }
 
 /**
@@ -853,7 +1056,7 @@ export async function createPrintSheetPdf(record: FarmerRecord): Promise<jsPDF> 
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(16);
   pdf.setTextColor(21, 128, 61);
-  pdf.text('AgriCard - Farmer ID Card Print Sheet', 105, 22, { align: 'center' });
+  pdf.text('MyAgriCard - Farmer ID Card Print Sheet', 105, 22, { align: 'center' });
 
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(10);
@@ -898,42 +1101,6 @@ export async function downloadCardPrintSheetPdf(record: FarmerRecord, filename?:
   pdf.save(filename);
 }
 
-/**
- * Shares the 2-sided card PDF via WhatsApp:
- * - On Mobile: Opens native share directly with attached PDF file.
- * - On Desktop: Downloads the PDF and opens WhatsApp with summary details.
- */
-export async function shareCardPdfViaWhatsApp(record: FarmerRecord): Promise<{ sharedDirectly: boolean }> {
-  const cleanName = (record.farmer_name || 'Farmer').replace(/[^a-zA-Z0-9_-]/g, '_');
-  const filename = `${cleanName}_AgriCard.pdf`;
-  const pdf = await createCardPdf(record);
-
-  const shareText = `🌾 AgriCard - Farmer ID Card (Front & Back)\n👤 Name: ${record.farmer_name || 'N/A'}\n🆔 Farmer ID: ${record.farmer_id || 'N/A'}\n📱 Mobile: ${record.mobile_number || 'N/A'}\n📍 Village/Dist: ${record.land_detail?.village || record.land_detail?.district || 'N/A'}`;
-
-  const pdfBlob = pdf.output('blob');
-  const file = new File([pdfBlob], filename, { type: 'application/pdf' });
-
-  if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({
-        files: [file],
-        title: `${record.farmer_name || 'Farmer'} - AgriCard`,
-        text: shareText,
-      });
-      return { sharedDirectly: true };
-    } catch (err: any) {
-      if (err.name === 'AbortError') return { sharedDirectly: true };
-      console.warn('Web Share failed, falling back to WhatsApp link:', err);
-    }
-  }
-
-  // Desktop fallback
-  pdf.save(filename);
-  const waMsg = encodeURIComponent(`${shareText}\n\n📎 (Card PDF downloaded — please attach here)`);
-  window.open(`https://api.whatsapp.com/send?text=${waMsg}`, '_blank');
-  return { sharedDirectly: false };
-}
-
 // ==========================================
 // UTILITY HELPERS
 // ==========================================
@@ -974,9 +1141,9 @@ function drawPhotoPlaceholder(
   ctx.fill();
 
   ctx.fillStyle = '#ffffff';
-  ctx.font = '600 24px Inter, sans-serif';
+  ctx.font = '700 36px Inter, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('Photo', x + w / 2, y + h / 2 + 8);
+  ctx.fillText('Photo', x + w / 2, y + h / 2 + 12);
   ctx.restore();
 }
 

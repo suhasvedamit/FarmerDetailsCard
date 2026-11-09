@@ -75,6 +75,19 @@ function getModifiedFields(original: FarmerRecord, current: FarmerRecord): strin
     check('caste_category', 'caste_category');
     check('mobile_number', 'mobile_number');
     check('address', 'address');
+    check('pan_card', 'pan_card');
+
+    // Bank details check
+    const origBank = original.bank_detail || ({} as any);
+    const currBank = current.bank_detail || ({} as any);
+    const checkBank = (key: string, label: string) => {
+      if ((origBank[key] || '').toString().trim() !== (currBank[key] || '').toString().trim()) {
+        fields.push(`bank_${label}`);
+      }
+    };
+    checkBank('bank_name_branch', 'bank_name');
+    checkBank('account_no', 'account_no');
+    checkBank('ifsc_code', 'ifsc_code');
 
     // Land details check
     const origLand = original.land_detail || ({} as any);

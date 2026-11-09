@@ -1,3 +1,10 @@
+export interface LandRow {
+  survey_no: string;
+  village: string;
+  owner_type: string;
+  area: string;
+}
+
 export interface LandDetail {
   khata_no?: string;
   total_area_hectare: string;
@@ -12,6 +19,7 @@ export interface LandDetail {
 
 export interface BankDetail {
   bank_name_branch: string;
+  bank_name?: string;
   account_no: string;
   ifsc_code: string;
 }
@@ -35,7 +43,7 @@ export interface PhotoTransform {
 
 export interface FarmerRecord {
   farmer_id: string;
-  enrollment_no: string;
+  enrollment_no: string; // PM किसान नंबर
   farmer_name: string;
   identifier_name: string;
   dob: string;
@@ -46,6 +54,7 @@ export interface FarmerRecord {
   aadhaar_number?: string;
   pan_card?: string;
   land_detail: LandDetail;
+  land_records?: LandRow[];
   bank_detail?: BankDetail;
   address: string;
   photo_base64?: string;
