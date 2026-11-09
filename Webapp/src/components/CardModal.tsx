@@ -1,13 +1,22 @@
-import React, { useState } from 'react';
-import { X, FileText, Image as ImageIcon } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, FileText, Image as ImageIcon, Printer, Share2, Layers, RefreshCw } from 'lucide-react';
 import { FarmerRecord } from '../types';
-import { downloadCardAsPng, downloadCardAsPdf, shareCardPdfViaWhatsApp } from '../lib/cardGenerator';
+import {
+  downloadCardAsPng,
+  downloadCardAsPdf,
+  downloadCardPrintSheetPdf,
+  shareCardPdfViaWhatsApp,
+  generateFrontCardCanvas,
+  generateBackCardCanvas,
+  generateBothCardsCanvas,
+} from '../lib/cardGenerator';
 
 interface CardModalProps {
   isOpen: boolean;
   onClose: () => void;
   record: FarmerRecord;
-  cardPreviewUrl: string;
+  frontPreviewUrl?: string;
+  backPreviewUrl?: string;
 }
 
 const WhatsAppIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
@@ -25,10 +34,53 @@ export const CardModal: React.FC<CardModalProps> = ({
   isOpen,
   onClose,
   record,
-  cardPreviewUrl,
+  frontPreviewUrl: initialFrontUrl,
+  backPreviewUrl: initialBackUrl,
 }) => {
+  const [activeSide, setActiveSide] = useState<'front' | 'back' | 'both'>('front');
+  const [frontUrl, setFrontUrl] = useState<string>(initialFrontUrl || '');
+  const [backUrl, setBackUrl] = useState<string>(initialBackUrl || '');
+  const [bothUrl, setBothUrl] = useState<string>('');
+  const [isLoadingPreviews, setIsLoadingPreviews] = useState<boolean>(false);
   const [isSharing, setIsSharing] = useState(false);
   const [shareNotice, setShareNotice] = useState<string | null>(null);
+
+  // Generate missing previews whenever modal opens or record changes
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let isMounted = true;
+    const generateAll = async () => {
+      setIsLoadingPreviews(true);
+      try {
+        const [fCanvas, bCanvas, bothCanvas] = await Promise.all([
+          initialFrontUrl ? Promise.resolve(null) : generateFrontCardCanvas(record),
+          initialBackUrl ? Promise.resolve(null) : generateBackCardCanvas(record),
+          generateBothCardsCanvas(record),
+        ]);
+
+        if (!isMounted) return;
+
+        if (fCanvas) setFrontUrl(fCanvas.toDataURL('image/png'));
+        else if (initialFrontUrl) setFrontUrl(initialFrontUrl);
+
+        if (bCanvas) setBackUrl(bCanvas.toDataURL('image/png'));
+        else if (initialBackUrl) setBackUrl(initialBackUrl);
+
+        if (bothCanvas) setBothUrl(bothCanvas.toDataURL('image/png'));
+      } catch (err) {
+        console.error('Failed to generate card previews:', err);
+      } finally {
+        if (isMounted) setIsLoadingPreviews(false);
+      }
+    };
+
+    generateAll();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, record, initialFrontUrl, initialBackUrl]);
 
   if (!isOpen) return null;
 
@@ -49,35 +101,94 @@ export const CardModal: React.FC<CardModalProps> = ({
     }
   };
 
+  const currentPreview =
+    activeSide === 'both' ? bothUrl || frontUrl : activeSide === 'back' ? backUrl : frontUrl;
+
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-4xl w-full p-6 shadow-2xl space-y-4">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl max-w-5xl w-full p-4 sm:p-6 shadow-2xl space-y-4 my-auto">
+        {/* Modal Top Bar */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-          <div className="flex items-center space-x-2">
-            <span className="text-xl">🪪</span>
-            <h3 className="font-bold text-slate-800 text-base">
-              Generated Farmer Details Card
-            </h3>
+          <div className="flex items-center space-x-2.5">
+            <span className="text-2xl">🪪</span>
+            <div>
+              <h3 className="font-bold text-slate-800 text-base leading-tight">
+                AgriCard - मेरा किसान कार्ड
+              </h3>
+              <p className="text-xs text-slate-500">
+                Front & Back Side Printable ID Card
+              </p>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 text-lg p-1 transition"
+            className="text-slate-400 hover:text-slate-600 rounded-lg p-1.5 hover:bg-slate-100 transition"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Card Preview */}
-        <div className="flex flex-col items-center justify-center py-2">
-          {cardPreviewUrl ? (
-            <img
-              src={cardPreviewUrl}
-              alt="Farmer Details Card Preview"
-              className="max-w-full rounded-xl shadow-lg border border-slate-200"
-            />
+        {/* View Switcher Tabs (Front, Back, Both) */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 bg-slate-50 p-2 rounded-xl border border-slate-200">
+          <div className="flex items-center space-x-1.5 w-full sm:w-auto">
+            <button
+              onClick={() => setActiveSide('front')}
+              className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 ${activeSide === 'front'
+                ? 'bg-emerald-700 text-white shadow'
+                : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                }`}
+            >
+              <span>🪪 Front Side (समोरील)</span>
+            </button>
+
+            <button
+              onClick={() => setActiveSide('back')}
+              className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 ${activeSide === 'back'
+                ? 'bg-emerald-700 text-white shadow'
+                : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                }`}
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Back Side (मागील)</span>
+            </button>
+
+            <button
+              onClick={() => setActiveSide('both')}
+              className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 ${activeSide === 'both'
+                ? 'bg-emerald-700 text-white shadow'
+                : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Both Sides (दोन्ही बाजू)</span>
+            </button>
+          </div>
+
+          <div className="text-[11px] text-slate-500 font-medium hidden sm:block">
+            {activeSide === 'front' && 'Photo, Name, DOB, Gender, PAN, Reg No, Aadhaar, Farmer ID, Address & QR'}
+            {activeSide === 'back' && 'जमिनीचा तपशील (Khata, Survey, Area) & बँक तपशील (Bank, A/C, IFSC)'}
+            {activeSide === 'both' && 'Complete 2-Sided Printable Overview'}
+          </div>
+        </div>
+
+        {/* Card Live Preview Container */}
+        <div className="relative flex flex-col items-center justify-center p-3 bg-gradient-to-b from-slate-100 to-slate-200 rounded-xl min-h-[300px] border border-slate-200 overflow-hidden">
+          {isLoadingPreviews ? (
+            <div className="flex flex-col items-center justify-center py-16 space-y-2 text-slate-500">
+              <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs font-semibold">Generating high-res card design...</span>
+            </div>
+          ) : currentPreview ? (
+            <div className="w-full flex justify-center">
+              <img
+                src={currentPreview}
+                alt={`Farmer ID Card - ${activeSide} view`}
+                className="max-h-[60vh] max-w-full rounded-xl shadow-xl border border-slate-300 object-contain"
+              />
+            </div>
           ) : (
             <div className="w-full h-64 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400">
-              Generating Card Preview...
+              Preview loading...
             </div>
           )}
         </div>
@@ -95,32 +206,53 @@ export const CardModal: React.FC<CardModalProps> = ({
           </div>
         )}
 
-        {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-slate-100">
+        {/* Action Buttons Toolbar */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100">
           <p className="text-xs text-slate-500 text-center sm:text-left">
-            This card is for personal reference & informational use.
+            This card is strictly for personal reference & informational reference.
           </p>
+
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+            {/* Share on WhatsApp */}
             <button
               onClick={handleShareWhatsApp}
               disabled={isSharing}
-              className="w-full sm:w-auto px-3.5 py-2 bg-[#25D366] hover:bg-[#20ba5a] text-white text-xs font-bold rounded-lg shadow transition flex items-center justify-center space-x-1.5 disabled:opacity-50"
+              className="px-3.5 py-2 bg-[#25D366] hover:bg-[#20ba5a] text-white text-xs font-bold rounded-lg shadow transition flex items-center space-x-1.5 disabled:opacity-50"
+              title="Share card PDF via WhatsApp"
             >
               <WhatsAppIcon className="w-4 h-4 text-white" />
-              <span>{isSharing ? 'Preparing...' : 'Share on WhatsApp'}</span>
+              <span>{isSharing ? 'Sharing...' : 'WhatsApp'}</span>
             </button>
+
+            {/* Single Image Download Button (downloads current active view: Front, Back, or Both) */}
             <button
-              onClick={() => downloadCardAsPng(record)}
-              className="w-full sm:w-auto px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg shadow transition flex items-center justify-center space-x-1.5"
+              onClick={() => downloadCardAsPng(record, activeSide)}
+              className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg shadow transition flex items-center space-x-1.5"
+              title={`Download ${activeSide === 'both' ? 'Both sides' : activeSide === 'back' ? 'Back side' : 'Front side'} image as PNG`}
             >
-              <ImageIcon className="w-4 h-4" />
-              <span>Download PNG</span>
+              <ImageIcon className="w-3.5 h-3.5 text-white" />
+              <span>
+                Download Image
+              </span>
             </button>
+
+            {/* Download A4 Print Sheet */}
+            <button
+              onClick={() => downloadCardPrintSheetPdf(record)}
+              className="px-3 py-2 bg-sky-700 hover:bg-sky-600 text-white text-xs font-bold rounded-lg shadow transition flex items-center space-x-1.5"
+              title="Printable A4 sheet with Front & Back side-by-side ready to cut"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>A4 Print Sheet</span>
+            </button>
+
+            {/* Download 2-Page CR80 PDF */}
             <button
               onClick={() => downloadCardAsPdf(record)}
-              className="w-full sm:w-auto px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-lg shadow transition flex items-center justify-center space-x-1.5"
+              className="px-3.5 py-2 bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow transition flex items-center space-x-1.5"
+              title="Standard CR80 2-page duplex PDF (Page 1 Front, Page 2 Back)"
             >
-              <FileText className="w-4 h-4 text-red-400" />
+              <FileText className="w-3.5 h-3.5 text-emerald-200" />
               <span>Download PDF</span>
             </button>
           </div>
@@ -129,4 +261,3 @@ export const CardModal: React.FC<CardModalProps> = ({
     </div>
   );
 };
-

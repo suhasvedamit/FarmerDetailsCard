@@ -10,7 +10,10 @@ export const EMPTY_FARMER_RECORD: FarmerRecord = {
   gender: '',
   caste_category: '',
   mobile_number: '',
+  aadhaar_number: '',
+  pan_card: '',
   land_detail: {
+    khata_no: '',
     total_area_hectare: '',
     number_of_lands: '',
     survey_gat_no: '',
@@ -19,6 +22,11 @@ export const EMPTY_FARMER_RECORD: FarmerRecord = {
     district: '',
     state: '',
     summary: '',
+  },
+  bank_detail: {
+    bank_name_branch: '',
+    account_no: '',
+    ifsc_code: '',
   },
   address: '',
 };

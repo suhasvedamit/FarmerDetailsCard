@@ -755,7 +755,28 @@ export async function extractFarmerDataFromPdf(
     fullText.match(/\b([6-9]\d{9})\b/);
   if (mobMatch) mobileNumber = mobMatch[1].trim();
 
+  // Aadhaar Number
+  let aadhaarNumber = '';
+  const aadhMatch = fullText.match(/(?:Aadhaar|UID|Adhar)(?:\s*(?:Number|No))?\s*[:\-\s]*([0-9X]{4}[\s\-]?[0-9X]{4}[\s\-]?[0-9]{4})\b/i);
+  if (aadhMatch) {
+    aadhaarNumber = aadhMatch[1].trim();
+  }
+
+  // PAN Card
+  let panCard = '';
+  const panMatch = fullText.match(/(?:PAN|PAN\s*Card)(?:\s*(?:Number|No))?\s*[:\-\s]*([A-Z]{5}[0-9]{4}[A-Z])/i) ||
+    fullText.match(/\b([A-Z]{5}[0-9]{4}[A-Z])\b/);
+  if (panMatch) {
+    panCard = panMatch[1].trim();
+  }
+
   // 8. Land Details
+  let khataNo = '';
+  const khataMatch = fullText.match(/(?:Khata|Khate|Khata\s*No|Khate\s*Kramank)\s*[:\-\s]*([A-Za-z0-9\/\-]+)/i);
+  if (khataMatch && !/^(Number|No|Gat|Survey)$/i.test(khataMatch[1])) {
+    khataNo = khataMatch[1].trim();
+  }
+
   let totalArea = '';
   const areaMatch = fullText.match(/Total\s*Land\s*Area\s*Owned\s*\(Hectare\)\s*([\d\.]+)/i);
   if (areaMatch) totalArea = areaMatch[1].trim();
@@ -819,6 +840,20 @@ export async function extractFarmerDataFromPdf(
   if (state) summaryParts.push(state);
   const landSummary = summaryParts.join(', ');
 
+  // Bank Details
+  let bankNameBranch = '';
+  const bMatch = fullText.match(/(?:Bank\s*Name|Name\s*of\s*Bank)\s*[:\-\s]*([A-Za-z\s,]+?)(?=\n|Account|Branch|IFSC|$)/i);
+  if (bMatch) bankNameBranch = bMatch[1].trim();
+
+  let accountNo = '';
+  const accMatch = fullText.match(/(?:Account\s*No|A\/C\s*No|Account\s*Number)\s*[:\-\s]*([0-9X]{8,20})/i);
+  if (accMatch) accountNo = accMatch[1].trim();
+
+  let ifscCode = '';
+  const ifscMatch = fullText.match(/(?:IFSC|IFSC\s*Code)\s*[:\-\s]*([A-Z]{4}0[A-Z0-9]{6})/i) ||
+    fullText.match(/\b([A-Z]{4}0[A-Z0-9]{6})\b/);
+  if (ifscMatch) ifscCode = ifscMatch[1].trim();
+
   // 9. Address
   let address = '';
   const targetAddressText = p2Text ? `${p2Text}\n---\n${fullText}` : fullText;
@@ -847,7 +882,10 @@ export async function extractFarmerDataFromPdf(
     gender: gender,
     caste_category: casteCategory,
     mobile_number: mobileNumber,
+    aadhaar_number: aadhaarNumber,
+    pan_card: panCard,
     land_detail: {
+      khata_no: khataNo,
       total_area_hectare: totalArea,
       number_of_lands: landCount,
       survey_gat_no: surveyNo,
@@ -856,6 +894,11 @@ export async function extractFarmerDataFromPdf(
       district,
       state,
       summary: landSummary,
+    },
+    bank_detail: {
+      bank_name_branch: bankNameBranch,
+      account_no: accountNo,
+      ifsc_code: ifscCode,
     },
     address: address,
     photo_url: photoUrl || undefined,

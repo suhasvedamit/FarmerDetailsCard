@@ -1,4 +1,5 @@
 export interface LandDetail {
+  khata_no?: string;
   total_area_hectare: string;
   number_of_lands: string;
   survey_gat_no: string;
@@ -7,6 +8,12 @@ export interface LandDetail {
   district: string;
   state: string;
   summary: string;
+}
+
+export interface BankDetail {
+  bank_name_branch: string;
+  account_no: string;
+  ifsc_code: string;
 }
 
 export interface PhotoBBox {
@@ -36,7 +43,10 @@ export interface FarmerRecord {
   gender: string;
   caste_category: string;
   mobile_number: string;
+  aadhaar_number?: string;
+  pan_card?: string;
   land_detail: LandDetail;
+  bank_detail?: BankDetail;
   address: string;
   photo_base64?: string;
   photo_url?: string;
