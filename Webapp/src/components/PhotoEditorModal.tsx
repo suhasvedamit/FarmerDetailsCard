@@ -11,6 +11,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
+  ArrowDownToLine,
   Maximize2,
   ScanFace,
   Upload,
@@ -105,14 +106,16 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
         const totalScale = baseScale * initZoom;
 
         const centerX = bbox.x + bbox.w / 2;
-        const centerY = bbox.y + bbox.h / 2;
+        // Anchor the bottom of the photo box to the bottom of the viewport
+        // so the shirt cleanly touches the bottom with zero white gap!
+        const bboxBottom = bbox.y + bbox.h;
+        const panY = Math.round(INTERNAL_CANVAS_H / 2 - (bboxBottom - imgH / 2) * totalScale);
         const offsetX = centerX - imgW / 2;
-        const offsetY = centerY - imgH / 2;
 
         return {
           zoom: Number(initZoom.toFixed(2)),
           panX: Math.round(-offsetX * totalScale),
-          panY: Math.round(-offsetY * totalScale),
+          panY,
         };
       } else {
         // Default to top-right quadrant of Page 1
@@ -181,7 +184,10 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
       } else if (sourceMode !== 'pdf' && !initialTransform) {
         setZoom(1);
         setPanX(0);
-        setPanY(0);
+        const baseScale = Math.max(INTERNAL_CANVAS_W / (img.naturalWidth || 1), INTERNAL_CANVAS_H / (img.naturalHeight || 1));
+        const dh = img.naturalHeight * baseScale;
+        // Anchor to bottom so the shirt cleanly touches the bottom edge
+        setPanY(Math.round((INTERNAL_CANVAS_H - dh) / 2));
       }
     };
     img.onerror = () => {
@@ -455,6 +461,22 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
   const centerPhoto = () => {
     setPanX(0);
     setPanY(0);
+  };
+
+  // Snap photo to bottom edge so shoulders/shirt cleanly touch bottom border with zero gap
+  const alignToBottom = () => {
+    if (!loadedImage) return;
+    const baseScale = getBaseScale(loadedImage);
+    const totalScale = baseScale * zoom;
+    if (sourceMode === 'pdf' && photoBBox) {
+      const bboxBottom = photoBBox.y + photoBBox.h;
+      setPanY(Math.round(INTERNAL_CANVAS_H / 2 - (bboxBottom - loadedImage.naturalHeight / 2) * totalScale));
+    } else {
+      const isRotatedQuarter = rotation === 90 || rotation === 270;
+      const rH = isRotatedQuarter ? loadedImage.naturalWidth : loadedImage.naturalHeight;
+      const dh = rH * totalScale;
+      setPanY(Math.round((INTERNAL_CANVAS_H - dh) / 2));
+    }
   };
 
   // Rotation controls
@@ -806,9 +828,16 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                     <button
                       onClick={centerPhoto}
                       title="Center Photo"
-                      className="p-1.5 bg-emerald-800 hover:bg-emerald-700 text-emerald-100 rounded-md transition shadow-sm active:scale-95"
+                      className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md transition shadow-sm active:scale-95"
                     >
                       <Maximize2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={alignToBottom}
+                      title="Align to Bottom (Eliminate bottom white gap)"
+                      className="p-1.5 bg-emerald-800 hover:bg-emerald-700 text-emerald-100 rounded-md transition shadow-sm active:scale-95"
+                    >
+                      <ArrowDownToLine className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => nudge(0, 8)}
@@ -888,6 +917,15 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                     </button>
                     <button
                       type="button"
+                      onClick={alignToBottom}
+                      className="px-2 py-0.5 rounded bg-emerald-50 border border-emerald-300 text-emerald-800 hover:bg-emerald-100 font-bold transition flex items-center space-x-1"
+                      title="Align photo to bottom edge (no white gap)"
+                    >
+                      <ArrowDownToLine className="w-3 h-3 text-emerald-600" />
+                      <span>Align Bottom</span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setZoom(6.0)}
                       className="px-2 py-0.5 rounded bg-white border border-slate-200 hover:bg-slate-100 transition"
                     >
@@ -913,6 +951,15 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                     <span className="text-[10px] text-slate-400 mr-0.5">Presets:</span>
                     <button
                       type="button"
+                      onClick={alignToBottom}
+                      className="px-2 py-0.5 rounded bg-emerald-50 border border-emerald-300 text-emerald-800 hover:bg-emerald-100 font-bold transition flex items-center space-x-1"
+                      title="Align photo to bottom edge (no white gap)"
+                    >
+                      <ArrowDownToLine className="w-3 h-3 text-emerald-600" />
+                      <span>Align Bottom</span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => {
                         setZoom(1);
                         setPanX(0);
@@ -920,7 +967,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                       }}
                       className="px-2 py-0.5 rounded bg-white border border-slate-200 hover:bg-slate-100 transition"
                     >
-                      Fit (100%)
+                      Center (100%)
                     </button>
                     <button
                       type="button"
@@ -1074,7 +1121,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                     style={{ aspectRatio: `${TARGET_ASPECT}` }}
                   >
                     {livePreviewUrl ? (
-                      <img src={livePreviewUrl} alt="Thumbnail" className="w-full h-full object-cover" />
+                      <img src={livePreviewUrl} alt="Thumbnail" className="w-full h-full object-cover object-bottom" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-[8px] text-slate-400">
                         Preview

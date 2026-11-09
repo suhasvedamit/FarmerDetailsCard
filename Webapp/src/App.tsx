@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { DropZone } from './components/DropZone';
 import { ProgressBar } from './components/ProgressBar';
@@ -7,13 +7,45 @@ import { FarmerForm } from './components/FarmerForm';
 import { CardModal } from './components/CardModal';
 import { DisclaimerModal } from './components/DisclaimerModal';
 import { PhotoEditorModal } from './components/PhotoEditorModal';
+import { FarmerVerificationPage } from './components/FarmerVerificationPage';
 import { FarmerRecord } from './types';
 import { extractFarmerDataFromPdf } from './lib/pdfExtractor';
-import { generateFrontCardCanvas, generateBackCardCanvas, addWatermarkToCanvas } from './lib/cardGenerator';
+import { generateFrontCardCanvas, generateBackCardCanvas } from './lib/cardGenerator';
 import { saveExtractedRecord, saveGeneratedRecord } from './lib/supabase';
+import {
+  isVerificationMode,
+  extractVerificationDataFromUrl,
+  FarmerVerificationData,
+} from './lib/verificationUrl';
 import { CreditCard } from 'lucide-react';
 
 export const App: React.FC = () => {
+  // Check if page opened via QR code scan (or verification URL parameter)
+  const [isVerifying, setIsVerifying] = useState<boolean>(() => isVerificationMode());
+  const [verificationData, setVerificationData] = useState<FarmerVerificationData | null>(() =>
+    isVerificationMode() ? extractVerificationDataFromUrl() : null
+  );
+
+  useEffect(() => {
+    const handleLocationChange = () => {
+      const verifying = isVerificationMode();
+      setIsVerifying(verifying);
+      if (verifying) {
+        setVerificationData(extractVerificationDataFromUrl());
+      }
+    };
+
+    window.addEventListener('popstate', handleLocationChange);
+    return () => window.removeEventListener('popstate', handleLocationChange);
+  }, []);
+
+  const handleNavigateHome = () => {
+    const cleanUrl = window.location.origin + window.location.pathname;
+    window.history.pushState({}, '', cleanUrl);
+    setIsVerifying(false);
+    setVerificationData(null);
+  };
+
   // Disclaimer state: resets on every page load/refresh
   const [hasAcceptedDisclaimer, setHasAcceptedDisclaimer] = useState(false);
 
@@ -76,8 +108,8 @@ export const App: React.FC = () => {
         generateFrontCardCanvas(data),
         generateBackCardCanvas(data),
       ]);
-      setFrontPreviewUrl(addWatermarkToCanvas(frontCanvas).toDataURL('image/png'));
-      setBackPreviewUrl(addWatermarkToCanvas(backCanvas).toDataURL('image/png'));
+      setFrontPreviewUrl(frontCanvas.toDataURL('image/png'));
+      setBackPreviewUrl(backCanvas.toDataURL('image/png'));
       setCardModalOpen(true);
 
       // Non-blocking background sync (never interrupts user experience if offline/blocked)
@@ -93,6 +125,16 @@ export const App: React.FC = () => {
       alert('Card generation failed');
     }
   };
+
+  // If opened via QR code scan (or verification URL), show the verification page directly
+  if (isVerifying) {
+    return (
+      <FarmerVerificationPage
+        data={verificationData}
+        onNavigateHome={handleNavigateHome}
+      />
+    );
+  }
 
   return (
     <>

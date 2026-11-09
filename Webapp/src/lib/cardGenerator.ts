@@ -1,13 +1,33 @@
 import { jsPDF } from 'jspdf';
 import QRCode from 'qrcode';
 import { FarmerRecord } from '../types';
-import { LOGO_DATA_URL } from '../assets/logoData';
+import { buildVerificationUrl } from './verificationUrl';
 
-let cachedLogoImg: HTMLImageElement | null = null;
-async function getLogoImage(): Promise<HTMLImageElement> {
-  if (cachedLogoImg) return cachedLogoImg;
-  cachedLogoImg = await loadImage(LOGO_DATA_URL);
-  return cachedLogoImg;
+// Direct image import: allows directly pasting/replacing card_template.png or card_template.jpg in src/assets/
+const templateModules = import.meta.glob('../assets/card_template.{png,jpg,jpeg}', {
+  eager: true,
+  import: 'default',
+}) as Record<string, string>;
+
+const cardTemplateUrl: string =
+  templateModules['../assets/card_template.png'] ||
+  templateModules['../assets/card_template.jpg'] ||
+  templateModules['../assets/card_template.jpeg'] ||
+  '';
+
+let cachedCardTemplateImg: HTMLImageElement | null = null;
+let cachedTemplateUrl: string | null = null;
+
+async function getCardTemplateImage(): Promise<HTMLImageElement> {
+  if (cachedCardTemplateImg && cachedTemplateUrl === cardTemplateUrl) {
+    return cachedCardTemplateImg;
+  }
+  if (!cardTemplateUrl) {
+    throw new Error('Card template image not found in src/assets/ (expected card_template.png or card_template.jpg)');
+  }
+  cachedCardTemplateImg = await loadImage(cardTemplateUrl);
+  cachedTemplateUrl = cardTemplateUrl;
+  return cachedCardTemplateImg;
 }
 
 /**
@@ -17,398 +37,30 @@ export const CARD_WIDTH = 1050;
 export const CARD_HEIGHT = 660;
 
 /**
- * Top-Right Leaf Foliage with dew drops and water bubbles.
- */
-const FOLIAGE_SVG = `
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 220" width="320" height="220">
-  <defs>
-    <linearGradient id="leafGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#86efac"/>
-      <stop offset="30%" stop-color="#22c55e"/>
-      <stop offset="80%" stop-color="#15803d"/>
-      <stop offset="100%" stop-color="#14532d"/>
-    </linearGradient>
-    <linearGradient id="leafGrad2" x1="10%" y1="0%" x2="90%" y2="100%">
-      <stop offset="0%" stop-color="#a3e635"/>
-      <stop offset="40%" stop-color="#4ade80"/>
-      <stop offset="90%" stop-color="#16a34a"/>
-    </linearGradient>
-    <linearGradient id="leafGrad3" x1="0%" y1="0%" x2="100%" y2="80%">
-      <stop offset="0%" stop-color="#bbf7d0"/>
-      <stop offset="50%" stop-color="#16a34a"/>
-      <stop offset="100%" stop-color="#0f5132"/>
-    </linearGradient>
-    <radialGradient id="dewGrad" cx="35%" cy="30%" r="65%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
-      <stop offset="30%" stop-color="#e0f2fe" stop-opacity="0.75"/>
-      <stop offset="70%" stop-color="#38bdf8" stop-opacity="0.4"/>
-      <stop offset="95%" stop-color="#0284c7" stop-opacity="0.6"/>
-      <stop offset="100%" stop-color="#0369a1" stop-opacity="0.8"/>
-    </radialGradient>
-    <radialGradient id="dewGradSmall" cx="35%" cy="30%" r="65%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
-      <stop offset="45%" stop-color="#bae6fd" stop-opacity="0.55"/>
-      <stop offset="100%" stop-color="#0284c7" stop-opacity="0.75"/>
-    </radialGradient>
-    <filter id="dewShadow" x="-30%" y="-30%" width="160%" height="160%">
-      <feDropShadow dx="1.5" dy="2" stdDeviation="1.5" flood-color="#064e3b" flood-opacity="0.4"/>
-    </filter>
-  </defs>
-
-  <!-- Curving Branch -->
-  <path d="M 320 0 Q 260 40 220 90 Q 180 140 170 170" fill="none" stroke="#166534" stroke-width="4.5" stroke-linecap="round"/>
-  <path d="M 260 45 Q 220 50 180 40" fill="none" stroke="#166534" stroke-width="3" stroke-linecap="round"/>
-  <path d="M 230 80 Q 200 110 150 115" fill="none" stroke="#166534" stroke-width="3" stroke-linecap="round"/>
-
-  <!-- Leaf 1 (Top large curving leaf) -->
-  <path d="M 320 10 C 270 15, 200 40, 160 30 C 200 70, 260 70, 320 35 Z" fill="url(#leafGrad1)"/>
-  <path d="M 320 18 Q 230 45 160 30" fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="1.8"/>
-
-  <!-- Leaf 2 (Main lush curving leaf pointing downwards) -->
-  <path d="M 270 40 C 230 70, 180 90, 130 110 C 160 145, 230 140, 260 90 Z" fill="url(#leafGrad2)"/>
-  <path d="M 265 50 Q 200 105 130 110" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="2"/>
-  <path d="M 210 85 Q 225 72 238 70" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
-  <path d="M 185 98 Q 195 86 210 82" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
-  <path d="M 190 102 Q 180 120 170 125" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
-
-  <!-- Leaf 3 (Lower drooping leaf) -->
-  <path d="M 220 90 C 180 120, 150 160, 155 200 C 190 180, 225 150, 235 110 Z" fill="url(#leafGrad3)"/>
-  <path d="M 222 95 Q 180 150 155 200" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.8"/>
-
-  <!-- Leaf 4 (Small side leaf) -->
-  <path d="M 290 60 C 260 70, 240 100, 230 120 C 260 115, 280 95, 305 75 Z" fill="url(#leafGrad1)"/>
-
-  <!-- Leaf 5 (Corner leaf) -->
-  <path d="M 320 50 C 295 65, 280 85, 285 105 C 305 95, 318 75, 320 60 Z" fill="url(#leafGrad2)"/>
-
-  <!-- Water droplet on Leaf 2 -->
-  <g filter="url(#dewShadow)">
-    <ellipse cx="185" cy="115" rx="14" ry="11" transform="rotate(-15 185 115)" fill="url(#dewGrad)"/>
-    <ellipse cx="181" cy="111" rx="4.5" ry="2.5" transform="rotate(-15 181 111)" fill="#ffffff" opacity="0.95"/>
-    <circle cx="189" cy="118" r="1.5" fill="#ffffff" opacity="0.7"/>
-  </g>
-
-  <!-- Water droplet on Leaf 1 -->
-  <g filter="url(#dewShadow)">
-    <ellipse cx="230" cy="45" rx="10" ry="7.5" transform="rotate(10 230 45)" fill="url(#dewGrad)"/>
-    <ellipse cx="227" cy="43" rx="3" ry="1.8" transform="rotate(10 227 43)" fill="#ffffff" opacity="0.9"/>
-  </g>
-
-  <!-- Water droplet on Leaf 3 -->
-  <g filter="url(#dewShadow)">
-    <circle cx="185" cy="165" r="7" fill="url(#dewGradSmall)"/>
-    <circle cx="183" cy="163" r="2.2" fill="#ffffff" opacity="0.9"/>
-  </g>
-
-  <!-- Bokeh circles & floating droplets -->
-  <circle cx="140" cy="65" r="14" fill="rgba(255,255,255,0.2)" stroke="rgba(74,222,128,0.5)" stroke-width="1.5"/>
-  <circle cx="136" cy="61" r="3" fill="#ffffff" opacity="0.75"/>
-  <circle cx="120" cy="140" r="8.5" fill="url(#dewGrad)" filter="url(#dewShadow)"/>
-  <circle cx="118" cy="138" r="2.5" fill="#ffffff" opacity="0.9"/>
-  <circle cx="210" cy="180" r="10" fill="rgba(255,255,255,0.15)" stroke="rgba(163,230,53,0.5)" stroke-width="1.2"/>
-  <circle cx="105" cy="100" r="6" fill="rgba(255,255,255,0.25)" stroke="rgba(74,222,128,0.4)" stroke-width="1"/>
-</svg>
-`;
-
-/**
- * Bottom Landscape with rolling hills, flying birds, and green farm tractor.
- */
-const LANDSCAPE_TRACTOR_SVG = `
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1050 260" width="1050" height="260">
-  <defs>
-    <linearGradient id="skyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0"/>
-      <stop offset="40%" stop-color="#f0fdf4" stop-opacity="0.25"/>
-      <stop offset="100%" stop-color="#dcfce7" stop-opacity="0.55"/>
-    </linearGradient>
-
-    <linearGradient id="hillFarGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#bef264"/>
-      <stop offset="60%" stop-color="#86efac"/>
-      <stop offset="100%" stop-color="#4ade80"/>
-    </linearGradient>
-
-    <linearGradient id="hillNearGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#4ade80"/>
-      <stop offset="40%" stop-color="#22c55e"/>
-      <stop offset="100%" stop-color="#16a34a"/>
-    </linearGradient>
-
-    <linearGradient id="tractorBodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#22c55e"/>
-      <stop offset="50%" stop-color="#16a34a"/>
-      <stop offset="100%" stop-color="#14532d"/>
-    </linearGradient>
-
-    <linearGradient id="tractorTireGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#334155"/>
-      <stop offset="60%" stop-color="#0f172a"/>
-      <stop offset="100%" stop-color="#020617"/>
-    </linearGradient>
-
-    <linearGradient id="tractorRimGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#facc15"/>
-      <stop offset="100%" stop-color="#ca8a04"/>
-    </linearGradient>
-  </defs>
-
-  <!-- Sky gradient wash -->
-  <rect x="0" y="0" width="1050" height="260" fill="url(#skyGrad)"/>
-
-  <!-- Distant Birds in flight -->
-  <g fill="none" stroke="#475569" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" opacity="0.65">
-    <path d="M 230 45 Q 235 39 240 45 Q 245 39 250 45" />
-    <path d="M 258 55 Q 262 50 266 55 Q 270 50 274 55" />
-    <path d="M 242 66 Q 245 62 249 66 Q 252 62 256 66" />
-    <path d="M 310 50 Q 314 46 318 50 Q 322 46 326 50" />
-    <path d="M 328 62 Q 332 58 335 62 Q 339 58 342 62" />
-  </g>
-
-  <!-- Distant rolling hill -->
-  <path d="M 0 160 Q 250 110 550 140 T 1050 110 L 1050 260 L 0 260 Z" fill="url(#hillFarGrad)" opacity="0.75"/>
-
-  <!-- Distant trees on ridge -->
-  <g fill="#15803d" opacity="0.45">
-    <circle cx="480" cy="135" r="14"/>
-    <circle cx="495" cy="133" r="11"/>
-    <circle cx="510" cy="136" r="13"/>
-    <circle cx="720" cy="120" r="12"/>
-    <circle cx="735" cy="118" r="10"/>
-    <circle cx="750" cy="122" r="11"/>
-  </g>
-
-  <!-- Foreground rolling hill -->
-  <path d="M 0 140 Q 180 120 400 160 Q 700 200 1050 150 L 1050 260 L 0 260 Z" fill="url(#hillNearGrad)"/>
-  <path d="M 0 140 Q 180 120 400 160 Q 700 200 1050 150" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="2.5"/>
-
-  <!-- CLASSIC GREEN FARM TRACTOR (Sitting on left hill) -->
-  <g id="tractor" transform="translate(85, 90)">
-    <!-- Exhaust pipe -->
-    <rect x="75" y="0" width="4.5" height="24" fill="#334155" rx="1.5"/>
-    <path d="M 73 2 Q 78 5 83 2" stroke="#334155" stroke-width="2.5" fill="none"/>
-    <circle cx="82" cy="-4" r="3.5" fill="#94a3b8" opacity="0.5"/>
-    <circle cx="87" cy="-9" r="4.5" fill="#cbd5e1" opacity="0.4"/>
-    <circle cx="94" cy="-14" r="5.5" fill="#e2e8f0" opacity="0.3"/>
-
-    <!-- Steering wheel and column -->
-    <line x1="42" y1="20" x2="48" y2="10" stroke="#0f172a" stroke-width="3" stroke-linecap="round"/>
-    <ellipse cx="49" cy="8" rx="8" ry="3" transform="rotate(-25 49 8)" fill="none" stroke="#0f172a" stroke-width="2.5"/>
-
-    <!-- Tractor Seat -->
-    <path d="M 24 16 Q 28 24 36 24" fill="none" stroke="#0f172a" stroke-width="4.5" stroke-linecap="round"/>
-
-    <!-- Tractor Green Engine Hood -->
-    <path d="M 38 22 L 88 22 Q 92 22 93 25 L 94 44 L 38 44 Z" fill="url(#tractorBodyGrad)"/>
-    <path d="M 90 25 L 94 25 L 94 42 L 90 42 Z" fill="#1e293b"/>
-    <line x1="91" y1="28" x2="91" y2="39" stroke="#94a3b8" stroke-width="1.5"/>
-    <circle cx="92" cy="28" r="3.5" fill="#fef08a" stroke="#ca8a04" stroke-width="1"/>
-
-    <line x1="48" y1="28" x2="84" y2="28" stroke="#14532d" stroke-width="2"/>
-    <line x1="56" y1="34" x2="84" y2="34" stroke="#14532d" stroke-width="1.5"/>
-    <line x1="62" y1="38" x2="84" y2="38" stroke="#14532d" stroke-width="1.5"/>
-
-    <!-- Rear Fender -->
-    <path d="M 8 28 Q 20 8 38 12 Q 36 24 34 32 Q 22 24 8 28 Z" fill="url(#tractorBodyGrad)"/>
-
-    <!-- Large Rear Tire -->
-    <g transform="translate(22, 40)">
-      <circle cx="0" cy="0" r="26" fill="url(#tractorTireGrad)"/>
-      <g stroke="#475569" stroke-width="3" stroke-linecap="round">
-        <line x1="0" y1="-26" x2="0" y2="-21"/>
-        <line x1="18" y1="-18" x2="15" y2="-15"/>
-        <line x1="26" y1="0" x2="21" y2="0"/>
-        <line x1="18" y1="18" x2="15" y2="15"/>
-        <line x1="0" y1="26" x2="0" y2="21"/>
-        <line x1="-18" y1="18" x2="-15" y2="15"/>
-        <line x1="-26" y1="0" x2="-21" y2="0"/>
-        <line x1="-18" y1="-18" x2="-15" y2="-15"/>
-      </g>
-      <circle cx="0" cy="0" r="15" fill="url(#tractorRimGrad)"/>
-      <circle cx="0" cy="0" r="7" fill="#854d0e"/>
-      <circle cx="0" cy="0" r="3.5" fill="#fef08a"/>
-    </g>
-
-    <!-- Small Front Tire -->
-    <g transform="translate(86, 46)">
-      <circle cx="0" cy="0" r="14" fill="url(#tractorTireGrad)"/>
-      <circle cx="0" cy="0" r="8" fill="url(#tractorRimGrad)"/>
-      <circle cx="0" cy="0" r="3.5" fill="#854d0e"/>
-      <circle cx="0" cy="0" r="1.8" fill="#fef08a"/>
-    </g>
-
-    <line x1="68" y1="44" x2="86" y2="46" stroke="#0f172a" stroke-width="4" stroke-linecap="round"/>
-  </g>
-</svg>
-`;
-
-/**
- * Draws the shared ID Card base:
- * - Card rounded border
- * - Top Header: "MyAgriCard" logo, "माझे  किसान कार्ड" + floral diamond ornament, foliage with dew drops
- * - Bottom Background Landscape: rolling hills, tractor, birds
- * - Bottom Footer Bar: Dark green bar with disclaimer & "फार्मर आईडी"
+ * Draws the shared ID Card base using the user's custom template image:
+ * Background template contains the wavy green top banner, wheat logo emblem,
+ * "माझे किसान कार्ड" title, diamond motif, bamboo leaves foliage,
+ * rolling hills landscape with red tractor and wheat stalks, and bottom disclaimer footer.
  */
 async function drawCardBase(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // 1. Background
+  // 1. Clear background
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, w, h);
 
-  const radius = 28;
-
-  // 2. Landscape graphic at bottom
+  // 2. Draw user-provided background card template
   try {
-    const landscapeImg = await loadSvgImage(LANDSCAPE_TRACTOR_SVG);
-    // Position landscape in bottom 250px above footer
-    ctx.drawImage(landscapeImg, 0, h - 260, w, 260);
+    const templateImg = await getCardTemplateImage();
+    ctx.drawImage(templateImg, 0, 0, w, h);
   } catch (err) {
-    console.warn('Could not draw landscape SVG:', err);
+    console.warn('Could not draw card template image:', err);
   }
 
-  // 3. Foliage graphic at top right
-  try {
-    const foliageImg = await loadSvgImage(FOLIAGE_SVG);
-    const fw = 320;
-    const fh = 220;
-    ctx.drawImage(foliageImg, w - fw, 0, fw, fh);
-  } catch (err) {
-    console.warn('Could not draw foliage SVG:', err);
-  }
-
-  // 4. Outer Green Border
+  // 3. Crisp outer rounded card border
   ctx.save();
   ctx.strokeStyle = '#15803d';
-  ctx.lineWidth = 3;
-  roundRect(ctx, 4, 4, w - 8, h - 8, radius);
+  ctx.lineWidth = 2.5;
+  roundRect(ctx, 2, 2, w - 4, h - 4, 20);
   ctx.stroke();
-  ctx.restore();
-
-  // 5. Header: Logo (Top-Left)
-  await drawCardLogo(ctx, 36, 16);
-
-  // 6. Header: "माझे  किसान कार्ड" (Top-Center)
-  const centerX = w / 2;
-  ctx.save();
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#c2410c'; // Warm terracotta / rust red
-  ctx.font = '700 46px "Noto Sans Devanagari", Inter, sans-serif';
-  ctx.fillText('माझे  किसान कार्ड', centerX, 52);
-
-  // Ornamental motif below "माझे  किसान कार्ड"
-  drawHeaderMotif(ctx, centerX, 74);
-  ctx.restore();
-
-  // 7. Footer Bar (Dark Green Banner at Bottom)
-  const footerH = 54;
-  const footerY = h - footerH - 4;
-
-  ctx.save();
-  ctx.beginPath();
-  roundRect(ctx, 4, footerY, w - 8, footerH, { tl: 0, tr: 0, bl: radius - 2, br: radius - 2 });
-  ctx.fillStyle = '#064e3b'; // Deep emerald forest green
-  ctx.fill();
-
-  // Left Disclaimer Text (Double / Enhanced readable font)
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '600 20px Inter, -apple-system, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText('This card is only for personal use not for Govt. issue card.  ——', 36, footerY + 34);
-
-  // Vertical Divider
-  const divX = w - 265;
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(divX, footerY + 10);
-  ctx.lineTo(divX, footerY + footerH - 10);
-  ctx.stroke();
-
-  // Right Badge Text: "फार्मर आईडी" (Enhanced large readable font)
-  ctx.fillStyle = '#a3e635'; // Vibrant bright lime
-  ctx.font = '700 32px "Noto Sans Devanagari", Inter, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('फार्मर आईडी', divX + 128, footerY + 37);
-  ctx.restore();
-}
-
-/**
- * Draws the official logo emblem and "MyAgriCard" branding at top-left of the card.
- */
-async function drawCardLogo(ctx: CanvasRenderingContext2D, x: number, y: number) {
-  const logoSize = 60;
-  try {
-    const logoImg = await getLogoImage();
-    ctx.drawImage(logoImg, x, y, logoSize, logoSize);
-  } catch (err) {
-    console.warn('Could not draw logo image on card:', err);
-  }
-
-  // Brand Name "MyAgriCard"
-  ctx.save();
-  const textX = x + logoSize + 10;
-  const textY = y + 42;
-
-  // // "Agri" in dark green
-  // ctx.fillStyle = '#15803d';
-  // ctx.font = '800 36px Inter, -apple-system, sans-serif';
-  // ctx.textAlign = 'left';
-  // ctx.fillText('MyAgri', textX, textY);
-
-  // const agriW = ctx.measureText('MyAgri').width;
-
-  // // "Card" in warm rust orange
-  // ctx.fillStyle = '#ea580c';
-  // ctx.font = '800 36px Inter, -apple-system, sans-serif';
-  // ctx.fillText('Card', textX + agriW, textY);
-  // ctx.restore();
-}
-
-/**
- * Draws the elegant 4-point diamond flower and lines underneath the title.
- */
-function drawHeaderMotif(ctx: CanvasRenderingContext2D, cx: number, cy: number) {
-  ctx.save();
-  ctx.fillStyle = '#16a34a';
-  ctx.strokeStyle = '#16a34a';
-  ctx.lineWidth = 2;
-
-  // Center 4-pointed sparkle
-  const s = 8;
-  ctx.beginPath();
-  ctx.moveTo(cx, cy - s);
-  ctx.quadraticCurveTo(cx, cy, cx + s, cy);
-  ctx.quadraticCurveTo(cx, cy, cx, cy + s);
-  ctx.quadraticCurveTo(cx, cy, cx - s, cy);
-  ctx.quadraticCurveTo(cx, cy, cx, cy - s);
-  ctx.closePath();
-  ctx.fill();
-
-  // Center tiny core dot
-  ctx.fillStyle = '#ca8a04';
-  ctx.beginPath();
-  ctx.arc(cx, cy, 2, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Left line and dot
-  ctx.strokeStyle = '#16a34a';
-  ctx.beginPath();
-  ctx.moveTo(cx - 16, cy);
-  ctx.lineTo(cx - 65, cy);
-  ctx.stroke();
-
-  ctx.fillStyle = '#16a34a';
-  ctx.beginPath();
-  ctx.arc(cx - 69, cy, 3, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Right line and dot
-  ctx.beginPath();
-  ctx.moveTo(cx + 16, cy);
-  ctx.lineTo(cx + 65, cy);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.arc(cx + 69, cy, 3, 0, Math.PI * 2);
-  ctx.fill();
   ctx.restore();
 }
 
@@ -435,9 +87,9 @@ export async function generateFrontCardCanvas(record: FarmerRecord): Promise<HTM
 
   // 1. Photo Frame (Left side matching template)
   const px = 36;
-  const py = 125;
-  const pw = 190;
-  const ph = 240;
+  const py = 152;
+  const pw = 191;
+  const ph = 241;
   const photoRadius = 16;
 
   ctx.save();
@@ -448,17 +100,31 @@ export async function generateFrontCardCanvas(record: FarmerRecord): Promise<HTM
       roundRect(ctx, px, py, pw, ph, photoRadius);
       ctx.clip();
 
-      // Aspect cover fit
+      // Detect content bounds to trim any white paper margin on all 4 sides (top, bottom, left, right)
+      const bounds = detectContentBounds(img);
       const targetAspect = pw / ph;
-      const imgAspect = img.width / img.height;
-      let sx = 0, sy = 0, sw = img.width, sh = img.height;
-      if (imgAspect > targetAspect) {
-        sw = img.height * targetAspect;
-        sx = (img.width - sw) / 2;
+      const contentAspect = bounds.w / bounds.h;
+
+      let sx = bounds.x;
+      let sy = bounds.y;
+      let sw = bounds.w;
+      let sh = bounds.h;
+
+      if (contentAspect >= targetAspect) {
+        // Content is wider than frame -> fit height, crop excess width centered
+        sw = Math.round(bounds.h * targetAspect);
+        sx = bounds.x + Math.round((bounds.w - sw) / 2);
+        sy = bounds.y;
+        sh = bounds.h;
       } else {
-        sh = img.width / targetAspect;
-        sy = (img.height - sh) / 2;
+        // Content is narrower/taller than frame -> fit width, crop excess height anchored to bottom
+        sw = bounds.w;
+        sh = Math.round(bounds.w / targetAspect);
+        sx = bounds.x;
+        // Anchor to bottom so the shirt cleanly touches the bottom of the photo frame with ZERO white gap
+        sy = bounds.y + Math.max(0, bounds.h - sh);
       }
+
       ctx.drawImage(img, sx, sy, sw, sh, px, py, pw, ph);
     } catch {
       drawPhotoPlaceholder(ctx, px, py, pw, ph, photoRadius);
@@ -490,7 +156,7 @@ export async function generateFrontCardCanvas(record: FarmerRecord): Promise<HTM
     { label: 'फार्मर नंबर', value: record.farmer_id || '--' },
   ];
 
-  let cy = 139;
+  let cy = 166;
   const rowGap = 37;
   const labelColX = 236;
   const colonColX = 490;
@@ -568,10 +234,10 @@ export async function generateFrontCardCanvas(record: FarmerRecord): Promise<HTM
   });
 
   // 4. Scannable QR Code (Right Side Box in Vertical Center of Card)
-  const qw = 175;
-  const qh = 175;
+  const qw = 205;
+  const qh = 205;
   const qx = 835;
-  const qy = 230; // Positioned 30px higher for better vertical balance and spacing
+  const qy = 190; // Positioned with fields for better vertical balance and spacing
   const qRadius = 12;
 
   // Outer QR container box
@@ -586,7 +252,8 @@ export async function generateFrontCardCanvas(record: FarmerRecord): Promise<HTM
 
   // Generate & Draw QR code
   try {
-    const qrPayload = [
+    // Generate URL that navigates to the verification page with farmer data in param
+    const qrPayload = buildVerificationUrl(record) || [
       `Name: ${record.farmer_name || '--'}`,
       `Farmer ID: ${record.farmer_id || '--'}`,
       `PM Kisan: ${record.enrollment_no || '--'}`,
@@ -648,6 +315,124 @@ function drawFittedText(
 }
 
 /**
+ * Wraps and fits a bank name into multiple lines if long:
+ * - If bank name is short and fits within maxWidth on one line, returns single line
+ * - If bank name is long, wraps words and shifts text onto next line (2 balanced lines,
+ *   or max 3 lines if exceptionally long)
+ * - Automatically finds natural break points (e.g. after comma/hyphen or before Branch/शाखा)
+ */
+function wrapBankNameToLines(
+  ctx: CanvasRenderingContext2D,
+  rawText: string,
+  maxWidth: number,
+  baseFontSize: number,
+  fontFamily: string = '"Noto Sans Devanagari", Inter, sans-serif'
+): { lines: string[]; fontSize: number; lineH: number } {
+  const text = (rawText || '--').trim();
+  if (!text || text === '--') {
+    return { lines: ['--'], fontSize: baseFontSize, lineH: baseFontSize + 6 };
+  }
+
+  // 1. If explicit newlines are present, honor them
+  if (text.includes('\n')) {
+    const rawLines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (rawLines.length > 0) {
+      let currentSize = baseFontSize;
+      ctx.font = `700 ${currentSize}px ${fontFamily}`;
+      while (currentSize > 15 && rawLines.some(l => ctx.measureText(l).width > maxWidth)) {
+        currentSize -= 1;
+        ctx.font = `700 ${currentSize}px ${fontFamily}`;
+      }
+      return {
+        lines: rawLines,
+        fontSize: currentSize,
+        lineH: currentSize + (currentSize <= 20 ? 5 : 6),
+      };
+    }
+  }
+
+  // 2. Check if the entire text fits on a single line at the base font size
+  ctx.font = `700 ${baseFontSize}px ${fontFamily}`;
+  if (ctx.measureText(text).width <= maxWidth) {
+    return { lines: [text], fontSize: baseFontSize, lineH: baseFontSize + 6 };
+  }
+
+  // 3. Text is long! Wrap and shift overflowing words to next line
+  // Ensure space after punctuation like commas, semicolons, or slashes if not already spaced
+  const normalizedText = text.replace(/([,;/])(?=[^\s])/g, '$1 ');
+  const words = normalizedText.split(/\s+/).filter(Boolean);
+
+  if (words.length <= 1) {
+    // Single unbroken word that exceeds maxWidth: scale font down
+    let currentSize = baseFontSize;
+    ctx.font = `700 ${currentSize}px ${fontFamily}`;
+    while (currentSize > 14 && ctx.measureText(text).width > maxWidth) {
+      currentSize -= 1;
+      ctx.font = `700 ${currentSize}px ${fontFamily}`;
+    }
+    return { lines: [text], fontSize: currentSize, lineH: currentSize + 6 };
+  }
+
+  // 4. Try 2-line balanced wrap (ideal for card layout)
+  // Search from baseFontSize down to 18px for the best 2-line split
+  for (let s = baseFontSize; s >= 18; s--) {
+    ctx.font = `700 ${s}px ${fontFamily}`;
+
+    let bestSplit = -1;
+    let minScore = Infinity;
+
+    for (let k = 1; k < words.length; k++) {
+      const l1 = words.slice(0, k).join(' ');
+      const l2 = words.slice(k).join(' ');
+      const w1 = ctx.measureText(l1).width;
+      const w2 = ctx.measureText(l2).width;
+
+      if (w1 <= maxWidth && w2 <= maxWidth) {
+        // Natural break bonus if l1 ends with a comma/dash or l2 starts with branch/शाखा
+        const endsWithPunctuation = /[,;:\-–]$/.test(l1);
+        const isBranchWord = /^(?:Branch|शाखा|Br\.|Br\b|Ta\.|Dist\.)/i.test(words[k]);
+        const bonus = (endsWithPunctuation ? 60 : 0) + (isBranchWord ? 80 : 0);
+
+        const diff = Math.abs(w1 - w2);
+        const score = diff - bonus;
+
+        if (score < minScore) {
+          minScore = score;
+          bestSplit = k;
+        }
+      }
+    }
+
+    if (bestSplit !== -1) {
+      const line1 = words.slice(0, bestSplit).join(' ');
+      const line2 = words.slice(bestSplit).join(' ');
+      return {
+        lines: [line1, line2],
+        fontSize: s,
+        lineH: s + (s <= 20 ? 5 : 6),
+      };
+    }
+  }
+
+  // 5. If it cannot fit in 2 lines even at 18px, wrap into 3 lines
+  let currentSize = Math.min(baseFontSize, 20);
+  ctx.font = `700 ${currentSize}px ${fontFamily}`;
+  let wrappedLines = wrapTextToLines(ctx, normalizedText, maxWidth);
+
+  while (currentSize > 15 && wrappedLines.length > 3) {
+    currentSize -= 1;
+    ctx.font = `700 ${currentSize}px ${fontFamily}`;
+    wrappedLines = wrapTextToLines(ctx, normalizedText, maxWidth);
+  }
+
+  return {
+    lines: wrappedLines,
+    fontSize: currentSize,
+    lineH: currentSize + 5,
+  };
+}
+
+/**
  * Generates BACK SIDE ID Card Canvas.
  * Matches the layout from the attached PDF:
  * - Top Header: MyAgriCard, माझे  किसान कार्ड, leaves with dew drops
@@ -701,7 +486,7 @@ export async function generateBackCardCanvas(record: FarmerRecord): Promise<HTML
   ctx.textAlign = 'center';
 
   // Dynamic layout metrics that keep the table UI completely unified and in sync
-  const s1Y = numRows <= 1 ? 154 : numRows <= 2 ? 150 : numRows <= 3 ? 146 : 142;
+  const s1Y = numRows <= 1 ? 182 : numRows <= 2 ? 178 : numRows <= 3 ? 174 : 170;
   const headerPillH = numRows <= 2 ? 34 : 30;
   const headerFontSize = numRows <= 2 ? 23 : 21;
   const rowHeight = numRows <= 1 ? 42 : numRows === 2 ? 38 : numRows === 3 ? 32 : numRows === 4 ? 28 : 26;
@@ -736,14 +521,8 @@ export async function generateBackCardCanvas(record: FarmerRecord): Promise<HTML
   landRows.forEach((row, i) => {
     const rY = startRowY + (i * rowHeight);
 
-    // Subtle alternating striping for multi-rows
-    if (numRows > 1 && i % 2 === 1) {
-      ctx.fillStyle = 'rgba(240, 253, 244, 0.55)';
-      roundRect(ctx, 60, rY - valFontSize + 2, CARD_WIDTH - 120, rowHeight, 4);
-      ctx.fill();
-    }
-
-    ctx.fillStyle = '#047857';
+    // Dark green table body text on transparent background
+    ctx.fillStyle = '#0c2d19ff';
     drawFittedText(ctx, row.survey_no || '--', col1X, rY, 210, valFontSize);
     drawFittedText(ctx, row.village || '--', col2X, rY, 230, valFontSize);
     drawFittedText(ctx, row.owner_type || '--', col3X, rY, 230, valFontSize);
@@ -751,7 +530,7 @@ export async function generateBackCardCanvas(record: FarmerRecord): Promise<HTML
   });
 
   const tableBottomY = startRowY + ((numRows - 1) * rowHeight) + (numRows <= 1 ? 16 : 10);
-  const separatorY = Math.max(292, tableBottomY + 12);
+  const separatorY = Math.max(320, tableBottomY + 12);
   const s2Y = separatorY + 34;
 
   // Subtle separator line
@@ -794,16 +573,29 @@ export async function generateBackCardCanvas(record: FarmerRecord): Promise<HTML
   ctx.lineTo(CARD_WIDTH - 70, bankDividerY);
   ctx.stroke();
 
-  // Bank Values row
+  // Bank Values row (Dark green table body text)
   const bankValY = bankDividerY + (numRows <= 2 ? 28 : 25);
-  ctx.fillStyle = '#047857';
+  ctx.fillStyle = '#0c2d19ff';
 
   const bankNameVal = record.bank_detail?.bank_name_branch || '--';
   const accountVal = record.bank_detail?.account_no || '--';
   const ifscVal = record.bank_detail?.ifsc_code || '--';
 
-  drawFittedText(ctx, bankNameVal, bankCol1X, bankValY, 340, bankValFontSize);
-  drawFittedText(ctx, accountVal, bankCol2X, bankValY, 280, bankValFontSize);
+  // Bank name wrapping: if bank name is long, wrap and shift text onto next line
+  const wrappedBank = wrapBankNameToLines(ctx, bankNameVal, 330, bankValFontSize);
+  wrappedBank.lines.forEach((line, idx) => {
+    drawFittedText(
+      ctx,
+      line,
+      bankCol1X,
+      bankValY + idx * wrappedBank.lineH,
+      330,
+      wrappedBank.fontSize,
+      '"Noto Sans Devanagari", Inter, sans-serif'
+    );
+  });
+
+  drawFittedText(ctx, accountVal, bankCol2X, bankValY, 260, bankValFontSize);
   drawFittedText(ctx, ifscVal, bankCol3X, bankValY, 220, bankValFontSize);
   ctx.restore();
 
@@ -853,121 +645,6 @@ export async function generateBothCardsCanvas(record: FarmerRecord): Promise<HTM
   ctx.drawImage(backCanvas, padding + frontCanvas.width + gap, padding);
 
   return canvas;
-}
-
-/**
- * Applies a visible, tamper-resistant watermark to a card canvas for preview display.
- * Creates a new canvas clone so the original remains completely pristine for official downloads.
- */
-export function addWatermarkToCanvas(sourceCanvas: HTMLCanvasElement): HTMLCanvasElement {
-  const w = sourceCanvas.width;
-  const h = sourceCanvas.height;
-
-  const watermarkedCanvas = document.createElement('canvas');
-  watermarkedCanvas.width = w;
-  watermarkedCanvas.height = h;
-
-  const ctx = watermarkedCanvas.getContext('2d');
-  if (!ctx) return sourceCanvas;
-
-  // 1. Draw original card contents
-  ctx.drawImage(sourceCanvas, 0, 0);
-
-  // 2. Draw repeating diagonal watermark ribbons
-  ctx.save();
-  ctx.translate(w / 2, h / 2);
-  ctx.rotate((-28 * Math.PI) / 180);
-  ctx.translate(-w / 2, -h / 2);
-
-  const isBoth = w > 1500;
-  const fontSize = isBoth ? 36 : 30;
-  ctx.font = `800 ${fontSize}px "Noto Sans Devanagari", Inter, -apple-system, sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  const line1 = 'PREVIEW ONLY  •  नमुना प्रत  •  DO NOT COPY  •  PREVIEW ONLY';
-  const line2 = 'USE DOWNLOAD BUTTON  •  माझे किसान कार्ड  •  SAMPLE ONLY';
-
-  const stepY = isBoth ? 130 : 105;
-  const stepX = isBoth ? 700 : 560;
-  const startY = -h * 1.5;
-  const endY = h * 2.5;
-  const startX = -w * 1.5;
-  const endX = w * 2.5;
-
-  let lineIdx = 0;
-  for (let y = startY; y < endY; y += stepY) {
-    lineIdx++;
-    const text = lineIdx % 2 === 0 ? line2 : line1;
-    const isLine2 = lineIdx % 2 === 0;
-
-    for (let x = startX; x < endX; x += stepX) {
-      const offsetX = (Math.floor(y / stepY) % 2 === 0) ? 0 : stepX / 2;
-
-      // Soft white outline for readability over dark background sections
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-      ctx.fillText(text, x + offsetX + 1, y + 1);
-
-      // Main watermark fill (semi-transparent slate/crimson tint)
-      ctx.fillStyle = isLine2
-        ? 'rgba(185, 28, 28, 0.22)'
-        : 'rgba(30, 41, 59, 0.20)';
-      ctx.fillText(text, x + offsetX, y);
-    }
-  }
-  ctx.restore();
-
-  // 3. Draw Security Stamp / Badge
-  const drawStamp = (cx: number, cy: number, badgeW: number, badgeH: number) => {
-    ctx.save();
-    // Translucent dark slate badge
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.70)';
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.lineWidth = 3;
-    ctx.setLineDash([10, 6]);
-
-    const rx = cx - badgeW / 2;
-    const ry = cy - badgeH / 2;
-    const radius = 16;
-
-    ctx.beginPath();
-    if (typeof ctx.roundRect === 'function') {
-      ctx.roundRect(rx, ry, badgeW, badgeH, radius);
-    } else {
-      ctx.rect(rx, ry, badgeW, badgeH);
-    }
-    ctx.fill();
-    ctx.stroke();
-
-    // Text shadow for high contrast
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-    ctx.shadowBlur = 8;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 2;
-
-    // Line 1: Header
-    ctx.font = '800 28px "Noto Sans Devanagari", Inter, -apple-system, sans-serif';
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('🔒 PREVIEW ONLY • नमुना प्रत', cx, cy - 22);
-
-    // Line 2: Action prompt
-    ctx.font = '700 17px Inter, -apple-system, sans-serif';
-    ctx.fillStyle = '#fde047';
-    ctx.fillText('USE DOWNLOAD BUTTONS BELOW', cx, cy + 22);
-
-    ctx.restore();
-  };
-
-  if (isBoth) {
-    drawStamp(545, h / 2, 540, 115);
-    drawStamp(1625, h / 2, 540, 115);
-  } else {
-    drawStamp(w / 2, h / 2, 540, 115);
-  }
-
-  return watermarkedCanvas;
 }
 
 /**
@@ -1108,21 +785,170 @@ export async function downloadCardPrintSheetPdf(record: FarmerRecord, filename?:
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
+    // Only set crossOrigin for remote http(s) URLs (e.g. remote photos)
+    // to avoid CORS issues on local assets or data URLs
+    if (src.startsWith('http://') || src.startsWith('https://')) {
+      img.crossOrigin = 'anonymous';
+    }
     img.onload = () => resolve(img);
     img.onerror = e => reject(e);
     img.src = src;
   });
 }
 
-function loadSvgImage(svg: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = e => reject(e);
-    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg.trim());
-  });
+interface ContentBounds {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Accurately detects the active photo content boundaries by trimming any blank,
+ * transparent, or white scanned paper margins on all 4 sides (top, bottom, left, right),
+ * and cleanly isolates the subject from any detached dark table lines or signatures below a blank gap.
+ */
+function detectContentBounds(img: HTMLImageElement): ContentBounds {
+  const naturalW = img.naturalWidth || img.width || 100;
+  const naturalH = img.naturalHeight || img.height || 100;
+
+  try {
+    const sw = 160;
+    const sh = Math.max(1, Math.round((naturalH / naturalW) * sw));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = sw;
+    canvas.height = sh;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return { x: 0, y: 0, w: naturalW, h: naturalH };
+
+    ctx.drawImage(img, 0, 0, sw, sh);
+    const imgData = ctx.getImageData(0, 0, sw, sh);
+    const data = imgData.data;
+
+    // Helper: is a pixel blank/white/transparent paper background?
+    const isBlank = (x: number, y: number) => {
+      const idx = (y * sw + x) * 4;
+      const a = data[idx + 3];
+      if (a < 35) return true;
+      const r = data[idx];
+      const g = data[idx + 1];
+      const b = data[idx + 2];
+      const gray = (r * 299 + g * 587 + b * 114) / 1000;
+      return gray >= 235;
+    };
+
+    const centerX = Math.floor(sw / 2);
+    const sampleW = Math.max(8, Math.floor(sw * 0.15));
+    const cx1 = Math.max(0, centerX - sampleW);
+    const cx2 = Math.min(sw - 1, centerX + sampleW);
+    const cSpan = cx2 - cx1 + 1;
+
+    // 1. Locate subject top along central axis
+    let topRow = 0;
+    for (let y = 0; y < Math.floor(sh * 0.40); y++) {
+      let count = 0;
+      for (let x = cx1; x <= cx2; x++) {
+        if (!isBlank(x, y)) count++;
+      }
+      if (count >= Math.max(2, Math.floor(cSpan * 0.10))) {
+        topRow = y;
+        break;
+      }
+    }
+
+    // 2. Locate subject bottom along central axis
+    // If a blank gap (>= 4 rows) appears below the shirt, stop immediately
+    // so any detached table borders or dark lines below the gap are cleanly excluded!
+    let bottomRow = sh - 1;
+    let lastContentY = topRow + 30;
+    let blankRowStreak = 0;
+    for (let y = topRow + 30; y < sh; y++) {
+      let count = 0;
+      for (let x = cx1; x <= cx2; x++) {
+        if (!isBlank(x, y)) count++;
+      }
+      if (count < Math.max(2, Math.floor(cSpan * 0.05))) {
+        blankRowStreak++;
+        if (blankRowStreak >= 4 && lastContentY > topRow + 35) {
+          bottomRow = lastContentY;
+          break;
+        }
+      } else {
+        blankRowStreak = 0;
+        lastContentY = y;
+      }
+    }
+    if (blankRowStreak < 4) {
+      bottomRow = lastContentY;
+    }
+
+    // 3. Scan outwards horizontally from centerX strictly within [yStart..yEnd]
+    const yStart = Math.min(bottomRow, topRow + 10);
+    const yEnd = Math.max(topRow, bottomRow - 10);
+    const vSpan = Math.max(1, yEnd - yStart + 1);
+
+    // Left edge: scan leftwards from centerX
+    let leftCol = 0;
+    let blankColStreak = 0;
+    let lastGoodX = centerX;
+    for (let x = centerX; x >= 0; x--) {
+      let count = 0;
+      for (let y = yStart; y <= yEnd; y++) {
+        if (!isBlank(x, y)) count++;
+      }
+      if (count < Math.max(2, Math.floor(vSpan * 0.10))) {
+        blankColStreak++;
+        if (blankColStreak >= 3) {
+          leftCol = lastGoodX;
+          break;
+        }
+      } else {
+        blankColStreak = 0;
+        lastGoodX = x;
+      }
+    }
+    if (blankColStreak < 3) leftCol = lastGoodX;
+
+    // Right edge: scan rightwards from centerX
+    let rightCol = sw - 1;
+    blankColStreak = 0;
+    lastGoodX = centerX;
+    for (let x = centerX; x < sw; x++) {
+      let count = 0;
+      for (let y = yStart; y <= yEnd; y++) {
+        if (!isBlank(x, y)) count++;
+      }
+      if (count < Math.max(2, Math.floor(vSpan * 0.10))) {
+        blankColStreak++;
+        if (blankColStreak >= 3) {
+          rightCol = lastGoodX;
+          break;
+        }
+      } else {
+        blankColStreak = 0;
+        lastGoodX = x;
+      }
+    }
+    if (blankColStreak < 3) rightCol = lastGoodX;
+
+    const scaleX = naturalW / sw;
+    const scaleY = naturalH / sh;
+
+    const cropX = Math.max(0, Math.round(leftCol * scaleX));
+    const cropY = Math.max(0, Math.round(topRow * scaleY));
+    const cropW = Math.min(naturalW - cropX, Math.round((rightCol - leftCol + 1) * scaleX));
+    const cropH = Math.min(naturalH - cropY, Math.round((bottomRow - topRow + 1) * scaleY));
+
+    // Safety fallback: if detected box is unreasonably small, fallback to full image
+    if (cropW < naturalW * 0.4 || cropH < naturalH * 0.4) {
+      return { x: 0, y: 0, w: naturalW, h: naturalH };
+    }
+
+    return { x: cropX, y: cropY, w: cropW, h: cropH };
+  } catch {
+    return { x: 0, y: 0, w: naturalW, h: naturalH };
+  }
 }
 
 function drawPhotoPlaceholder(

@@ -84,7 +84,7 @@ export const PhotoCard: React.FC<PhotoCardProps> = ({
               <img
                 src={photoUrl}
                 alt="Farmer Portrait"
-                className="w-full h-full object-cover transition duration-200 group-hover:scale-[1.02]"
+                className="w-full h-full object-cover object-bottom transition duration-200 group-hover:scale-[1.02]"
               />
               {/* Hover overlay hint */}
               <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[1px] opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-xs font-semibold p-2 text-center">

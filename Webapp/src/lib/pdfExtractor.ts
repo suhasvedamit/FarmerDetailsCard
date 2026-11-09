@@ -325,8 +325,8 @@ export function extractPhotoDetailsFromCanvas(canvas: HTMLCanvasElement): Extrac
     return null;
   }
 
-  // Fine edge snapping: trim any residual white margins around the detected box
-  const pad = Math.max(4, Math.floor(w * 0.005));
+  // Fine edge snapping: trim residual margins and anchor subject with proper portrait framing
+  const pad = Math.max(6, Math.floor(w * 0.008));
   let cropX1 = Math.max(0, best.x - pad);
   let cropY1 = Math.max(0, best.y - pad);
   let cropX2 = Math.min(w, best.x + best.w + pad);
@@ -343,66 +343,148 @@ export function extractPhotoDetailsFromCanvas(canvas: HTMLCanvasElement): Extrac
     return (fullData[i] * 299 + fullData[i + 1] * 587 + fullData[i + 2] * 114) / 1000;
   };
 
-  // Trim top white rows
-  let trimTop = 0;
-  while (trimTop < fh - 30) {
-    let sum = 0;
-    for (let x = 0; x < fw; x++) {
-      sum += getFullGray(x, trimTop);
+  // Sample background brightness in the margin
+  let bgSum = 0;
+  let bgSamples = 0;
+  for (let x = 0; x < Math.min(10, fw); x++) {
+    for (let y = 0; y < Math.min(10, fh); y++) {
+      bgSum += getFullGray(x, y);
+      bgSamples++;
     }
-    if (sum / fw > 244) {
-      trimTop++;
-    } else {
+  }
+  const paperBrightness = bgSamples > 0 ? bgSum / bgSamples : 245;
+  const contentThreshold = Math.max(140, Math.min(230, paperBrightness - 25));
+
+  // 1. Locate photo top & bottom along the central vertical axis of the subject
+  const centerX = Math.floor(fw / 2);
+  const sampleW = Math.max(10, Math.floor(fw * 0.15));
+  const cx1 = Math.max(0, centerX - sampleW);
+  const cx2 = Math.min(fw - 1, centerX + sampleW);
+  const cSpan = cx2 - cx1 + 1;
+
+  // Find top edge of subject head/hair in center
+  let photoTop = 0;
+  for (let y = 0; y < Math.floor(fh * 0.40); y++) {
+    let count = 0;
+    for (let x = cx1; x <= cx2; x++) {
+      if (getFullGray(x, y) < contentThreshold) count++;
+    }
+    if (count >= Math.max(3, Math.floor(cSpan * 0.10))) {
+      photoTop = y;
       break;
     }
   }
 
-  // Trim bottom white rows
-  let trimBottom = fh;
-  while (trimBottom > trimTop + 30) {
-    let sum = 0;
-    for (let x = 0; x < fw; x++) {
-      sum += getFullGray(x, trimBottom - 1);
+  // Find bottom edge of subject shirt along center axis
+  // Stops cleanly as soon as the shirt ends and a blank paper gap appears,
+  // preventing any detached table borders or dark lines below the photo from ever being included!
+  let photoBottom = fh - 1;
+  let lastContentY = photoTop + 35;
+  let blankRowStreak = 0;
+  for (let y = photoTop + 35; y < fh; y++) {
+    let count = 0;
+    for (let x = cx1; x <= cx2; x++) {
+      if (getFullGray(x, y) < contentThreshold) count++;
     }
-    if (sum / fw > 244) {
-      trimBottom--;
+    if (count < Math.max(2, Math.floor(cSpan * 0.05))) {
+      blankRowStreak++;
+      if (blankRowStreak >= 4 && lastContentY > photoTop + 50) {
+        photoBottom = lastContentY;
+        break;
+      }
     } else {
-      break;
+      blankRowStreak = 0;
+      lastContentY = y;
     }
   }
-
-  // Trim left white columns
-  let trimLeft = 0;
-  while (trimLeft < fw - 30) {
-    let sum = 0;
-    for (let y = trimTop; y < trimBottom; y++) {
-      sum += getFullGray(trimLeft, y);
-    }
-    if (sum / (trimBottom - trimTop) > 244) {
-      trimLeft++;
-    } else {
-      break;
-    }
+  if (blankRowStreak < 4) {
+    photoBottom = lastContentY;
   }
 
-  // Trim right white columns
-  let trimRight = fw;
-  while (trimRight > trimLeft + 30) {
-    let sum = 0;
-    for (let y = trimTop; y < trimBottom; y++) {
-      sum += getFullGray(trimRight - 1, y);
+  // 2. Locate photo left & right boundaries by scanning outward from centerX
+  // strictly within the vertical span of the portrait (above the bottom gap and table line)
+  const yStart = Math.min(photoBottom, photoTop + 15);
+  const yEnd = Math.max(photoTop, photoBottom - 15);
+  const vSpan = Math.max(1, yEnd - yStart + 1);
+
+  let photoLeft = 0;
+  let blankColStreak = 0;
+  let lastGoodX = centerX;
+  for (let x = centerX; x >= 0; x--) {
+    let count = 0;
+    for (let y = yStart; y <= yEnd; y++) {
+      if (getFullGray(x, y) < contentThreshold) count++;
     }
-    if (sum / (trimBottom - trimTop) > 244) {
-      trimRight--;
+    if (count < Math.max(3, Math.floor(vSpan * 0.12))) {
+      blankColStreak++;
+      if (blankColStreak >= 3) {
+        photoLeft = lastGoodX;
+        break;
+      }
     } else {
-      break;
+      blankColStreak = 0;
+      lastGoodX = x;
     }
   }
+  if (blankColStreak < 3) photoLeft = lastGoodX;
 
-  const finalX = cropX1 + trimLeft;
-  const finalY = cropY1 + trimTop;
-  const finalW = trimRight - trimLeft;
-  const finalH = trimBottom - trimTop;
+  let photoRight = fw - 1;
+  blankColStreak = 0;
+  lastGoodX = centerX;
+  for (let x = centerX; x < fw; x++) {
+    let count = 0;
+    for (let y = yStart; y <= yEnd; y++) {
+      if (getFullGray(x, y) < contentThreshold) count++;
+    }
+    if (count < Math.max(3, Math.floor(vSpan * 0.12))) {
+      blankColStreak++;
+      if (blankColStreak >= 3) {
+        photoRight = lastGoodX;
+        break;
+      }
+    } else {
+      blankColStreak = 0;
+      lastGoodX = x;
+    }
+  }
+  if (blankColStreak < 3) photoRight = lastGoodX;
+
+  // 3. Portrait Framing (matching ID Card aspect ratio 191 / 241)
+  const TARGET_ASPECT = 191 / 241;
+  const photoW = Math.max(30, photoRight - photoLeft + 1);
+  const photoH = Math.max(30, photoBottom - photoTop + 1);
+  const currentAspect = photoW / photoH;
+
+  let cropW = photoW;
+  let cropH = photoH;
+  let cropLocalX = photoLeft;
+  let cropLocalY = photoTop;
+
+  if (currentAspect >= TARGET_ASPECT) {
+    // Photo is wider than ID card slot (e.g. square 1:1 or 4:3)
+    // Use full height, crop excess width centered:
+    cropH = photoH;
+    cropW = Math.max(30, Math.round(cropH * TARGET_ASPECT));
+    cropLocalX = photoLeft + Math.round((photoW - cropW) / 2);
+    cropLocalY = photoTop;
+  } else {
+    // Photo is taller than ID card slot
+    // Use full width, crop excess height anchored to bottom (shoulders):
+    cropW = photoW;
+    cropH = Math.max(30, Math.round(cropW / TARGET_ASPECT));
+    cropLocalX = photoLeft;
+    // Anchor to bottom so the shirt cleanly touches the bottom edge with ZERO white gap
+    cropLocalY = photoBottom + 1 - cropH;
+  }
+
+  // Strictly clamp inside detected photo content bounds to guarantee 0% paper margin
+  cropLocalX = Math.max(photoLeft, Math.min(photoRight - cropW + 1, cropLocalX));
+  cropLocalY = Math.max(photoTop, Math.min(photoBottom - cropH + 1, cropLocalY));
+
+  const finalX = cropX1 + cropLocalX;
+  const finalY = cropY1 + cropLocalY;
+  const finalW = Math.min(w - finalX, cropW);
+  const finalH = Math.min(h - finalY, cropH);
 
   if (finalW < 30 || finalH < 30) return null;
 
