@@ -234,10 +234,10 @@ export async function generateFrontCardCanvas(record: FarmerRecord): Promise<HTM
   });
 
   // 4. Scannable QR Code (Right Side Box in Vertical Center of Card)
-  const qw = 205;
-  const qh = 205;
-  const qx = 835;
-  const qy = 190; // Positioned with fields for better vertical balance and spacing
+  const qw = 235;
+  const qh = 235;
+  const qx = 805;
+  const qy = 180; // Positioned with fields for better vertical balance and spacing
   const qRadius = 12;
 
   // Outer QR container box
