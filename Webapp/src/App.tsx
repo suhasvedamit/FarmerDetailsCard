@@ -8,6 +8,12 @@ import { CardModal } from './components/CardModal';
 import { DisclaimerModal } from './components/DisclaimerModal';
 import { PhotoEditorModal } from './components/PhotoEditorModal';
 import { FarmerVerificationPage } from './components/FarmerVerificationPage';
+import { Footer } from './components/Footer';
+import { TermsPage } from './components/pages/TermsPage';
+import { PrivacyPage } from './components/pages/PrivacyPage';
+import { ContactPage } from './components/pages/ContactPage';
+import { DisclaimerPage } from './components/pages/DisclaimerPage';
+import { AppPage, getPageFromUrl, navigateToPage } from './lib/navigation';
 import { FarmerRecord } from './types';
 import { extractFarmerDataFromPdf } from './lib/pdfExtractor';
 import { generateFrontCardCanvas, generateBackCardCanvas } from './lib/cardGenerator';
@@ -17,18 +23,24 @@ import {
   extractVerificationDataFromUrl,
   FarmerVerificationData,
 } from './lib/verificationUrl';
+import { DEMO_FARMER_RECORD } from './lib/sampleData';
 import { CreditCard } from 'lucide-react';
 
 export const App: React.FC = () => {
+  // Navigation & Page routing state
+  const [currentPage, setCurrentPage] = useState<AppPage>(() => getPageFromUrl());
+
   // Check if page opened via QR code scan (or verification URL parameter)
-  const [isVerifying, setIsVerifying] = useState<boolean>(() => isVerificationMode());
+  const [isVerifying, setIsVerifying] = useState<boolean>(() => isVerificationMode() || getPageFromUrl() === 'verify');
   const [verificationData, setVerificationData] = useState<FarmerVerificationData | null>(() =>
-    isVerificationMode() ? extractVerificationDataFromUrl() : null
+    (isVerificationMode() || getPageFromUrl() === 'verify') ? extractVerificationDataFromUrl() : null
   );
 
   useEffect(() => {
     const handleLocationChange = () => {
-      const verifying = isVerificationMode();
+      const page = getPageFromUrl();
+      setCurrentPage(page);
+      const verifying = isVerificationMode() || page === 'verify';
       setIsVerifying(verifying);
       if (verifying) {
         setVerificationData(extractVerificationDataFromUrl());
@@ -39,11 +51,19 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('popstate', handleLocationChange);
   }, []);
 
+  const handleNavigate = (page: AppPage) => {
+    navigateToPage(page, false);
+    setCurrentPage(page);
+    if (page === 'verify') {
+      setIsVerifying(true);
+      setVerificationData(extractVerificationDataFromUrl());
+    } else {
+      setIsVerifying(false);
+    }
+  };
+
   const handleNavigateHome = () => {
-    const cleanUrl = window.location.origin + window.location.pathname;
-    window.history.pushState({}, '', cleanUrl);
-    setIsVerifying(false);
-    setVerificationData(null);
+    handleNavigate('home');
   };
 
   // Disclaimer state: resets on every page load/refresh
@@ -78,9 +98,10 @@ export const App: React.FC = () => {
         setProgressPct(pct);
       });
 
-      const newSessionId = typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      const newSessionId =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
       setSessionId(newSessionId);
       setOriginalExtractedData(extracted);
@@ -88,7 +109,7 @@ export const App: React.FC = () => {
 
       // Non-blocking background sync (never interrupts user experience if offline/blocked)
       try {
-        saveExtractedRecord(extracted, newSessionId, file.name).catch(() => { });
+        saveExtractedRecord(extracted, newSessionId, file.name).catch(() => {});
       } catch (logErr) {
         console.warn('[Supabase] Non-fatal background sync error:', logErr);
       }
@@ -98,6 +119,18 @@ export const App: React.FC = () => {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  // Instant Demo Data Loader (triggered only from Header)
+  const handleLoadDemo = () => {
+    const newSessionId =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `demo_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+    setSessionId(newSessionId);
+    setOriginalExtractedData(DEMO_FARMER_RECORD);
+    setData({ ...DEMO_FARMER_RECORD });
   };
 
   // Generate ID Card (Front & Back)
@@ -115,7 +148,7 @@ export const App: React.FC = () => {
       // Non-blocking background sync (never interrupts user experience if offline/blocked)
       if (sessionId) {
         try {
-          saveGeneratedRecord(data, sessionId, originalExtractedData).catch(() => { });
+          saveGeneratedRecord(data, sessionId, originalExtractedData).catch(() => {});
         } catch (logErr) {
           console.warn('[Supabase] Non-fatal background sync error:', logErr);
         }
@@ -126,12 +159,27 @@ export const App: React.FC = () => {
     }
   };
 
+  // Dedicated Informational & Policy Pages
+  if (currentPage === 'terms') {
+    return <TermsPage onNavigate={handleNavigate} />;
+  }
+  if (currentPage === 'privacy') {
+    return <PrivacyPage onNavigate={handleNavigate} />;
+  }
+  if (currentPage === 'contact') {
+    return <ContactPage onNavigate={handleNavigate} />;
+  }
+  if (currentPage === 'disclaimer') {
+    return <DisclaimerPage onNavigate={handleNavigate} />;
+  }
+
   // If opened via QR code scan (or verification URL), show the verification page directly
-  if (isVerifying) {
+  if (isVerifying || currentPage === 'verify') {
     return (
       <FarmerVerificationPage
         data={verificationData}
         onNavigateHome={handleNavigateHome}
+        onNavigate={handleNavigate}
       />
     );
   }
@@ -146,13 +194,14 @@ export const App: React.FC = () => {
 
       {/* Main page content is completely hidden until user accepts and proceeds */}
       <div
-        className={`min-h-screen flex flex-col bg-slate-50 text-slate-800 transition-opacity duration-300 ${!hasAcceptedDisclaimer
-          ? 'invisible pointer-events-none select-none max-h-screen overflow-hidden'
-          : 'opacity-100'
-          }`}
+        className={`min-h-screen flex flex-col bg-slate-50 text-slate-800 transition-opacity duration-300 ${
+          !hasAcceptedDisclaimer
+            ? 'invisible pointer-events-none select-none max-h-screen overflow-hidden'
+            : 'opacity-100'
+        }`}
         aria-hidden={!hasAcceptedDisclaimer}
       >
-        <Header />
+        <Header onLoadDemo={handleLoadDemo} />
 
         <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
           {/* Upload Zone */}
@@ -190,10 +239,10 @@ export const App: React.FC = () => {
                 />
 
                 {/* Action Buttons */}
-                <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-4">
+                <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-4 space-y-2">
                   <button
                     onClick={handleGenerateCard}
-                    className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg shadow transition flex items-center justify-center space-x-2"
+                    className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white text-xs font-bold rounded-lg shadow transition flex items-center justify-center space-x-2 cursor-pointer"
                   >
                     <CreditCard className="w-4 h-4" />
                     <span>Review Changes and Generate Card</span>
@@ -250,10 +299,8 @@ export const App: React.FC = () => {
           />
         )}
 
-        {/* Footer */}
-        <footer className="bg-slate-900 text-slate-400 py-4 text-xs text-center border-t border-slate-800">
-          <p>Farmer ID Details Summary Card</p>
-        </footer>
+        {/* Global Rich Footer */}
+        <Footer onNavigate={handleNavigate} />
       </div>
     </>
   );

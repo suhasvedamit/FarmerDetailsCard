@@ -19,16 +19,20 @@ import {
   Award
 } from 'lucide-react';
 import { FarmerVerificationData } from '../lib/verificationUrl';
+import { AppPage } from '../lib/navigation';
+import { Footer } from './Footer';
 import logoImg from '../assets/logo.png';
 
 interface FarmerVerificationPageProps {
   data: FarmerVerificationData | null;
   onNavigateHome: () => void;
+  onNavigate?: (page: AppPage) => void;
 }
 
 export const FarmerVerificationPage: React.FC<FarmerVerificationPageProps> = ({
   data,
   onNavigateHome,
+  onNavigate,
 }) => {
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -462,6 +466,8 @@ export const FarmerVerificationPage: React.FC<FarmerVerificationPageProps> = ({
           </div>
         </div>
       </main>
+
+      <Footer onNavigate={onNavigate} />
     </div>
   );
 };

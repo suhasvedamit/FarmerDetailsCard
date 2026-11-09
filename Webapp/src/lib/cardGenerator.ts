@@ -976,8 +976,8 @@ function drawPhotoPlaceholder(
 function formatGender(gender?: string): string {
   if (!gender) return '--';
   const g = gender.trim().toLowerCase();
-  if (g === 'male' || g === 'm' || g === 'पुरुष') return 'पुरुष / Male';
-  if (g === 'female' || g === 'f' || g === 'स्त्री') return 'स्त्री / Female';
+  if (g === 'male' || g === 'm' || g === 'पुरुष') return 'Male';
+  if (g === 'female' || g === 'f' || g === 'स्त्री') return 'Female';
   return gender;
 }
 

@@ -54,7 +54,7 @@ export const DropZone: React.FC<DropZoneProps> = ({ onFileSelected, isProcessing
         type="file"
         accept=".pdf,image/*"
         className="hidden"
-        onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
+        onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
         disabled={isProcessing}
       />
       <div className="flex flex-col items-center justify-center space-y-2">
@@ -70,7 +70,7 @@ export const DropZone: React.FC<DropZoneProps> = ({ onFileSelected, isProcessing
             href="./sample_farmer_record.pdf"
             target="_blank"
             rel="noopener noreferrer"
-            onClick={e => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
             className="text-emerald-700 font-semibold underline hover:text-emerald-800 inline-flex items-center gap-0.5"
           >
             <span>example PDF</span>
@@ -82,4 +82,3 @@ export const DropZone: React.FC<DropZoneProps> = ({ onFileSelected, isProcessing
     </div>
   );
 };
-
