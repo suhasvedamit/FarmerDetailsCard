@@ -16,7 +16,12 @@ import { DisclaimerPage } from './components/pages/DisclaimerPage';
 import { AppPage, getPageFromUrl, navigateToPage } from './lib/navigation';
 import { FarmerRecord } from './types';
 import { extractFarmerDataFromPdf } from './lib/pdfExtractor';
-import { generateFrontCardCanvas, generateBackCardCanvas } from './lib/cardGenerator';
+import {
+  generateFrontCardCanvas,
+  generateBackCardCanvas,
+  combineCardCanvases,
+} from './lib/cardGenerator';
+import { DEFAULT_CARD_TEMPLATE_ID } from './lib/cardTemplates';
 import { saveExtractedRecord, saveGeneratedRecord } from './lib/supabase';
 import {
   isVerificationMode,
@@ -78,7 +83,16 @@ export const App: React.FC = () => {
   const [cardModalOpen, setCardModalOpen] = useState(false);
   const [frontPreviewUrl, setFrontPreviewUrl] = useState('');
   const [backPreviewUrl, setBackPreviewUrl] = useState('');
+  const [bothPreviewUrl, setBothPreviewUrl] = useState('');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(DEFAULT_CARD_TEMPLATE_ID);
   const [isPhotoEditorOpen, setIsPhotoEditorOpen] = useState(false);
+
+  const handleTemplateChange = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    setFrontPreviewUrl('');
+    setBackPreviewUrl('');
+    setBothPreviewUrl('');
+  };
 
   // Upload custom PDF file
   const handleFileSelected = async (file: File) => {
@@ -138,11 +152,13 @@ export const App: React.FC = () => {
     if (!data) return;
     try {
       const [frontCanvas, backCanvas] = await Promise.all([
-        generateFrontCardCanvas(data),
-        generateBackCardCanvas(data),
+        generateFrontCardCanvas(data, selectedTemplateId),
+        generateBackCardCanvas(data, selectedTemplateId),
       ]);
+      const bothCanvas = combineCardCanvases(frontCanvas, backCanvas);
       setFrontPreviewUrl(frontCanvas.toDataURL('image/png'));
       setBackPreviewUrl(backCanvas.toDataURL('image/png'));
+      setBothPreviewUrl(bothCanvas.toDataURL('image/png'));
       setCardModalOpen(true);
 
       // Non-blocking background sync (never interrupts user experience if offline/blocked)
@@ -266,6 +282,9 @@ export const App: React.FC = () => {
             record={data}
             frontPreviewUrl={frontPreviewUrl}
             backPreviewUrl={backPreviewUrl}
+            bothPreviewUrl={bothPreviewUrl}
+            selectedTemplateId={selectedTemplateId}
+            onSelectTemplate={handleTemplateChange}
           />
         )}
 

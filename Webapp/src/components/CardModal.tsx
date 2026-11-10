@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { FarmerRecord } from '../types';
 import logoImg from '../assets/logo.png';
+import { BackgroundSelector } from './BackgroundSelector';
 import {
   downloadCardAsPng,
   downloadCardAsPdf,
@@ -16,6 +17,7 @@ import {
   generateFrontCardCanvas,
   generateBackCardCanvas,
   generateBothCardsCanvas,
+  combineCardCanvases,
 } from '../lib/cardGenerator';
 
 interface CardModalProps {
@@ -24,6 +26,9 @@ interface CardModalProps {
   record: FarmerRecord;
   frontPreviewUrl?: string;
   backPreviewUrl?: string;
+  bothPreviewUrl?: string;
+  selectedTemplateId: string;
+  onSelectTemplate: (templateId: string) => void;
 }
 
 export const CardModal: React.FC<CardModalProps> = ({
@@ -32,26 +37,46 @@ export const CardModal: React.FC<CardModalProps> = ({
   record,
   frontPreviewUrl: initialFrontUrl,
   backPreviewUrl: initialBackUrl,
+  bothPreviewUrl: initialBothUrl,
+  selectedTemplateId,
+  onSelectTemplate,
 }) => {
   const [activeSide, setActiveSide] = useState<'front' | 'back' | 'both'>('front');
   const [frontUrl, setFrontUrl] = useState<string>(initialFrontUrl || '');
   const [backUrl, setBackUrl] = useState<string>(initialBackUrl || '');
-  const [bothUrl, setBothUrl] = useState<string>('');
+  const [bothUrl, setBothUrl] = useState<string>(initialBothUrl || '');
   const [isLoadingPreviews, setIsLoadingPreviews] = useState<boolean>(false);
 
-  // Generate missing previews whenever modal opens or record changes
+  // Generate missing previews whenever modal opens, record changes, or selected background changes
   useEffect(() => {
     if (!isOpen) return;
+
+    if (initialFrontUrl && initialBackUrl && initialBothUrl) {
+      setFrontUrl(initialFrontUrl);
+      setBackUrl(initialBackUrl);
+      setBothUrl(initialBothUrl);
+      setIsLoadingPreviews(false);
+      return;
+    }
 
     let isMounted = true;
     const generateAll = async () => {
       setIsLoadingPreviews(true);
       try {
-        const [fCanvas, bCanvas, bothCanvas] = await Promise.all([
-          initialFrontUrl ? Promise.resolve(null) : generateFrontCardCanvas(record),
-          initialBackUrl ? Promise.resolve(null) : generateBackCardCanvas(record),
-          generateBothCardsCanvas(record),
+        const [fCanvas, bCanvas] = await Promise.all([
+          initialFrontUrl
+            ? Promise.resolve(null)
+            : generateFrontCardCanvas(record, selectedTemplateId),
+          initialBackUrl
+            ? Promise.resolve(null)
+            : generateBackCardCanvas(record, selectedTemplateId),
         ]);
+
+        const bothCanvas = initialBothUrl
+          ? null
+          : fCanvas && bCanvas
+            ? combineCardCanvases(fCanvas, bCanvas)
+            : await generateBothCardsCanvas(record, selectedTemplateId);
 
         if (!isMounted) return;
 
@@ -62,6 +87,7 @@ export const CardModal: React.FC<CardModalProps> = ({
         else if (initialBackUrl) setBackUrl(initialBackUrl);
 
         if (bothCanvas) setBothUrl(bothCanvas.toDataURL('image/png'));
+        else if (initialBothUrl) setBothUrl(initialBothUrl);
       } catch (err) {
         console.error('Failed to generate card previews:', err);
       } finally {
@@ -74,7 +100,7 @@ export const CardModal: React.FC<CardModalProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [isOpen, record, initialFrontUrl, initialBackUrl]);
+  }, [isOpen, record, initialFrontUrl, initialBackUrl, initialBothUrl, selectedTemplateId]);
 
   if (!isOpen) return null;
 
@@ -107,12 +133,12 @@ export const CardModal: React.FC<CardModalProps> = ({
           </button>
         </div>
 
-        {/* View Switcher Tabs (Front, Back, Both) */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 bg-slate-50 p-2 rounded-xl border border-slate-200">
-          <div className="flex items-center space-x-1.5 w-full sm:w-auto">
+        {/* View Switcher Tabs & Background Selector */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 bg-slate-50 p-2 rounded-xl border border-slate-200">
+          <div className="flex items-center space-x-1.5 w-full md:w-auto">
             <button
               onClick={() => setActiveSide('front')}
-              className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 ${activeSide === 'front'
+              className={`flex-1 md:flex-none px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 ${activeSide === 'front'
                 ? 'bg-emerald-700 text-white shadow'
                 : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
                 }`}
@@ -122,7 +148,7 @@ export const CardModal: React.FC<CardModalProps> = ({
 
             <button
               onClick={() => setActiveSide('back')}
-              className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 ${activeSide === 'back'
+              className={`flex-1 md:flex-none px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 ${activeSide === 'back'
                 ? 'bg-emerald-700 text-white shadow'
                 : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
                 }`}
@@ -133,7 +159,7 @@ export const CardModal: React.FC<CardModalProps> = ({
 
             <button
               onClick={() => setActiveSide('both')}
-              className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 ${activeSide === 'both'
+              className={`flex-1 md:flex-none px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 ${activeSide === 'both'
                 ? 'bg-emerald-700 text-white shadow'
                 : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
                 }`}
@@ -143,27 +169,38 @@ export const CardModal: React.FC<CardModalProps> = ({
             </button>
           </div>
 
-          <div className="text-[11px] text-slate-500 font-medium hidden sm:block">
-            {activeSide === 'front' && 'Photo, Name, DOB, Gender, PAN, Reg No, Aadhaar, Farmer ID, Address & QR'}
-            {activeSide === 'back' && 'जमिनीचा तपशील (Khata, Survey, Area) & बँक तपशील (Bank, A/C, IFSC)'}
-            {activeSide === 'both' && 'Complete 2-Sided Printable Overview'}
+          <div className="w-full md:w-72">
+            <BackgroundSelector
+              selectedTemplateId={selectedTemplateId}
+              onChange={onSelectTemplate}
+            />
           </div>
         </div>
 
         {/* Card Live Preview Container */}
         <div className="relative flex flex-col items-center justify-center p-3 bg-gradient-to-b from-slate-100 to-slate-200 rounded-xl min-h-[300px] border border-slate-200 overflow-hidden">
-          {isLoadingPreviews ? (
-            <div className="flex flex-col items-center justify-center py-16 space-y-2 text-slate-500">
-              <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin" />
-              <span className="text-xs font-semibold">Generating high-res card design...</span>
-            </div>
-          ) : currentPreview ? (
-            <div className="w-full flex justify-center">
+          {currentPreview ? (
+            <div className="w-full flex justify-center relative">
               <img
                 src={currentPreview}
                 alt={`Farmer ID Card - ${activeSide} view`}
-                className="max-h-[60vh] max-w-full rounded-xl shadow-xl border border-slate-300 object-contain"
+                className={`max-h-[60vh] max-w-full rounded-xl shadow-xl border border-slate-300 object-contain transition-opacity duration-150 ${
+                  isLoadingPreviews ? 'opacity-50' : 'opacity-100'
+                }`}
               />
+              {isLoadingPreviews && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="bg-white/90 backdrop-blur-sm px-3.5 py-2 rounded-lg shadow-md border border-slate-200 flex items-center space-x-2 text-slate-700">
+                    <div className="w-4 h-4 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-xs font-semibold">Updating card preview...</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : isLoadingPreviews ? (
+            <div className="flex flex-col items-center justify-center py-16 space-y-2 text-slate-500">
+              <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs font-semibold">Generating high-res card design...</span>
             </div>
           ) : (
             <div className="w-full h-64 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400">
@@ -181,7 +218,7 @@ export const CardModal: React.FC<CardModalProps> = ({
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
             {/* Single Image Download Button (downloads current active view: Front, Back, or Both) */}
             <button
-              onClick={() => downloadCardAsPng(record, activeSide)}
+              onClick={() => downloadCardAsPng(record, activeSide, undefined, selectedTemplateId)}
               className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 active:scale-95 text-white text-xs font-bold rounded-lg shadow-sm hover:shadow transition flex items-center space-x-1.5"
               title={`Download ${activeSide === 'both' ? 'Both sides' : activeSide === 'back' ? 'Back side' : 'Front side'} image as PNG`}
             >
@@ -193,7 +230,7 @@ export const CardModal: React.FC<CardModalProps> = ({
 
             {/* Download A4 Print Sheet */}
             <button
-              onClick={() => downloadCardPrintSheetPdf(record)}
+              onClick={() => downloadCardPrintSheetPdf(record, undefined, selectedTemplateId)}
               className="px-3.5 py-2 bg-sky-700 hover:bg-sky-600 active:scale-95 text-white text-xs font-bold rounded-lg shadow-sm hover:shadow transition flex items-center space-x-1.5"
               title="Printable A4 sheet with Front & Back side-by-side ready to cut"
             >
@@ -203,7 +240,7 @@ export const CardModal: React.FC<CardModalProps> = ({
 
             {/* Download 2-Page CR80 PDF */}
             <button
-              onClick={() => downloadCardAsPdf(record)}
+              onClick={() => downloadCardAsPdf(record, undefined, selectedTemplateId)}
               className="px-3.5 py-2 bg-emerald-800 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-lg shadow-sm hover:shadow transition flex items-center space-x-1.5"
               title="Standard CR80 2-page duplex PDF (Page 1 Front, Page 2 Back)"
             >

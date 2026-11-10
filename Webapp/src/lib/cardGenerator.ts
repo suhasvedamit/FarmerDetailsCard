@@ -2,32 +2,27 @@ import { jsPDF } from 'jspdf';
 import QRCode from 'qrcode';
 import { FarmerRecord } from '../types';
 import { buildVerificationUrl } from './verificationUrl';
+import { getCardTemplate } from './cardTemplates';
 
-// Direct image import: allows directly pasting/replacing card_template.png or card_template.jpg in src/assets/
-const templateModules = import.meta.glob('../assets/card_template.{png,jpg,jpeg}', {
-  eager: true,
-  import: 'default',
-}) as Record<string, string>;
+const templateImageCache = new Map<string, Promise<HTMLImageElement>>();
 
-const cardTemplateUrl: string =
-  templateModules['../assets/card_template.png'] ||
-  templateModules['../assets/card_template.jpg'] ||
-  templateModules['../assets/card_template.jpeg'] ||
-  '';
-
-let cachedCardTemplateImg: HTMLImageElement | null = null;
-let cachedTemplateUrl: string | null = null;
-
-async function getCardTemplateImage(): Promise<HTMLImageElement> {
-  if (cachedCardTemplateImg && cachedTemplateUrl === cardTemplateUrl) {
-    return cachedCardTemplateImg;
+async function getCardTemplateImage(templateId?: string): Promise<HTMLImageElement> {
+  const template = getCardTemplate(templateId);
+  if (!template?.url) {
+    throw new Error('No card template images found in src/assets/card_template/');
   }
-  if (!cardTemplateUrl) {
-    throw new Error('Card template image not found in src/assets/ (expected card_template.png or card_template.jpg)');
+
+  const cached = templateImageCache.get(template.url);
+  if (cached) {
+    return cached;
   }
-  cachedCardTemplateImg = await loadImage(cardTemplateUrl);
-  cachedTemplateUrl = cardTemplateUrl;
-  return cachedCardTemplateImg;
+
+  const loadPromise = loadImage(template.url).catch((err) => {
+    templateImageCache.delete(template.url);
+    throw err;
+  });
+  templateImageCache.set(template.url, loadPromise);
+  return loadPromise;
 }
 
 /**
@@ -37,19 +32,16 @@ export const CARD_WIDTH = 1050;
 export const CARD_HEIGHT = 660;
 
 /**
- * Draws the shared ID Card base using the user's custom template image:
- * Background template contains the wavy green top banner, wheat logo emblem,
- * "माझे किसान कार्ड" title, diamond motif, bamboo leaves foliage,
- * rolling hills landscape with red tractor and wheat stalks, and bottom disclaimer footer.
+ * Draws the shared ID Card base using the selected template image from src/assets/card_template/.
  */
-async function drawCardBase(ctx: CanvasRenderingContext2D, w: number, h: number) {
+async function drawCardBase(ctx: CanvasRenderingContext2D, w: number, h: number, templateId?: string) {
   // 1. Clear background
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, w, h);
 
   // 2. Draw user-provided background card template
   try {
-    const templateImg = await getCardTemplateImage();
+    const templateImg = await getCardTemplateImage(templateId);
     ctx.drawImage(templateImg, 0, 0, w, h);
   } catch (err) {
     console.warn('Could not draw card template image:', err);
@@ -67,7 +59,10 @@ async function drawCardBase(ctx: CanvasRenderingContext2D, w: number, h: number)
 /**
  * Generates FRONT SIDE ID Card Canvas.
  */
-export async function generateFrontCardCanvas(record: FarmerRecord): Promise<HTMLCanvasElement> {
+export async function generateFrontCardCanvas(
+  record: FarmerRecord,
+  templateId?: string
+): Promise<HTMLCanvasElement> {
   // Wait for Google Fonts to be ready for perfect Devanagari text rendering
   if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
     try {
@@ -83,7 +78,7 @@ export async function generateFrontCardCanvas(record: FarmerRecord): Promise<HTM
   if (!ctx) throw new Error('Could not get 2D context for card generation');
 
   // Shared Base Frame
-  await drawCardBase(ctx, CARD_WIDTH, CARD_HEIGHT);
+  await drawCardBase(ctx, CARD_WIDTH, CARD_HEIGHT, templateId);
 
   // 1. Photo Frame (Left side matching template)
   const px = 36;
@@ -158,7 +153,7 @@ export async function generateFrontCardCanvas(record: FarmerRecord): Promise<HTM
 
   let cy = 166;
   const rowGap = 37;
-  const labelColX = 236;
+  const labelColX = 260;
   const colonColX = 490;
   const valColX = 508;
 
@@ -441,7 +436,10 @@ function wrapBankNameToLines(
  * - Bottom Landscape: rolling hills, tractor, birds
  * - Bottom Footer: "This card is only for personal use not for Govt. issue card. —— | फार्मर आईडी"
  */
-export async function generateBackCardCanvas(record: FarmerRecord): Promise<HTMLCanvasElement> {
+export async function generateBackCardCanvas(
+  record: FarmerRecord,
+  templateId?: string
+): Promise<HTMLCanvasElement> {
   if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
     try {
       await document.fonts.ready;
@@ -456,7 +454,7 @@ export async function generateBackCardCanvas(record: FarmerRecord): Promise<HTML
   if (!ctx) throw new Error('Could not get 2D context for card generation');
 
   // Shared Base Frame
-  await drawCardBase(ctx, CARD_WIDTH, CARD_HEIGHT);
+  await drawCardBase(ctx, CARD_WIDTH, CARD_HEIGHT, templateId);
 
   const centerX = CARD_WIDTH / 2;
 
@@ -609,19 +607,21 @@ export async function generateBackCardCanvas(record: FarmerRecord): Promise<HTML
  */
 export async function generateCardCanvas(
   record: FarmerRecord,
-  side: 'front' | 'back' = 'front'
+  side: 'front' | 'back' = 'front',
+  templateId?: string
 ): Promise<HTMLCanvasElement> {
-  return side === 'back' ? generateBackCardCanvas(record) : generateFrontCardCanvas(record);
+  return side === 'back'
+    ? generateBackCardCanvas(record, templateId)
+    : generateFrontCardCanvas(record, templateId);
 }
 
 /**
- * Generates both Front and Back cards side-by-side on a single unified canvas:
- * Ideal for quick 1-click preview and combined PNG export!
+ * Combines pre-rendered Front and Back card canvases side-by-side on a unified canvas.
  */
-export async function generateBothCardsCanvas(record: FarmerRecord): Promise<HTMLCanvasElement> {
-  const frontCanvas = await generateFrontCardCanvas(record);
-  const backCanvas = await generateBackCardCanvas(record);
-
+export function combineCardCanvases(
+  frontCanvas: HTMLCanvasElement,
+  backCanvas: HTMLCanvasElement
+): HTMLCanvasElement {
   const gap = 30;
   const padding = 20;
   const totalW = frontCanvas.width * 2 + gap + padding * 2;
@@ -648,25 +648,42 @@ export async function generateBothCardsCanvas(record: FarmerRecord): Promise<HTM
 }
 
 /**
+ * Generates both Front and Back cards side-by-side on a single unified canvas:
+ * Ideal for quick 1-click preview and combined PNG export!
+ */
+export async function generateBothCardsCanvas(
+  record: FarmerRecord,
+  templateId?: string
+): Promise<HTMLCanvasElement> {
+  const [frontCanvas, backCanvas] = await Promise.all([
+    generateFrontCardCanvas(record, templateId),
+    generateBackCardCanvas(record, templateId),
+  ]);
+
+  return combineCardCanvases(frontCanvas, backCanvas);
+}
+
+/**
  * Downloads the card as a PNG image:
  * side: 'front' | 'back' | 'both'
  */
 export async function downloadCardAsPng(
   record: FarmerRecord,
   side: 'front' | 'back' | 'both' = 'front',
-  filename?: string
+  filename?: string,
+  templateId?: string
 ): Promise<void> {
   let canvas: HTMLCanvasElement;
   const cleanName = (record.farmer_name || 'farmer').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
 
   if (side === 'both') {
-    canvas = await generateBothCardsCanvas(record);
+    canvas = await generateBothCardsCanvas(record, templateId);
     filename = filename || `${cleanName}_id_card_both_sides.png`;
   } else if (side === 'back') {
-    canvas = await generateBackCardCanvas(record);
+    canvas = await generateBackCardCanvas(record, templateId);
     filename = filename || `${cleanName}_id_card_back.png`;
   } else {
-    canvas = await generateFrontCardCanvas(record);
+    canvas = await generateFrontCardCanvas(record, templateId);
     filename = filename || `${cleanName}_id_card_front.png`;
   }
 
@@ -682,9 +699,11 @@ export async function downloadCardAsPng(
  * - Page 1: Front Side
  * - Page 2: Back Side
  */
-export async function createCardPdf(record: FarmerRecord): Promise<jsPDF> {
-  const frontCanvas = await generateFrontCardCanvas(record);
-  const backCanvas = await generateBackCardCanvas(record);
+export async function createCardPdf(record: FarmerRecord, templateId?: string): Promise<jsPDF> {
+  const [frontCanvas, backCanvas] = await Promise.all([
+    generateFrontCardCanvas(record, templateId),
+    generateBackCardCanvas(record, templateId),
+  ]);
 
   const frontData = frontCanvas.toDataURL('image/png', 1.0);
   const backData = backCanvas.toDataURL('image/png', 1.0);
@@ -710,9 +729,11 @@ export async function createCardPdf(record: FarmerRecord): Promise<jsPDF> {
  * Generates an A4 Printable Sheet PDF with Front and Back side-by-side with cut guidelines.
  * Perfect for standard desktop paper and PVC printer sheets.
  */
-export async function createPrintSheetPdf(record: FarmerRecord): Promise<jsPDF> {
-  const frontCanvas = await generateFrontCardCanvas(record);
-  const backCanvas = await generateBackCardCanvas(record);
+export async function createPrintSheetPdf(record: FarmerRecord, templateId?: string): Promise<jsPDF> {
+  const [frontCanvas, backCanvas] = await Promise.all([
+    generateFrontCardCanvas(record, templateId),
+    generateBackCardCanvas(record, templateId),
+  ]);
 
   const frontData = frontCanvas.toDataURL('image/png', 1.0);
   const backData = backCanvas.toDataURL('image/png', 1.0);
@@ -761,20 +782,28 @@ export async function createPrintSheetPdf(record: FarmerRecord): Promise<jsPDF> 
 /**
  * Downloads the 2-page duplex PDF (Page 1 = Front, Page 2 = Back).
  */
-export async function downloadCardAsPdf(record: FarmerRecord, filename?: string): Promise<void> {
+export async function downloadCardAsPdf(
+  record: FarmerRecord,
+  filename?: string,
+  templateId?: string
+): Promise<void> {
   const cleanName = (record.farmer_name || 'farmer').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
   filename = filename || `${cleanName}_id_card_2sided.pdf`;
-  const pdf = await createCardPdf(record);
+  const pdf = await createCardPdf(record, templateId);
   pdf.save(filename);
 }
 
 /**
  * Downloads the A4 printable sheet PDF.
  */
-export async function downloadCardPrintSheetPdf(record: FarmerRecord, filename?: string): Promise<void> {
+export async function downloadCardPrintSheetPdf(
+  record: FarmerRecord,
+  filename?: string,
+  templateId?: string
+): Promise<void> {
   const cleanName = (record.farmer_name || 'farmer').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
   filename = filename || `${cleanName}_id_card_print_sheet.pdf`;
-  const pdf = await createPrintSheetPdf(record);
+  const pdf = await createPrintSheetPdf(record, templateId);
   pdf.save(filename);
 }
 
