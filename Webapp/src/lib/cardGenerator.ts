@@ -2,26 +2,29 @@ import { jsPDF } from 'jspdf';
 import QRCode from 'qrcode';
 import { FarmerRecord } from '../types';
 import { buildVerificationUrl } from './verificationUrl';
-import { getCardTemplate } from './cardTemplates';
+import { CardSide, getCardTemplateUrl } from './cardTemplates';
 
 const templateImageCache = new Map<string, Promise<HTMLImageElement>>();
 
-async function getCardTemplateImage(templateId?: string): Promise<HTMLImageElement> {
-  const template = getCardTemplate(templateId);
-  if (!template?.url) {
+async function getCardTemplateImage(
+  templateId?: string,
+  side: CardSide = 'front'
+): Promise<HTMLImageElement> {
+  const imageUrl = getCardTemplateUrl(templateId, side);
+  if (!imageUrl) {
     throw new Error('No card template images found in src/assets/card_template/');
   }
 
-  const cached = templateImageCache.get(template.url);
+  const cached = templateImageCache.get(imageUrl);
   if (cached) {
     return cached;
   }
 
-  const loadPromise = loadImage(template.url).catch((err) => {
-    templateImageCache.delete(template.url);
+  const loadPromise = loadImage(imageUrl).catch((err) => {
+    templateImageCache.delete(imageUrl);
     throw err;
   });
-  templateImageCache.set(template.url, loadPromise);
+  templateImageCache.set(imageUrl, loadPromise);
   return loadPromise;
 }
 
@@ -32,19 +35,25 @@ export const CARD_WIDTH = 1050;
 export const CARD_HEIGHT = 660;
 
 /**
- * Draws the shared ID Card base using the selected template image from src/assets/card_template/.
+ * Draws the shared ID Card base using the selected template front/back image from src/assets/card_template/.
  */
-async function drawCardBase(ctx: CanvasRenderingContext2D, w: number, h: number, templateId?: string) {
+async function drawCardBase(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  templateId?: string,
+  side: CardSide = 'front'
+) {
   // 1. Clear background
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, w, h);
 
-  // 2. Draw user-provided background card template
+  // 2. Draw user-provided background card template for the requested side
   try {
-    const templateImg = await getCardTemplateImage(templateId);
+    const templateImg = await getCardTemplateImage(templateId, side);
     ctx.drawImage(templateImg, 0, 0, w, h);
   } catch (err) {
-    console.warn('Could not draw card template image:', err);
+    console.warn(`Could not draw card ${side} template image:`, err);
   }
 
   // 3. Crisp outer rounded card border
@@ -77,8 +86,8 @@ export async function generateFrontCardCanvas(
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Could not get 2D context for card generation');
 
-  // Shared Base Frame
-  await drawCardBase(ctx, CARD_WIDTH, CARD_HEIGHT, templateId);
+  // Shared Base Frame (Front template)
+  await drawCardBase(ctx, CARD_WIDTH, CARD_HEIGHT, templateId, 'front');
 
   // 1. Photo Frame (Left side matching template)
   const px = 36;
@@ -453,8 +462,8 @@ export async function generateBackCardCanvas(
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Could not get 2D context for card generation');
 
-  // Shared Base Frame
-  await drawCardBase(ctx, CARD_WIDTH, CARD_HEIGHT, templateId);
+  // Shared Base Frame (Back template)
+  await drawCardBase(ctx, CARD_WIDTH, CARD_HEIGHT, templateId, 'back');
 
   const centerX = CARD_WIDTH / 2;
 

@@ -129,7 +129,7 @@ export const PhotoCard: React.FC<PhotoCardProps> = ({
               className="flex-1 py-1.5 px-2 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition flex items-center justify-center space-x-1"
             >
               <Upload className="w-3 h-3 text-slate-500" />
-              <span>Upload New</span>
+              <span>{photoUrl ? 'Upload New' : 'Upload Photo'}</span>
             </button>
 
             {isAdjusted && onResetToOriginal && (
@@ -137,7 +137,7 @@ export const PhotoCard: React.FC<PhotoCardProps> = ({
                 type="button"
                 onClick={onResetToOriginal}
                 className="py-1.5 px-2.5 text-slate-500 hover:text-slate-800 text-[11px] font-semibold rounded-lg hover:bg-slate-100 transition"
-                title="Reset to PDF extracted photo"
+                title="Reset to original photo"
               >
                 Reset
               </button>

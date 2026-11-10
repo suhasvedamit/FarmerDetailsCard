@@ -67,7 +67,7 @@ export const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
           {selectedTemplate ? (
             <div className="flex items-center gap-2.5 min-w-0 flex-1">
               <img
-                src={selectedTemplate.url}
+                src={selectedTemplate.frontUrl}
                 alt={selectedTemplate.name}
                 className="w-10 h-[25px] rounded border border-slate-200 object-cover bg-white flex-shrink-0 shadow-sm"
               />
@@ -89,7 +89,7 @@ export const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
           <div
             role="listbox"
             aria-label="Card background templates"
-            className="absolute mt-1.5 z-40 bg-white rounded-xl border border-slate-200 shadow-xl py-1.5 max-h-72 overflow-y-auto left-0 right-0 sm:left-auto sm:right-0 sm:w-72"
+            className="absolute mt-1.5 z-40 bg-white rounded-xl border border-slate-200 shadow-xl py-1.5 max-h-72 overflow-y-auto left-0 right-0 sm:left-auto sm:right-0 sm:w-80"
           >
             {CARD_TEMPLATES.map((template) => {
               const isSelected = template.id === selectedTemplate?.id;
@@ -105,17 +105,29 @@ export const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
                     : 'text-slate-700 hover:bg-slate-50'
                     }`}
                 >
-                  <img
-                    src={template.url}
-                    alt={template.name}
-                    className={`w-16 h-10 rounded-md object-cover bg-white flex-shrink-0 border shadow-sm ${isSelected ? 'border-emerald-500 ring-1 ring-emerald-500/30' : 'border-slate-200'
-                      }`}
-                  />
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <img
+                      src={template.frontUrl}
+                      alt={`${template.name} front`}
+                      title="Front side template"
+                      className={`w-14 h-[35px] rounded object-cover bg-white border shadow-sm ${isSelected ? 'border-emerald-500 ring-1 ring-emerald-500/30' : 'border-slate-200'
+                        }`}
+                    />
+                    {template.hasSeparateBack && (
+                      <img
+                        src={template.backUrl}
+                        alt={`${template.name} back`}
+                        title="Back side template"
+                        className={`w-14 h-[35px] rounded object-cover bg-white border shadow-sm ${isSelected ? 'border-emerald-500 ring-1 ring-emerald-500/30' : 'border-slate-200'
+                          }`}
+                      />
+                    )}
+                  </div>
                   <div className="min-w-0 flex-1">
                     <div className="text-xs font-bold truncate">{template.name}</div>
-                    <div className="text-[10px] text-slate-400 font-mono truncate">
-                      {/* {template.fileName} */}
-                    </div>
+                    {/* <div className="text-[10px] text-slate-400 truncate">
+                      {template.hasSeparateBack ? 'Front & Back' : 'Single image'}
+                    </div> */}
                   </div>
                   {isSelected && <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />}
                 </button>

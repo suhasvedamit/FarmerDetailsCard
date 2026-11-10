@@ -89,3 +89,18 @@ export const EMPTY_FARMER_RECORD: FarmerRecord = {
   },
   address: '',
 };
+
+export function cloneFarmerRecord(record: FarmerRecord): FarmerRecord {
+  return {
+    ...record,
+    land_detail: { ...record.land_detail },
+    land_records: record.land_records?.map((row) => ({ ...row })),
+    bank_detail: record.bank_detail ? { ...record.bank_detail } : undefined,
+    photo_bbox: record.photo_bbox ? { ...record.photo_bbox } : undefined,
+    photo_transform: record.photo_transform ? { ...record.photo_transform } : undefined,
+  };
+}
+
+export function createEmptyFarmerRecord(): FarmerRecord {
+  return cloneFarmerRecord(EMPTY_FARMER_RECORD);
+}

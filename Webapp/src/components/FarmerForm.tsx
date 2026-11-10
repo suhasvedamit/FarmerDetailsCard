@@ -1,13 +1,22 @@
 import React from 'react';
-import { User, Phone, MapPin, Calendar, CreditCard, Building2, Landmark, FileText, CheckCircle2, Plus, Trash2 } from 'lucide-react';
+import { User, Phone, MapPin, Calendar, CreditCard, Building2, Landmark, FileText, CheckCircle2, Plus, Trash2, RotateCcw } from 'lucide-react';
 import { FarmerRecord, LandRow } from '../types';
 
 interface FarmerFormProps {
   data: FarmerRecord;
   onChange: (updated: FarmerRecord) => void;
+  showExtractedBadges?: boolean;
+  onReset?: () => void;
+  canReset?: boolean;
 }
 
-export const FarmerForm: React.FC<FarmerFormProps> = ({ data, onChange }) => {
+export const FarmerForm: React.FC<FarmerFormProps> = ({
+  data,
+  onChange,
+  showExtractedBadges = true,
+  onReset,
+  canReset = false,
+}) => {
   const updateField = (field: keyof FarmerRecord, val: any) => {
     onChange({ ...data, [field]: val });
   };
@@ -96,7 +105,7 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({ data, onChange }) => {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
       {/* Header Banner */}
-      <div className="bg-gradient-to-r from-emerald-800 to-emerald-700 px-6 py-4 text-white flex items-center justify-between">
+      <div className="bg-gradient-to-r from-emerald-800 to-emerald-700 px-6 py-4 text-white flex items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-bold flex items-center space-x-2">
             {/* <div className="w-6 h-6 rounded-md bg-white flex items-center justify-center p-0.5 shadow-sm"> */}
@@ -106,9 +115,20 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({ data, onChange }) => {
             </span>
           </h2>
           <p className="text-xs text-emerald-100">
-            Review and edit details for both Front & Back sides of the ID card
+            Enter manually or review &amp; edit details for both Front &amp; Back sides of the ID card
           </p>
         </div>
+        {onReset && canReset && (
+          <button
+            type="button"
+            onClick={onReset}
+            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-900/50 hover:bg-emerald-900/80 text-emerald-100 border border-emerald-500/40 text-xs font-semibold transition cursor-pointer shrink-0"
+            title="Clear all fields and start over"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Clear Form</span>
+          </button>
+        )}
         {/* <span className="hidden sm:inline-flex items-center text-xs bg-emerald-900/60 text-emerald-200 px-3 py-1 rounded-full font-medium border border-emerald-500/30">
           Front & Back 2-Sided
         </span> */}
@@ -218,7 +238,7 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({ data, onChange }) => {
                   <CreditCard className="w-3.5 h-3.5 mr-1 text-emerald-600" />
                   <span>पॅन कार्ड (Farmer PAN Card)</span>
                 </span>
-                {data.pan_card && (
+                {showExtractedBadges && data.pan_card && (
                   <span className="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
                     Extracted
                   </span>
@@ -511,7 +531,7 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({ data, onChange }) => {
                 <Landmark className="w-3.5 h-3.5 mr-1.5 text-sky-700" />
                 <span>बँक तपशील (Bank Details)</span>
               </h4>
-              {(data.bank_detail?.bank_name_branch || data.bank_detail?.account_no || data.bank_detail?.ifsc_code) && (
+              {showExtractedBadges && (data.bank_detail?.bank_name_branch || data.bank_detail?.account_no || data.bank_detail?.ifsc_code) && (
                 <span className="inline-flex items-center text-[10px] font-semibold text-sky-700 bg-sky-100/80 px-2 py-0.5 rounded-full border border-sky-200">
                   <CheckCircle2 className="w-3 h-3 mr-1 text-sky-600" />
                   Auto-extracted
