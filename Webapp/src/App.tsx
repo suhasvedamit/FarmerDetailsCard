@@ -14,7 +14,7 @@ import { PrivacyPage } from './components/pages/PrivacyPage';
 import { ContactPage } from './components/pages/ContactPage';
 import { DisclaimerPage } from './components/pages/DisclaimerPage';
 import { AppPage, getPageFromUrl, navigateToPage } from './lib/navigation';
-import { FarmerRecord } from './types';
+import { FarmerRecord, createEmptyFarmerRecord } from './types';
 import { extractFarmerDataFromPdf } from './lib/pdfExtractor';
 import {
   generateFrontCardCanvas,
@@ -28,17 +28,12 @@ import {
   extractVerificationDataFromUrl,
   FarmerVerificationData,
 } from './lib/verificationUrl';
-import {
-  DEMO_FARMER_RECORD,
-  cloneFarmerRecord,
-  createEmptyFarmerRecord,
-} from './lib/sampleData';
 import { CreditCard } from 'lucide-react';
 
-function createSessionId(prefix = 'session'): string {
+function createSessionId(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID
     ? crypto.randomUUID()
-    : `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    : `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
 function hasFarmerRecordContent(record: FarmerRecord): boolean {
@@ -140,7 +135,7 @@ export const App: React.FC = () => {
   const [data, setData] = useState<FarmerRecord>(() => createEmptyFarmerRecord());
   const [sessionId, setSessionId] = useState<string>(() => createSessionId());
   const [originalExtractedData, setOriginalExtractedData] = useState<FarmerRecord | null>(null);
-  const [dataSource, setDataSource] = useState<'manual' | 'pdf' | 'demo'>('manual');
+  const [dataSource, setDataSource] = useState<'manual' | 'pdf'>('manual');
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
   const [progressPct, setProgressPct] = useState(0);
@@ -198,19 +193,6 @@ export const App: React.FC = () => {
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  // Instant Demo Data Loader (triggered only from Header)
-  const handleLoadDemo = () => {
-    const newSessionId = createSessionId('demo');
-
-    setSessionId(newSessionId);
-    setOriginalExtractedData(DEMO_FARMER_RECORD);
-    setData(cloneFarmerRecord(DEMO_FARMER_RECORD));
-    setDataSource('demo');
-    setFrontPreviewUrl('');
-    setBackPreviewUrl('');
-    setBothPreviewUrl('');
   };
 
   // Reset form back to blank manual entry
@@ -310,7 +292,7 @@ export const App: React.FC = () => {
         }`}
         aria-hidden={!hasAcceptedDisclaimer}
       >
-        <Header onLoadDemo={handleLoadDemo} />
+        <Header />
 
         <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
           {/* Upload Zone */}
@@ -363,7 +345,7 @@ export const App: React.FC = () => {
               <FarmerForm
                 data={data}
                 onChange={setData}
-                showExtractedBadges={dataSource !== 'manual'}
+                showExtractedBadges={dataSource === 'pdf'}
                 onReset={handleResetForm}
                 canReset={canResetForm}
               />

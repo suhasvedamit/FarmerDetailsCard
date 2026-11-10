@@ -70,8 +70,7 @@ npm run build
 │   ├── components/         # React UI Components (Header, DropZone, Form, Modal)
 │   ├── lib/
 │   │   ├── pdfExtractor.ts # PDF.js + Tesseract.js WASM + Photo Cropper
-│   │   ├── cardGenerator.ts# Canvas ID Card Renderer (PNG + PDF)
-│   │   └── sampleData.ts   # Pre-embedded sample AgriStack record
+│   │   └── cardGenerator.ts# Canvas ID Card Renderer (PNG + PDF)
 │   ├── App.tsx             # Main Application Logic
 │   └── types.ts            # TypeScript Definitions
 ├── dist/                   # Compiled, production-ready static bundle

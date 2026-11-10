@@ -5,12 +5,8 @@ import {
   Mail,
   AlertTriangle,
   Home,
-  ArrowLeft,
   ChevronRight,
-  ExternalLink,
-  Printer,
-  Share2,
-  Check
+  ExternalLink
 } from 'lucide-react';
 import { AppPage, getPageUrl } from '../lib/navigation';
 import logoImg from '../assets/logo.png';
@@ -35,8 +31,6 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
   children,
   onNavigate,
 }) => {
-  const [copied, setCopied] = React.useState(false);
-
   const navItems: { page: AppPage; label: string; icon: React.ReactNode }[] = [
     { page: 'terms', label: 'Terms & Conditions', icon: <FileText className="w-4 h-4" /> },
     { page: 'privacy', label: 'Privacy Policy', icon: <ShieldCheck className="w-4 h-4" /> },
@@ -57,27 +51,6 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
       window.dispatchEvent(new PopStateEvent('popstate'));
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  };
-
-  const handleShare = async () => {
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: `${title} - Farmer Details Card`,
-          url: window.location.href,
-        });
-      } else {
-        await navigator.clipboard.writeText(window.location.href);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      }
-    } catch {
-      // Ignore user cancellation
-    }
-  };
-
-  const handlePrint = () => {
-    window.print();
   };
 
   return (
@@ -145,8 +118,8 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        {/* Breadcrumb & Utilities */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-500 border-b border-slate-200 pb-3 print:hidden">
+        {/* Breadcrumb */}
+        <div className="text-xs text-slate-500 border-b border-slate-200 pb-3 print:hidden">
           <nav className="flex items-center space-x-1.5" aria-label="Breadcrumb">
             <a
               href={getPageUrl('home')}
@@ -159,42 +132,6 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
             <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
             <span className="text-slate-800 font-semibold">{title}</span>
           </nav>
-
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={handleShare}
-              className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-md font-medium transition flex items-center space-x-1 text-xs"
-              title="Share or copy page link"
-            >
-              {copied ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  <span className="text-emerald-700 font-semibold">Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Share2 className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Share</span>
-                </>
-              )}
-            </button>
-            <button
-              onClick={handlePrint}
-              className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-md font-medium transition flex items-center space-x-1 text-xs"
-              title="Print document"
-            >
-              <Printer className="w-3.5 h-3.5 text-slate-500" />
-              <span>Print</span>
-            </button>
-            <a
-              href={getPageUrl('home')}
-              onClick={(e) => handleLinkClick(e, 'home')}
-              className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-md font-bold transition flex items-center space-x-1 text-xs"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Maker</span>
-            </a>
-          </div>
         </div>
 
         {/* Page Title & Subtitle Banner */}
