@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CreditCard, Home, ChevronRight, Lock, Sparkles } from 'lucide-react';
+import { CreditCard, Home, ChevronRight, Lock, Loader2, Sparkles } from 'lucide-react';
 import { Header } from '../Header';
 import { DropZone } from '../DropZone';
 import { ProgressBar } from '../ProgressBar';
@@ -69,13 +69,13 @@ function hasFarmerRecordContent(record: FarmerRecord): boolean {
 
   return Boolean(
     record.land_detail?.khata_no ||
-      record.land_detail?.total_area_hectare ||
-      record.land_detail?.survey_gat_no ||
-      record.land_detail?.village ||
-      record.land_detail?.sub_district ||
-      record.land_detail?.district ||
-      record.land_detail?.state ||
-      record.land_detail?.summary
+    record.land_detail?.total_area_hectare ||
+    record.land_detail?.survey_gat_no ||
+    record.land_detail?.village ||
+    record.land_detail?.sub_district ||
+    record.land_detail?.district ||
+    record.land_detail?.state ||
+    record.land_detail?.summary
   );
 }
 
@@ -98,6 +98,7 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
   const [sessionId, setSessionId] = useState<string>(() => createSessionId());
   const [originalExtractedData, setOriginalExtractedData] = useState<FarmerRecord | null>(null);
   const [dataSource, setDataSource] = useState<'manual' | 'pdf'>('manual');
+  const [uploadedFileName, setUploadedFileName] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
   const [progressPct, setProgressPct] = useState(0);
@@ -138,13 +139,14 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
       setOriginalExtractedData(extracted);
       setData(extracted);
       setDataSource('pdf');
+      setUploadedFileName(file.name);
       setFrontPreviewUrl('');
       setBackPreviewUrl('');
       setBothPreviewUrl('');
 
       // Non-blocking background sync (never interrupts user experience if offline/blocked)
       try {
-        saveExtractedRecord(extracted, newSessionId, file.name).catch(() => {});
+        saveExtractedRecord(extracted, newSessionId, file.name).catch(() => { });
       } catch (logErr) {
         console.warn('[Supabase] Non-fatal background sync error:', logErr);
       }
@@ -158,10 +160,12 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
 
   // Reset form back to blank manual entry
   const handleResetForm = () => {
+    if (isProcessing) return;
     setSessionId(createSessionId());
     setOriginalExtractedData(null);
     setData(createEmptyFarmerRecord());
     setDataSource('manual');
+    setUploadedFileName('');
     setFrontPreviewUrl('');
     setBackPreviewUrl('');
     setBothPreviewUrl('');
@@ -169,6 +173,7 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
 
   // Generate ID Card (Front & Back)
   const handleGenerateCard = async () => {
+    if (isProcessing) return;
     try {
       const [frontCanvas, backCanvas] = await Promise.all([
         generateFrontCardCanvas(data, selectedTemplateId),
@@ -183,7 +188,7 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
       // Non-blocking background sync (never interrupts user experience if offline/blocked)
       if (sessionId) {
         try {
-          saveGeneratedRecord(data, sessionId, originalExtractedData).catch(() => {});
+          saveGeneratedRecord(data, sessionId, originalExtractedData).catch(() => { });
         } catch (logErr) {
           console.warn('[Supabase] Non-fatal background sync error:', logErr);
         }
@@ -206,15 +211,17 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
           onChange={handleTemplateChange}
           previewRecord={data}
           showQuickCustomButton={true}
+          disabled={isProcessing}
         />
       </div>
 
       <button
         type="button"
         onClick={handleGenerateCard}
-        className="w-full py-3 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white text-xs sm:text-sm font-bold rounded-xl shadow-md shadow-emerald-700/15 transition flex items-center justify-center space-x-2 cursor-pointer"
+        disabled={isProcessing}
+        className="w-full py-3.5 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm sm:text-base font-bold rounded-xl shadow-md shadow-emerald-700/15 transition flex items-center justify-center space-x-2 cursor-pointer"
       >
-        <CreditCard className="w-4 h-4" />
+        <CreditCard className="w-5 h-5" />
         <span>{generateButtonLabel}</span>
       </button>
     </div>
@@ -230,11 +237,10 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
       />
 
       <div
-        className={`min-h-screen flex flex-col bg-slate-50 text-slate-800 transition-opacity duration-300 ${
-          !hasAcceptedDisclaimer
+        className={`min-h-screen flex flex-col bg-slate-50 text-slate-800 transition-opacity duration-300 ${!hasAcceptedDisclaimer
             ? 'invisible pointer-events-none select-none max-h-screen overflow-hidden'
             : 'opacity-100'
-        }`}
+          }`}
         aria-hidden={!hasAcceptedDisclaimer}
       >
         <Header currentPage="create-card" onNavigate={onNavigate} />
@@ -243,7 +249,7 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
           {/* Workspace Intro Strip & Breadcrumb */}
           <div className="bg-white rounded-2xl border border-slate-200 px-5 py-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div className="space-y-1">
-              <nav className="flex items-center space-x-1.5 text-xs text-slate-500" aria-label="Breadcrumb">
+              <nav className="flex items-center space-x-1.5 text-sm text-slate-500" aria-label="Breadcrumb">
                 <a
                   href={getPageUrl('home')}
                   onClick={(e) => {
@@ -253,90 +259,140 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
                   }}
                   className="hover:text-emerald-700 transition flex items-center space-x-1 font-medium"
                 >
-                  <Home className="w-3.5 h-3.5" />
+                  <Home className="w-4 h-4" />
                   <span>Home</span>
                 </a>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                <ChevronRight className="w-4 h-4 text-slate-400" />
                 <span className="text-emerald-800 font-bold">Card Maker Studio</span>
               </nav>
-              <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
                 Create Your Farmer Summary Card
               </h1>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold">
-              <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
-                <Lock className="w-3 h-3 text-emerald-600" />
-                <span>Secure Card Studio</span>
-              </span>
-              <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-                <Sparkles className="w-3 h-3 text-emerald-600" />
-                <span>CR80 Front &amp; Back</span>
-              </span>
-            </div>
+
           </div>
 
           {/* Upload Zone */}
           <section>
-            <DropZone onFileSelected={handleFileSelected} isProcessing={isProcessing} />
+            <DropZone
+              onFileSelected={handleFileSelected}
+              isProcessing={isProcessing}
+              uploadedFileName={uploadedFileName}
+            />
             {isProcessing && <ProgressBar message={progressMsg} percent={progressPct} />}
           </section>
 
-          {/* Divider between optional PDF upload and manual/editable form */}
+          {/* Divider between PDF auto-extract upload and manual/editable form */}
           <div className="relative flex items-center justify-center">
             <div className="absolute inset-0 flex items-center" aria-hidden="true">
               <div className="w-full border-t border-slate-200" />
             </div>
-            <span className="relative bg-slate-50 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400 whitespace-nowrap">
-              Or Fill / Edit Details Manually
+            <span
+              className={`relative px-3.5 py-0.5 rounded-full text-xs sm:text-sm font-semibold uppercase tracking-wider whitespace-nowrap ${
+                isProcessing
+                  ? 'bg-amber-50 text-amber-800 border border-amber-200 inline-flex items-center gap-1.5'
+                  : dataSource === 'pdf'
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : 'bg-slate-50 text-slate-500'
+              }`}
+            >
+              {isProcessing ? (
+                <>
+                  <Lock className="w-3.5 h-3.5 shrink-0" />
+                  <span>Extracting File — Form Locked</span>
+                </>
+              ) : dataSource === 'pdf' ? (
+                'Auto-Extracted Below — Review & Edit Any Field'
+              ) : (
+                'Or Skip Upload & Fill Details Manually'
+              )}
             </span>
           </div>
 
           {/* Form & Photo Workspace */}
-          <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-fadeIn">
-            {/* Left Column: Photo, Template Picker & Actions */}
-            <div className="lg:col-span-4 space-y-4">
-              <PhotoCard
-                photoUrl={data.photo_url}
-                rawPhotoUrl={data.raw_photo_url}
-                photoTransform={data.photo_transform}
-                onOpenEditor={() => setIsPhotoEditorOpen(true)}
-                onPhotoUploaded={(rawUrl) => {
-                  setData({
-                    ...data,
-                    photo_url: rawUrl,
-                    raw_photo_url: rawUrl,
-                    photo_transform: undefined,
-                  });
-                  setIsPhotoEditorOpen(true);
-                }}
-                onResetToOriginal={() => {
-                  setData({
-                    ...data,
-                    photo_url: data.raw_photo_url,
-                    photo_transform: undefined,
-                  });
-                }}
-              />
+          <div className="relative animate-fadeIn">
+            <fieldset
+              disabled={isProcessing}
+              aria-busy={isProcessing}
+              className="min-w-0 w-full border-0 p-0 m-0"
+            >
+              <section
+                className={`grid grid-cols-1 lg:grid-cols-12 gap-6 transition-opacity duration-200 ${
+                  isProcessing ? 'opacity-60 pointer-events-none select-none' : ''
+                }`}
+              >
+                {/* Left Column: Photo, Template Picker & Actions */}
+                <div className="lg:col-span-4 space-y-4">
+                  <PhotoCard
+                    photoUrl={data.photo_url}
+                    rawPhotoUrl={data.raw_photo_url}
+                    photoTransform={data.photo_transform}
+                    disabled={isProcessing}
+                    onOpenEditor={() => {
+                      if (!isProcessing) setIsPhotoEditorOpen(true);
+                    }}
+                    onPhotoUploaded={(rawUrl) => {
+                      if (isProcessing) return;
+                      setData({
+                        ...data,
+                        photo_url: rawUrl,
+                        raw_photo_url: rawUrl,
+                        photo_transform: undefined,
+                      });
+                      setIsPhotoEditorOpen(true);
+                    }}
+                    onResetToOriginal={() => {
+                      if (isProcessing) return;
+                      setData({
+                        ...data,
+                        photo_url: data.raw_photo_url,
+                        photo_transform: undefined,
+                      });
+                    }}
+                  />
 
-              {/* Desktop Action Card */}
-              {renderGenerateActionCard('hidden lg:block')}
-            </div>
+                  {/* Desktop Action Card */}
+                  {renderGenerateActionCard('hidden lg:block')}
+                </div>
 
-            {/* Right Column: Form Fields */}
-            <div className="lg:col-span-8 space-y-4">
-              <FarmerForm
-                data={data}
-                onChange={setData}
-                showExtractedBadges={dataSource === 'pdf'}
-                onReset={handleResetForm}
-                canReset={canResetForm}
-              />
+                {/* Right Column: Form Fields */}
+                <div className="lg:col-span-8 space-y-4">
+                  <FarmerForm
+                    data={data}
+                    onChange={(updated) => {
+                      if (!isProcessing) setData(updated);
+                    }}
+                    disabled={isProcessing}
+                    showExtractedBadges={dataSource === 'pdf'}
+                    onReset={handleResetForm}
+                    canReset={canResetForm}
+                  />
 
-              {/* Mobile Action Card */}
-              {renderGenerateActionCard('lg:hidden')}
-            </div>
-          </section>
+                  {/* Mobile Action Card */}
+                  {renderGenerateActionCard('lg:hidden')}
+                </div>
+              </section>
+            </fieldset>
+
+            {isProcessing && (
+              <div
+                className="absolute inset-0 z-20 cursor-not-allowed flex items-start justify-center pt-10 sm:pt-16 px-4"
+                aria-live="polite"
+              >
+                <div className="sticky top-24 bg-white/95 backdrop-blur-sm border border-emerald-200 shadow-lg rounded-2xl px-5 py-3.5 max-w-md w-full text-center space-y-1">
+                  <div className="flex items-center justify-center gap-2 text-emerald-900 font-bold text-sm sm:text-base">
+                    <Loader2 className="w-4 h-4 animate-spin text-emerald-600 shrink-0" />
+                    <span>Form disabled while extracting file...</span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-slate-600">
+                    {progressMsg || 'Reading uploaded document...'}{' '}
+                    <span className="font-mono font-semibold text-emerald-700">({progressPct}%)</span>
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
         </main>
 
         {/* Card Generation Modal (Front & Back) */}

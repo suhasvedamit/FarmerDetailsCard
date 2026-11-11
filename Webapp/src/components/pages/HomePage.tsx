@@ -154,7 +154,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     className="px-6 py-3.5 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white text-sm font-bold rounded-xl shadow-lg shadow-emerald-700/20 transition transform hover:-translate-y-0.5 flex items-center justify-center space-x-2 cursor-pointer"
                   >
                     <CreditCard className="w-4 h-4" />
-                    <span>Launch Card Maker</span>
+                    <span>Create Card</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
 
@@ -168,7 +168,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </div>
 
                 {/* Quick Trust Indicators */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                {/* <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
                   <div className="flex items-center space-x-2 text-xs text-slate-600 bg-white/80 px-3 py-2 rounded-lg border border-slate-200/80">
                     <Lock className="w-4 h-4 text-emerald-600 shrink-0" />
                     <span className="font-medium">Protected Data Handling</span>
@@ -181,7 +181,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     <Printer className="w-4 h-4 text-emerald-600 shrink-0" />
                     <span className="font-medium">Multiple Print Exports</span>
                   </div>
-                </div>
+                </div> */}
               </div>
 
               {/* Right: Live Interactive Card Preview Studio */}
@@ -204,22 +204,20 @@ export const HomePage: React.FC<HomePageProps> = ({
                       <button
                         type="button"
                         onClick={() => setPreviewSide('front')}
-                        className={`px-2.5 sm:px-3 py-1 rounded-md text-[11px] font-bold transition cursor-pointer ${
-                          previewSide === 'front'
-                            ? 'bg-emerald-700 text-white shadow-sm'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
+                        className={`px-2.5 sm:px-3 py-1 rounded-md text-[11px] font-bold transition cursor-pointer ${previewSide === 'front'
+                          ? 'bg-emerald-700 text-white shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900'
+                          }`}
                       >
                         Front Side
                       </button>
                       <button
                         type="button"
                         onClick={() => setPreviewSide('back')}
-                        className={`px-2.5 sm:px-3 py-1 rounded-md text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer ${
-                          previewSide === 'back'
-                            ? 'bg-emerald-700 text-white shadow-sm'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
+                        className={`px-2.5 sm:px-3 py-1 rounded-md text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer ${previewSide === 'back'
+                          ? 'bg-emerald-700 text-white shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900'
+                          }`}
                       >
                         <RefreshCw className="w-3 h-3" />
                         <span>Back Side</span>
@@ -233,9 +231,8 @@ export const HomePage: React.FC<HomePageProps> = ({
                       <img
                         src={displayedPreviewSrc}
                         alt={`Sample Farmer Card - ${previewSide} view`}
-                        className={`w-full rounded-xl shadow-lg border border-slate-300/80 object-contain transition-opacity duration-200 ${
-                          isRenderingPreview ? 'opacity-70' : 'opacity-100'
-                        }`}
+                        className={`w-full rounded-xl shadow-lg border border-slate-300/80 object-contain transition-opacity duration-200 ${isRenderingPreview ? 'opacity-70' : 'opacity-100'
+                          }`}
                         style={{ aspectRatio: '1050 / 660' }}
                       />
                     ) : (
@@ -265,20 +262,18 @@ export const HomePage: React.FC<HomePageProps> = ({
                               onSelectTemplate(tpl.id);
                             }}
                             title={`Preview ${tpl.name}`}
-                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer flex items-center gap-1 ${
-                              isSelected
-                                ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm'
-                                : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50'
-                            }`}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer flex items-center gap-1 ${isSelected
+                              ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm'
+                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50'
+                              }`}
                           >
                             <span>{tpl.name}</span>
                             {tpl.isCustom && (
                               <span
-                                className={`text-[9px] px-1 py-0.2 rounded font-extrabold uppercase ${
-                                  isSelected
-                                    ? 'bg-emerald-600 text-emerald-100'
-                                    : 'bg-emerald-100 text-emerald-800'
-                                }`}
+                                className={`text-[9px] px-1 py-0.2 rounded font-extrabold uppercase ${isSelected
+                                  ? 'bg-emerald-600 text-emerald-100'
+                                  : 'bg-emerald-100 text-emerald-800'
+                                  }`}
                               >
                                 Custom
                               </span>
@@ -586,9 +581,8 @@ export const HomePage: React.FC<HomePageProps> = ({
               return (
                 <div
                   key={template.id}
-                  className={`bg-white rounded-2xl border p-4 space-y-4 transition shadow-sm hover:shadow-md ${
-                    isSelected ? 'border-emerald-500 ring-2 ring-emerald-500/20' : 'border-slate-200'
-                  }`}
+                  className={`bg-white rounded-2xl border p-4 space-y-4 transition shadow-sm hover:shadow-md ${isSelected ? 'border-emerald-500 ring-2 ring-emerald-500/20' : 'border-slate-200'
+                    }`}
                 >
                   {/* Front & Back Thumbnails */}
                   <div className="grid grid-cols-2 gap-2.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
@@ -678,40 +672,6 @@ export const HomePage: React.FC<HomePageProps> = ({
               );
             })}
 
-            {/* Balanced Studio Callout Tile to complete the 3-col grid symmetrically */}
-            <div
-              className={`sm:col-span-2 ${
-                (allTemplates.length + 1) % 3 === 0
-                  ? 'lg:col-span-3'
-                  : (allTemplates.length + 1) % 3 === 1
-                    ? 'lg:col-span-2'
-                    : 'lg:col-span-1'
-              } bg-gradient-to-br from-emerald-50 via-white to-emerald-50/70 rounded-2xl border border-emerald-200 p-6 flex flex-col justify-between gap-4 shadow-sm`}
-            >
-              <div className="space-y-2">
-                <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  <Sparkles className="w-3 h-3 text-emerald-700" />
-                  <span>Switch Designs Anytime</span>
-                </span>
-                <h3 className="text-lg font-extrabold text-slate-900">
-                  Preview Every Design With Your Own Details Before Exporting
-                </h3>
-                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed max-w-xl">
-                  Enter or extract your farmer record once, then switch between all available Front &amp; Back layouts live inside the Card Maker Studio before exporting your card.
-                </p>
-              </div>
-              <div>
-                <button
-                  type="button"
-                  onClick={() => onLaunchCreateCard(previewTemplateId)}
-                  className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-sm transition inline-flex items-center space-x-2 cursor-pointer"
-                >
-                  <CreditCard className="w-4 h-4" />
-                  <span>Open Card Maker Studio</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
           </div>
         </section>
 

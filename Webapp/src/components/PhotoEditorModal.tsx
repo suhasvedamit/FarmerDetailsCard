@@ -663,15 +663,15 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h3 className="font-bold text-slate-800 text-base">Crop & Adjust Farmer Photo</h3>
+                <h3 className="font-bold text-slate-800 text-lg">Crop & Adjust Farmer Photo</h3>
                 {sourceMode === 'pdf' && (
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center space-x-1">
-                    <FileText className="w-3 h-3 text-emerald-600" />
+                  <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center space-x-1">
+                    <FileText className="w-3.5 h-3.5 text-emerald-600" />
                     <span>Whole PDF Document Mode</span>
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-500">
+              <p className="text-sm text-slate-500">
                 Crop directly from the complete document page so no part of the head or shoulders is clipped.
               </p>
             </div>
@@ -687,32 +687,32 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
 
         {/* Source Mode Selector Banner if PDF is available */}
         {pdfPageImageUrl && (
-          <div className="bg-slate-100/90 border-b border-slate-200 px-6 py-2 flex items-center justify-between flex-wrap gap-2 text-xs">
-            <div className="flex items-center space-x-2">
+          <div className="bg-slate-100/90 border-b border-slate-200 px-6 py-2.5 flex items-center justify-between flex-wrap gap-2 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold text-slate-600">Document Source:</span>
               <button
                 type="button"
                 onClick={() => handleSwitchSource('pdf')}
-                className={`px-3 py-1 rounded-md font-bold transition flex items-center space-x-1.5 ${
+                className={`px-3 py-1.5 rounded-md font-bold transition flex items-center space-x-1.5 ${
                   sourceMode === 'pdf'
                     ? 'bg-emerald-700 text-white shadow-sm'
                     : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
                 }`}
               >
-                <FileText className="w-3.5 h-3.5" />
+                <FileText className="w-4 h-4" />
                 <span>Whole PDF Page (Recommended)</span>
               </button>
               {(imageUrl || originalImageUrl) && (
                 <button
                   type="button"
                   onClick={() => handleSwitchSource('extracted')}
-                  className={`px-3 py-1 rounded-md font-bold transition flex items-center space-x-1.5 ${
+                  className={`px-3 py-1.5 rounded-md font-bold transition flex items-center space-x-1.5 ${
                     sourceMode === 'extracted'
                       ? 'bg-emerald-700 text-white shadow-sm'
                       : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
                   }`}
                 >
-                  <ImageIcon className="w-3.5 h-3.5" />
+                  <ImageIcon className="w-4 h-4" />
                   <span>Auto-Detected Box Only</span>
                 </button>
               )}
@@ -724,19 +724,19 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                   <button
                     type="button"
                     onClick={handleFocusDetectedPhoto}
-                    className="text-[11px] text-emerald-800 bg-white hover:bg-emerald-50 border border-emerald-300 font-bold px-2.5 py-1 rounded-md transition flex items-center space-x-1"
+                    className="text-xs sm:text-sm text-emerald-800 bg-white hover:bg-emerald-50 border border-emerald-300 font-bold px-2.5 py-1.5 rounded-md transition flex items-center space-x-1"
                     title="Jump directly to the detected photo box on the PDF page"
                   >
-                    <Target className="w-3.5 h-3.5 text-emerald-600" />
+                    <Target className="w-4 h-4 text-emerald-600" />
                     <span>Focus Photo Box</span>
                   </button>
                   <button
                     type="button"
                     onClick={handleFitWholePage}
-                    className="text-[11px] text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 font-semibold px-2.5 py-1 rounded-md transition flex items-center space-x-1"
+                    className="text-xs sm:text-sm text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 font-semibold px-2.5 py-1.5 rounded-md transition flex items-center space-x-1"
                     title="Zoom out to see the entire PDF registration form"
                   >
-                    <Eye className="w-3.5 h-3.5 text-slate-500" />
+                    <Eye className="w-4 h-4 text-slate-500" />
                     <span>View Entire Page</span>
                   </button>
                 </>
@@ -771,7 +771,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                   onTouchEnd={handleTouchEnd}
                 >
                   {isLoadingImage ? (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 text-xs gap-2">
+                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 text-sm gap-2">
                       <RefreshCw className="w-6 h-6 animate-spin text-emerald-500" />
                       <span>Loading full document page...</span>
                     </div>
@@ -783,12 +783,12 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                       className="w-full h-full block"
                     />
                   ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 text-xs p-4 text-center">
+                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 text-sm p-4 text-center">
                       <ImageIcon className="w-10 h-10 mb-2 opacity-40" />
                       <p className="font-medium">No document or photo loaded</p>
                       <button
                         onClick={() => fileInputRef.current?.click()}
-                        className="mt-3 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold"
+                        className="mt-3 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold"
                       >
                         Upload Photo
                       </button>
@@ -797,7 +797,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
 
                   {/* Floating guide hint pill */}
                   {currentRawUrl && (
-                    <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 bg-slate-900/80 backdrop-blur-sm text-slate-200 text-[10px] px-2.5 py-1 rounded-full shadow pointer-events-none border border-slate-700/60 flex items-center space-x-1 whitespace-nowrap">
+                    <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 bg-slate-900/80 backdrop-blur-sm text-slate-200 text-xs px-2.5 py-1 rounded-full shadow pointer-events-none border border-slate-700/60 flex items-center space-x-1 whitespace-nowrap">
                       <span>🖐️ Drag across document</span>
                       <span className="opacity-40">•</span>
                       <span>🔍 Scroll to zoom</span>
@@ -807,7 +807,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
 
                 {/* Micro Nudge & Re-center D-pad below canvas */}
                 <div className="mt-3.5 flex items-center justify-between w-full max-w-[286px] px-1">
-                  <span className="text-[11px] font-medium text-slate-400 flex items-center">
+                  <span className="text-xs font-medium text-slate-400 flex items-center">
                     Micro Nudge:
                   </span>
                   <div className="flex items-center space-x-1">
@@ -863,11 +863,11 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
               {/* Zoom & Scale Slider */}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-700 flex items-center space-x-1.5">
-                    <ZoomIn className="w-3.5 h-3.5 text-emerald-600" />
+                  <label className="text-sm font-bold text-slate-700 flex items-center space-x-1.5">
+                    <ZoomIn className="w-4 h-4 text-emerald-600" />
                     <span>Zoom & Scale</span>
                   </label>
-                  <span className="text-xs font-mono font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded">
+                  <span className="text-sm font-mono font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded">
                     {Math.round(zoom * 100)}%
                   </span>
                 </div>
@@ -899,8 +899,8 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                 </div>
 
                 {sourceMode === 'pdf' ? (
-                  <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] font-semibold text-slate-600">
-                    <span className="text-[10px] text-slate-400 mr-0.5">Presets:</span>
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs font-semibold text-slate-600">
+                    <span className="text-xs text-slate-400 mr-0.5">Presets:</span>
                     <button
                       type="button"
                       onClick={handleFitWholePage}
@@ -921,7 +921,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                       className="px-2 py-0.5 rounded bg-emerald-50 border border-emerald-300 text-emerald-800 hover:bg-emerald-100 font-bold transition flex items-center space-x-1"
                       title="Align photo to bottom edge (no white gap)"
                     >
-                      <ArrowDownToLine className="w-3 h-3 text-emerald-600" />
+                      <ArrowDownToLine className="w-3.5 h-3.5 text-emerald-600" />
                       <span>Align Bottom</span>
                     </button>
                     <button
@@ -947,15 +947,15 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                     </button>
                   </div>
                 ) : (
-                  <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] font-semibold text-slate-600">
-                    <span className="text-[10px] text-slate-400 mr-0.5">Presets:</span>
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs font-semibold text-slate-600">
+                    <span className="text-xs text-slate-400 mr-0.5">Presets:</span>
                     <button
                       type="button"
                       onClick={alignToBottom}
                       className="px-2 py-0.5 rounded bg-emerald-50 border border-emerald-300 text-emerald-800 hover:bg-emerald-100 font-bold transition flex items-center space-x-1"
                       title="Align photo to bottom edge (no white gap)"
                     >
-                      <ArrowDownToLine className="w-3 h-3 text-emerald-600" />
+                      <ArrowDownToLine className="w-3.5 h-3.5 text-emerald-600" />
                       <span>Align Bottom</span>
                     </button>
                     <button
@@ -1005,11 +1005,11 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
               {sourceMode === 'pdf' && pdfPageImageUrl && (
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-slate-700 flex items-center space-x-1.5">
-                      <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-xs sm:text-sm font-bold text-slate-700 flex items-center space-x-1.5">
+                      <FileText className="w-4 h-4 text-emerald-600" />
                       <span>Whole PDF Page Overview</span>
                     </span>
-                    <span className="text-[10px] text-slate-500">Click anywhere to jump</span>
+                    <span className="text-xs text-slate-500">Click anywhere to jump</span>
                   </div>
 
                   <div className="flex items-center justify-center">
@@ -1046,53 +1046,53 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
               {/* Orientation & Guides */}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2.5">
                 <div>
-                  <span className="text-xs font-bold text-slate-700 block mb-1.5">Rotate & Flip</span>
+                  <span className="text-sm font-bold text-slate-700 block mb-1.5">Rotate & Flip</span>
                   <div className="grid grid-cols-3 gap-2">
                     <button
                       onClick={rotateCounterClockwise}
-                      className="flex items-center justify-center space-x-1 px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg shadow-sm transition"
+                      className="flex items-center justify-center space-x-1 px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-sm font-semibold rounded-lg shadow-sm transition"
                     >
-                      <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                      <RotateCcw className="w-4 h-4 text-slate-500" />
                       <span>-90°</span>
                     </button>
                     <button
                       onClick={rotateClockwise}
-                      className="flex items-center justify-center space-x-1 px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg shadow-sm transition"
+                      className="flex items-center justify-center space-x-1 px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-sm font-semibold rounded-lg shadow-sm transition"
                     >
-                      <RotateCw className="w-3.5 h-3.5 text-slate-500" />
+                      <RotateCw className="w-4 h-4 text-slate-500" />
                       <span>+90°</span>
                     </button>
                     <button
                       onClick={toggleFlip}
-                      className={`flex items-center justify-center space-x-1 px-2.5 py-1.5 border text-xs font-semibold rounded-lg shadow-sm transition ${
+                      className={`flex items-center justify-center space-x-1 px-2.5 py-1.5 border text-sm font-semibold rounded-lg shadow-sm transition ${
                         flipH
                           ? 'bg-emerald-100/80 border-emerald-400 text-emerald-800'
                           : 'bg-white border-slate-200 hover:bg-slate-100 text-slate-700'
                       }`}
                     >
-                      <FlipHorizontal className="w-3.5 h-3.5" />
+                      <FlipHorizontal className="w-4 h-4" />
                       <span>Flip</span>
                     </button>
                   </div>
                 </div>
 
                 <div className="pt-2 border-t border-slate-200/80">
-                  <span className="text-xs font-bold text-slate-700 block mb-1.5">Alignment Guides</span>
+                  <span className="text-sm font-bold text-slate-700 block mb-1.5">Alignment Guides</span>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={() => setShowFaceGuide(!showFaceGuide)}
-                      className={`flex items-center justify-center space-x-1.5 px-2.5 py-1.5 border text-xs font-semibold rounded-lg transition ${
+                      className={`flex items-center justify-center space-x-1.5 px-2.5 py-1.5 border text-sm font-semibold rounded-lg transition ${
                         showFaceGuide
                           ? 'bg-emerald-100/80 border-emerald-400 text-emerald-800'
                           : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
                       }`}
                     >
-                      <ScanFace className="w-3.5 h-3.5 text-emerald-600" />
+                      <ScanFace className="w-4 h-4 text-emerald-600" />
                       <span>Face Oval</span>
                     </button>
                     <button
                       onClick={() => setShowGrid(!showGrid)}
-                      className={`flex items-center justify-center space-x-1.5 px-2.5 py-1.5 border text-xs font-semibold rounded-lg transition ${
+                      className={`flex items-center justify-center space-x-1.5 px-2.5 py-1.5 border text-sm font-semibold rounded-lg transition ${
                         showGrid
                           ? 'bg-emerald-100/80 border-emerald-400 text-emerald-800'
                           : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
@@ -1107,11 +1107,11 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
               {/* Live ID Card Preview Thumbnail */}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-bold text-slate-700 flex items-center space-x-1">
+                  <span className="text-xs sm:text-sm font-bold text-slate-700 flex items-center space-x-1">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block mr-1"></span>
                     Live Card Result
                   </span>
-                  <span className="text-[10px] text-slate-500">Real-time appearance</span>
+                  <span className="text-xs text-slate-500">Real-time appearance</span>
                 </div>
 
                 <div className="bg-white rounded-lg p-2.5 border border-slate-200 shadow-sm flex items-center space-x-3">
@@ -1123,19 +1123,19 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                     {livePreviewUrl ? (
                       <img src={livePreviewUrl} alt="Thumbnail" className="w-full h-full object-cover object-bottom" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-[8px] text-slate-400">
+                      <div className="w-full h-full flex items-center justify-center text-xs text-slate-400">
                         Preview
                       </div>
                     )}
                   </div>
-                  <div className="text-xs overflow-hidden space-y-0.5">
-                    <p className="font-bold text-slate-800 truncate text-[11px]">
+                  <div className="text-xs sm:text-sm overflow-hidden space-y-0.5">
+                    <p className="font-bold text-slate-800 truncate text-sm">
                       {farmerName || 'Farmer Name'}
                     </p>
-                    <p className="text-[10px] font-mono text-emerald-800 font-semibold truncate">
+                    <p className="text-xs font-mono text-emerald-800 font-semibold truncate">
                       ID: {farmerId || 'IDFARMER123'}
                     </p>
-                    <p className="text-[9px] text-slate-500">
+                    <p className="text-xs text-slate-500">
                       Crop directly from the document to include full head & shoulders.
                     </p>
                   </div>
@@ -1153,16 +1153,16 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                 />
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg shadow-sm transition flex items-center space-x-1.5"
+                  className="px-3.5 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-sm font-semibold rounded-lg shadow-sm transition flex items-center space-x-1.5"
                 >
-                  <Upload className="w-3.5 h-3.5 text-slate-500" />
+                  <Upload className="w-4 h-4 text-slate-500" />
                   <span>Upload Different Image</span>
                 </button>
 
                 {sourceMode === 'custom' && (
                   <button
                     onClick={handleRevertToOriginal}
-                    className="px-3 py-1.5 bg-amber-50 border border-amber-300 hover:bg-amber-100 text-amber-800 text-xs font-semibold rounded-lg shadow-sm transition"
+                    className="px-3.5 py-2 bg-amber-50 border border-amber-300 hover:bg-amber-100 text-amber-800 text-sm font-semibold rounded-lg shadow-sm transition"
                   >
                     Revert to PDF
                   </button>
@@ -1174,7 +1174,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
 
         {/* Modal Footer */}
         <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-          <p className="text-xs text-slate-500 hidden sm:block">
+          <p className="text-sm text-slate-500 hidden sm:block">
             {sourceMode === 'pdf'
               ? 'Cropping from full 250 DPI PDF document page for maximum print sharpness.'
               : 'Changes apply directly to your generated card preview and downloads.'}
@@ -1182,14 +1182,14 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
           <div className="flex items-center space-x-2.5 ml-auto">
             <button
               onClick={onClose}
-              className="px-4 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-lg transition"
+              className="px-4 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 text-sm font-bold rounded-lg transition"
             >
               Cancel
             </button>
             <button
               onClick={handleApply}
               disabled={!currentRawUrl}
-              className="px-5 py-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow-md transition flex items-center space-x-1.5"
+              className="px-5 py-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white text-sm font-bold rounded-lg shadow-md transition flex items-center space-x-1.5"
             >
               <Check className="w-4 h-4" />
               <span>Apply & Save Photo</span>

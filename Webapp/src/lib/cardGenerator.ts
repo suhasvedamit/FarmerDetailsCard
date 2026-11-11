@@ -337,7 +337,7 @@ export async function generateFrontCardCanvas(
   // 4. Scannable QR Code (Right Side Box in Vertical Center of Card)
   const qw = 235;
   const qh = 235;
-  const qx = 805;
+  const qx = 795;
   const qy = 180; // Positioned with fields for better vertical balance and spacing
   const qRadius = 12;
 
