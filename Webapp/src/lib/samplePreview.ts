@@ -1,4 +1,5 @@
 import { FarmerRecord } from '../types';
+import { getTranslations, Language } from '../i18n';
 
 const SAMPLE_FARMER_PORTRAIT_SVG = `
 <svg xmlns="http://www.w3.org/2000/svg" width="382" height="482" viewBox="0 0 382 482">
@@ -53,50 +54,58 @@ export const SAMPLE_FARMER_PHOTO_URL = `data:image/svg+xml;charset=utf-8,${encod
   SAMPLE_FARMER_PORTRAIT_SVG
 )}`;
 
-export const SAMPLE_FARMER_RECORD: FarmerRecord = {
-  farmer_id: 'MH2710045892',
-  enrollment_no: 'MH284910234',
-  farmer_name: 'Ramesh Vitthal Patil',
-  identifier_name: 'Vitthal Patil',
-  dob: '15/06/1982',
-  age: '44',
-  gender: 'Male',
-  caste_category: 'OBC',
-  mobile_number: '98XXXXXX21',
-  aadhaar_number: 'XXXX XXXX 4821',
-  pan_card: 'ABCDE1234F',
-  address: 'At Post Shirur, Tal. Shirur, Dist. Pune, Maharashtra - 412210',
-  photo_url: SAMPLE_FARMER_PHOTO_URL,
-  land_detail: {
-    khata_no: '412',
-    total_area_hectare: '1.85',
-    number_of_lands: '2',
-    survey_gat_no: '102/4',
-    village: 'Shirur',
-    sub_district: 'Shirur',
-    district: 'Pune',
-    state: 'Maharashtra',
-    summary: '102/4 (1.20 Ha), 105/1 (0.65 Ha)',
-  },
-  land_records: [
-    {
-      survey_no: '102/4',
-      village: 'Shirur',
-      owner_type: 'Single',
-      area: '1.20 Ha',
+export function getSampleFarmerRecord(language: Language = 'en'): FarmerRecord {
+  const sample = getTranslations(language).cardCanvas.sampleRecord;
+
+  return {
+    farmer_id: 'MH2710045892',
+    enrollment_no: 'MH284910234',
+    farmer_name: sample.farmer_name,
+    identifier_name: sample.identifier_name,
+    dob: '15/06/1982',
+    age: '44',
+    gender: sample.gender,
+    caste_category: 'OBC',
+    mobile_number: '98XXXXXX21',
+    aadhaar_number: 'XXXX XXXX 4821',
+    pan_card: 'ABCDE1234F',
+    address: sample.address,
+    photo_url: SAMPLE_FARMER_PHOTO_URL,
+    land_detail: {
+      khata_no: '412',
+      total_area_hectare: '1.85',
+      number_of_lands: '2',
+      survey_gat_no: '102/4',
+      village: sample.village,
+      sub_district: sample.sub_district,
+      district: sample.district,
+      state: sample.state,
+      summary: '102/4 (1.20 Ha), 105/1 (0.65 Ha)',
     },
-    {
-      survey_no: '105/1',
-      village: 'Shirur',
-      owner_type: 'Joint',
-      area: '0.65 Ha',
+    land_records: [
+      {
+        khata_no: '412',
+        survey_no: '102/4',
+        village: sample.village,
+        owner_type: sample.owner_type_1,
+        area: '1.20 Ha',
+      },
+      {
+        khata_no: '518',
+        survey_no: '105/1',
+        village: sample.village,
+        owner_type: sample.owner_type_2,
+        area: '0.65 Ha',
+      },
+    ],
+    bank_detail: {
+      bank_name_branch: sample.bank_name_branch,
+      bank_name: sample.bank_name_branch,
+      account_no: 'XXXXXXXX4910',
+      ifsc_code: 'SBIN0000482',
     },
-  ],
-  bank_detail: {
-    bank_name_branch: 'State Bank of India, Shirur',
-    bank_name: 'State Bank of India, Shirur',
-    account_no: 'XXXXXXXX4910',
-    ifsc_code: 'SBIN0000482',
-  },
-};
+  };
+}
+
+export const SAMPLE_FARMER_RECORD: FarmerRecord = getSampleFarmerRecord('en');
 

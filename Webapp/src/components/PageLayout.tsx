@@ -11,12 +11,12 @@ import {
 import { AppPage, getPageUrl } from '../lib/navigation';
 import { Header } from './Header';
 import { Footer } from './Footer';
+import { useLanguage } from '../i18n';
 
 interface PageLayoutProps {
   currentPage: AppPage;
   title: string;
   subtitle: string;
-  marathiSubtitle?: string;
   lastUpdated?: string;
   children: React.ReactNode;
   onNavigate?: (page: AppPage) => void;
@@ -26,16 +26,18 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
   currentPage,
   title,
   subtitle,
-  marathiSubtitle,
-  lastUpdated = 'नोव्हेंबर २०२६ / November 2026',
+  lastUpdated,
   children,
   onNavigate,
 }) => {
+  const { t } = useLanguage();
+  const resolvedLastUpdated = lastUpdated || t.pageLayout.lastUpdatedValue;
+
   const subNavItems: { page: AppPage; label: string; icon: React.ReactNode }[] = [
-    { page: 'terms', label: 'Terms & Conditions', icon: <FileText className="w-3.5 h-3.5" /> },
-    { page: 'privacy', label: 'Privacy Policy', icon: <ShieldCheck className="w-3.5 h-3.5" /> },
-    { page: 'disclaimer', label: 'Legal Disclaimer', icon: <AlertTriangle className="w-3.5 h-3.5" /> },
-    { page: 'contact', label: 'Contact Us', icon: <Mail className="w-3.5 h-3.5" /> },
+    { page: 'terms', label: t.pageLayout.navTerms, icon: <FileText className="w-3.5 h-3.5" /> },
+    { page: 'privacy', label: t.pageLayout.navPrivacy, icon: <ShieldCheck className="w-3.5 h-3.5" /> },
+    { page: 'disclaimer', label: t.pageLayout.navDisclaimer, icon: <AlertTriangle className="w-3.5 h-3.5" /> },
+    { page: 'contact', label: t.pageLayout.navContact, icon: <Mail className="w-3.5 h-3.5" /> },
   ];
 
   const handleNavigate = (page: AppPage) => {
@@ -65,14 +67,14 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         {/* Breadcrumb + Sub-page Pill Switcher */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4 print:hidden">
-          <nav className="flex items-center space-x-1.5 text-xs text-slate-500" aria-label="Breadcrumb">
+          <nav className="flex items-center space-x-1.5 text-xs text-slate-500" aria-label={t.pageLayout.breadcrumbAria}>
             <a
               href={getPageUrl('home')}
               onClick={(e) => handleLinkClick(e, 'home')}
               className="hover:text-emerald-700 transition flex items-center space-x-1 font-medium"
             >
               <Home className="w-3.5 h-3.5" />
-              <span>Home</span>
+              <span>{t.common.home}</span>
             </a>
             <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
             <span className="text-slate-800 font-semibold">{title}</span>
@@ -107,22 +109,16 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
           <div className="relative z-10 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                Information &amp; Guidelines
+                {t.pageLayout.infoBadge}
               </span>
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                Last Updated: {lastUpdated}
+                {t.pageLayout.lastUpdatedLabel} {resolvedLastUpdated}
               </span>
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
               {title}
             </h1>
-
-            {marathiSubtitle && (
-              <p className="text-sm font-medium text-emerald-700">
-                {marathiSubtitle}
-              </p>
-            )}
 
             <p className="text-sm sm:text-base text-slate-600 leading-relaxed max-w-3xl pt-1">
               {subtitle}
@@ -139,10 +135,10 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
         <section className="bg-gradient-to-r from-emerald-50 via-teal-50 to-slate-50 border border-emerald-200 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4 print:hidden">
           <div className="space-y-1 text-center sm:text-left">
             <h3 className="text-base font-bold text-slate-900">
-              Ready to create your Farmer Summary Card?
+              {t.pageLayout.ctaTitle}
             </h3>
             <p className="text-xs text-slate-600">
-              Upload your PM-Kisan or AgriStack PDF document to extract details and generate front &amp; back printable cards instantly.
+              {t.pageLayout.ctaDescription}
             </p>
           </div>
           <a
@@ -150,7 +146,7 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
             onClick={(e) => handleLinkClick(e, 'create-card')}
             className="shrink-0 px-5 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-md transition flex items-center space-x-2"
           >
-            <span>Open Card Maker</span>
+            <span>{t.pageLayout.ctaButton}</span>
             <ExternalLink className="w-3.5 h-3.5" />
           </a>
         </section>

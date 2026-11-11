@@ -4,6 +4,7 @@ import {
   CardSide,
   ImageFitMode,
 } from './cardTemplates';
+import { getTranslations, Language } from '../i18n';
 
 export const CUSTOM_IMAGE_MAX_BYTES = 15 * 1024 * 1024; // 15 MB
 const TARGET_EXPORT_W = CARD_CANVAS_WIDTH * 2; // 2100 px
@@ -18,24 +19,28 @@ export interface LoadedImageFileResult {
   fileName: string;
 }
 
-function loadImgElement(src: string): Promise<HTMLImageElement> {
+function loadImgElement(src: string, decodeErrorMsg: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Could not decode the selected image file.'));
+    img.onerror = () => reject(new Error(decodeErrorMsg));
     img.src = src;
   });
 }
 
-export async function readImageFileAsDataUrl(file: File): Promise<LoadedImageFileResult> {
+export async function readImageFileAsDataUrl(
+  file: File,
+  language: Language = 'en'
+): Promise<LoadedImageFileResult> {
+  const errMsgs = getTranslations(language).customDesignModal;
   const isImageMime = file.type.startsWith('image/');
   const hasAllowedExt = ALLOWED_EXTENSIONS.test(file.name);
   if (!isImageMime && !hasAllowedExt) {
-    throw new Error('Please upload a valid image file (PNG, JPG, WebP, or SVG).');
+    throw new Error(errMsgs.errInvalidImageType);
   }
 
   if (file.size > CUSTOM_IMAGE_MAX_BYTES) {
-    throw new Error('Image file is larger than 15 MB. Please upload a smaller image.');
+    throw new Error(errMsgs.errImageTooLarge);
   }
 
   const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -44,14 +49,14 @@ export async function readImageFileAsDataUrl(file: File): Promise<LoadedImageFil
       if (typeof reader.result === 'string') {
         resolve(reader.result);
       } else {
-        reject(new Error('Failed to read image file.'));
+        reject(new Error(errMsgs.errReadImage));
       }
     };
-    reader.onerror = () => reject(new Error('Failed to read image file.'));
+    reader.onerror = () => reject(new Error(errMsgs.errReadImage));
     reader.readAsDataURL(file);
   });
 
-  const img = await loadImgElement(dataUrl);
+  const img = await loadImgElement(dataUrl, errMsgs.errDecodeImage);
   const width = img.naturalWidth || img.width || TARGET_EXPORT_W;
   const height = img.naturalHeight || img.height || TARGET_EXPORT_H;
 
@@ -81,7 +86,7 @@ export async function renderFittedCardBackground(
   fitMode: ImageFitMode = 'cover',
   fillColor: string = '#ffffff'
 ): Promise<string> {
-  const img = await loadImgElement(sourceUrl);
+  const img = await loadImgElement(sourceUrl, 'Could not decode the selected image file.');
   const imgW = img.naturalWidth || img.width || TARGET_EXPORT_W;
   const imgH = img.naturalHeight || img.height || TARGET_EXPORT_H;
 

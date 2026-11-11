@@ -1,6 +1,7 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import { createWorker } from 'tesseract.js';
 import { FarmerRecord, LandRow } from '../types';
+import { formatMessage, getTranslations, Language } from '../i18n';
 
 // Set up PDF.js worker from CDN
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
@@ -983,6 +984,51 @@ function cleanSurveyNo(sNo?: string, ssNo?: string): string {
   return `${s}/${ss}`;
 }
 
+function cleanKhataVal(raw?: string): string {
+  const v = (raw || '').trim();
+  if (!v || /^[\-*\.]+$/.test(v) || /^(?:n\/?a|nil|none|khata|khate|no|number)$/i.test(v)) {
+    return '';
+  }
+  return v;
+}
+
+interface LandTableHeaderCols {
+  village: number;
+  survey: number;
+  owner: number;
+  area: number;
+  khata: number;
+  subDistrict: number;
+  district: number;
+  state: number;
+}
+
+function detectLandHeaderCols(parts: string[]): LandTableHeaderCols | null {
+  if (parts.length < 3) return null;
+  const lower = parts.map(p => p.toLowerCase());
+  const hasVillage = lower.some(p => p.includes('village') || p.includes('गाव'));
+  const hasSurvey = lower.some(p => /s\s*no|s\/s|survey|gat|सर्व्हे/i.test(p));
+  const hasArea = lower.some(p => /extent|assigned\s*area|area|क्षेत्र/i.test(p));
+
+  if (!hasVillage && !(hasSurvey && hasArea)) return null;
+
+  const ownerIdx = lower.findIndex(p => /owner\s*type|मालकी\s*प्रकार/i.test(p));
+  return {
+    village: lower.findIndex(p => p.includes('village') || p.includes('गाव')),
+    survey: lower.findIndex(p => /s\s*no|s\/s|survey|gat|सर्व्हे/i.test(p)),
+    owner: ownerIdx >= 0
+      ? ownerIdx
+      : lower.findIndex(p => p.includes('owner') && !p.includes('name') && !p.includes('share')),
+    area: lower.findIndex(p => /extent|assigned\s*area|area|क्षेत्र/i.test(p)),
+    khata: lower.findIndex(
+      p => (p.includes('khata') || p.includes('खाते') || p.includes('खाता')) && !p.includes('बचत') && !p.includes('bank')
+    ),
+    subDistrict: lower.findIndex(p => /sub\s*district|taluk|tehsil|तालुका/i.test(p)),
+    district: lower.findIndex(p => p.includes('district') && !p.includes('sub')),
+    state: lower.findIndex(p => p.includes('state')),
+  };
+}
+
 function resolveVillage(rawVillage: string, address?: string, nextLine?: string): string {
   let v = (rawVillage || '').trim();
   if (!v) return '';
@@ -1018,9 +1064,10 @@ function resolveVillage(rawVillage: string, address?: string, nextLine?: string)
  * Extracts multiple Land Details records dynamically from PDF text (digital or OCR).
  * Uses column mapping:
  * 1. S No./S/S no. -> survey_no
- * 2. Village -> village
- * 3. Owner Type -> owner_type
- * 4. Extent Assigned Area -> area
+ * 2. Khata No. -> khata_no
+ * 3. Village -> village
+ * 4. Owner Type -> owner_type
+ * 5. Extent Assigned Area -> area
  * Strictly limits to max 5 records. Never hardcodes any place, name, or number.
  */
 export function extractLandRecordsFromText(
@@ -1047,10 +1094,16 @@ export function extractLandRecordsFromText(
   const lines = pre.split('\n').map(l => l.trim()).filter(Boolean);
 
   // Strategy 1: AgriStack OCR table rows (detect lines having decimal Area + Owner Type)
+  let s1HeaderCols: LandTableHeaderCols | null = null;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     // Stop processing if we reached the consent or annexure section after the table
     if (line.includes('Consent by Farmer') || line.includes('Annexure')) break;
+
+    if (!s1HeaderCols && (line.includes('|') || line.includes('\t')) && !/\d+\.\d+/.test(line)) {
+      const detected = detectLandHeaderCols(splitLineIntoCols(line));
+      if (detected) s1HeaderCols = detected;
+    }
 
     // Check for decimal areas (e.g. 0.070000, 0.820000, 1.230000)
     const areaMatches = [...line.matchAll(/\b(\d+\.\d+)[,\s]*/g)];
@@ -1060,6 +1113,14 @@ export function extractLandRecordsFromText(
       const assignedArea = cleanAreaVal(areaMatches[areaMatches.length - 1][1]);
       const ownerType = ownerTypeMatch[1];
       const nextLine = lines[i + 1] || '';
+
+      let rowKhata = '';
+      if (s1HeaderCols && s1HeaderCols.khata >= 0 && (line.includes('|') || line.includes('\t'))) {
+        const fullParts = splitLineIntoCols(line);
+        if (fullParts.length > s1HeaderCols.khata) {
+          rowKhata = cleanKhataVal(fullParts[s1HeaderCols.khata]);
+        }
+      }
 
       const firstAreaIndex = line.indexOf(areaMatches[0][0]);
       const lineBeforeArea = line.substring(0, firstAreaIndex).trim();
@@ -1099,7 +1160,16 @@ export function extractLandRecordsFromText(
       // 1. Check pipe parts for survey numbers
       if (lineBeforeArea.includes('|')) {
         const parts = lineBeforeArea.split('|').map(p => p.trim());
-        for (let p = 1; p < parts.length; p++) {
+        const startIdx = s1HeaderCols && s1HeaderCols.survey >= 1 && s1HeaderCols.survey < parts.length
+          ? s1HeaderCols.survey
+          : 1;
+        const candidateIndices = [
+          startIdx,
+          ...Array.from({ length: Math.max(0, parts.length - 1) }, (_, k) => k + 1).filter(idx => idx !== startIdx),
+        ];
+
+        for (const p of candidateIndices) {
+          if (s1HeaderCols && p === s1HeaderCols.khata) continue;
           const part = parts[p];
           // Two tokens separated by space in cell, e.g. "52 16/4", "67 1", "14 *"
           const mSpace = part.match(/\b(\d{1,5})\s+([0-9A-Za-z\u0900-\u097F\/\*\-]+)\b/);
@@ -1120,7 +1190,8 @@ export function extractLandRecordsFromText(
           const mSingle = part.match(/^\d{1,5}$/);
           if (mSingle) {
             sNo = mSingle[0];
-            if (parts[p + 1] && /^[0-9A-Za-z\u0900-\u097F\/\*\-]+$/.test(parts[p + 1])) {
+            const nextIsKhata = s1HeaderCols && p + 1 === s1HeaderCols.khata;
+            if (!nextIsKhata && parts[p + 1] && /^[0-9A-Za-z\u0900-\u097F\/\*\-]+$/.test(parts[p + 1])) {
               ssNo = parts[p + 1];
             }
             if (p >= 1 && !villageRaw && /^[A-Za-z\s]+$/.test(parts[p - 1])) villageRaw = parts[p - 1];
@@ -1160,12 +1231,14 @@ export function extractLandRecordsFromText(
 
         if (!isDuplicate) {
           extractedRows.push({
+            khata_no: rowKhata,
             survey_no: surveyFinal,
             village: villageFinal,
             owner_type: ownerType,
             area: assignedArea,
           });
 
+          if (!foundKhataNo && rowKhata) foundKhataNo = rowKhata;
           if (!foundDistrict && districtRaw) foundDistrict = correctDistrict(districtRaw);
           if (!foundSubDistrict && subDistrictRaw) foundSubDistrict = subDistrictRaw;
           if (!foundState && stateRaw) foundState = stateRaw;
@@ -1178,16 +1251,7 @@ export function extractLandRecordsFromText(
 
   // Strategy 2: Generic Pipe-delimited or Tab-delimited table with column headers
   if (extractedRows.length === 0) {
-    let headerCols: {
-      village: number;
-      survey: number;
-      owner: number;
-      area: number;
-      khata: number;
-      subDistrict: number;
-      district: number;
-      state: number;
-    } | null = null;
+    let headerCols: LandTableHeaderCols | null = null;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -1196,25 +1260,12 @@ export function extractLandRecordsFromText(
       const parts = splitLineIntoCols(line);
       if (parts.length < 3) continue;
 
-      const lower = parts.map(p => p.toLowerCase());
-      const hasVillage = lower.some(p => p.includes('village') || p.includes('गाव'));
-      const hasSurvey = lower.some(p => /s\s*no|s\/s|survey|gat|सर्व्हे/i.test(p));
-      const hasArea = lower.some(p => /extent|assigned\s*area|area|क्षेत्र/i.test(p));
-
-      if (!headerCols && (hasVillage || (hasSurvey && hasArea))) {
-        headerCols = {
-          village: lower.findIndex(p => p.includes('village') || p.includes('गाव')),
-          survey: lower.findIndex(p => /s\s*no|s\/s|survey|gat|सर्व्हे/i.test(p)),
-          owner: lower.findIndex(p => /owner\s*type|मालकी\s*प्रकार/i.test(p)) >= 0
-            ? lower.findIndex(p => /owner\s*type|मालकी\s*प्रकार/i.test(p))
-            : lower.findIndex(p => p.includes('owner') && !p.includes('name') && !p.includes('share')),
-          area: lower.findIndex(p => /extent|assigned\s*area|area|क्षेत्र/i.test(p)),
-          khata: lower.findIndex(p => p.includes('khata') || p.includes('खाते')),
-          subDistrict: lower.findIndex(p => /sub\s*district|taluk|tehsil|तालुका/i.test(p)),
-          district: lower.findIndex(p => p.includes('district') && !p.includes('sub')),
-          state: lower.findIndex(p => p.includes('state')),
-        };
-        continue;
+      if (!headerCols) {
+        const detected = detectLandHeaderCols(parts);
+        if (detected) {
+          headerCols = detected;
+          continue;
+        }
       }
 
       if (headerCols) {
@@ -1224,6 +1275,7 @@ export function extractLandRecordsFromText(
         const s = headerCols.survey >= 0 ? parts[headerCols.survey] : '';
         const o = headerCols.owner >= 0 ? parts[headerCols.owner] : '';
         const a = headerCols.area >= 0 ? parts[headerCols.area] : '';
+        const k = headerCols.khata >= 0 ? cleanKhataVal(parts[headerCols.khata]) : '';
 
         const cleanS = cleanSurveyNo(s);
         const cleanA = cleanAreaVal(a);
@@ -1261,6 +1313,7 @@ export function extractLandRecordsFromText(
 
         if (!isDuplicate) {
           extractedRows.push({
+            khata_no: k,
             survey_no: surveyFinal,
             village: villageFinal,
             owner_type: ownerType,
@@ -1270,7 +1323,7 @@ export function extractLandRecordsFromText(
           if (!foundState && headerCols.state >= 0) foundState = parts[headerCols.state];
           if (!foundDistrict && headerCols.district >= 0) foundDistrict = correctDistrict(parts[headerCols.district]);
           if (!foundSubDistrict && headerCols.subDistrict >= 0) foundSubDistrict = parts[headerCols.subDistrict];
-          if (!foundKhataNo && headerCols.khata >= 0) foundKhataNo = parts[headerCols.khata];
+          if (!foundKhataNo && k) foundKhataNo = k;
         }
 
         if (extractedRows.length >= 5) break;
@@ -1286,6 +1339,7 @@ export function extractLandRecordsFromText(
       const sm = line.match(spaceRegex);
       if (sm) {
         extractedRows.push({
+          khata_no: '',
           village: resolveVillage(sm[1], address),
           survey_no: sm[2].trim(),
           owner_type: sm[3].trim(),
@@ -1320,6 +1374,24 @@ export function extractLandRecordsFromText(
     }
   }
 
+  let docKhataFallback = '';
+  if (!foundKhataNo) {
+    for (const line of lines) {
+      if (/(?:Bank|Savings|IFSC|Account|बचत)/i.test(line)) continue;
+      const kMatch =
+        line.match(/(?:Khata|Khate)\s*(?:No\.?|Number|Id)\s*[:\-\s]+([A-Za-z0-9\/\-]{1,20})/i) ||
+        line.match(/(?:खाते|खाता)\s*(?:क्र\.?|क्रमांक)\s*[:\-\s]+([0-9A-Za-z\u0966-\u096F\/\-]{1,20})/i);
+      if (kMatch) {
+        const candidate = cleanKhataVal(kMatch[1]);
+        if (candidate) {
+          docKhataFallback = candidate;
+          foundKhataNo = candidate;
+          break;
+        }
+      }
+    }
+  }
+
   if (!foundTotalArea) {
     const areaMatch = pre.match(/(?:Total\s*Land\s*Area\s*Owned\s*\(Hectare\)|Extent\s*Total\s*Area|Extent\s*Assigned\s*Area)\s*[:\-\s]*([\d\.]+)/i);
     if (areaMatch) foundTotalArea = cleanAreaVal(areaMatch[1]);
@@ -1328,8 +1400,12 @@ export function extractLandRecordsFromText(
 
   // Guarantee at least 1 row and strictly max 5 records
   const finalRows: LandRow[] = extractedRows.length > 0
-    ? extractedRows.slice(0, 5)
+    ? extractedRows.slice(0, 5).map(row => ({
+        ...row,
+        khata_no: row.khata_no || docKhataFallback,
+      }))
     : [{
+        khata_no: foundKhataNo || '',
         survey_no: '',
         village: '',
         owner_type: '',
@@ -1351,7 +1427,7 @@ export function extractLandRecordsFromText(
     village: primaryRow.village || '',
     surveyNo: primaryRow.survey_no || '',
     totalArea: foundTotalArea,
-    khataNo: foundKhataNo,
+    khataNo: primaryRow.khata_no || foundKhataNo,
     subDistrict: foundSubDistrict,
     district: foundDistrict,
     state: foundState,
@@ -1367,13 +1443,15 @@ export function extractLandRecordsFromText(
  */
 export async function extractFarmerDataFromPdf(
   pdfBuffer: ArrayBuffer,
-  onProgress?: ExtractionProgressCallback
+  onProgress?: ExtractionProgressCallback,
+  language: Language = 'en'
 ): Promise<FarmerRecord> {
-  onProgress?.('Loading PDF document...', 10);
+  const pt = getTranslations(language).pdfProgress;
+  onProgress?.(pt.loadingPdf, 10);
   const pdf = await pdfjsLib.getDocument({ data: pdfBuffer }).promise;
   const totalPages = pdf.numPages;
 
-  onProgress?.('Rendering Page 1 at 250 DPI & extracting photograph...', 25);
+  onProgress?.(pt.renderingPage1, 25);
   // High-res canvas render
   const p1RawCanvas = await renderPdfPageToCanvas(pdf, 1, 2.5);
   const photoDetails = extractPhotoDetailsFromCanvas(p1RawCanvas);
@@ -1391,24 +1469,24 @@ export async function extractFarmerDataFromPdf(
 
   // If digital text is missing or sparse (scanned form), perform OCR
   if (!hasDigitalText || p1Text.trim().length < 60) {
-    onProgress?.('Initializing Tesseract WebAssembly engine...', 40);
+    onProgress?.(pt.initializingOcr, 40);
     const worker = await createWorker('eng', 1, {
       logger: m => {
         if (m.status === 'recognizing text') {
           const pct = Math.floor(40 + (m.progress || 0) * 45);
-          onProgress?.(`Recognizing text (${Math.floor(m.progress * 100)}%)...`, pct);
+          onProgress?.(formatMessage(pt.recognizingTextPct, { pct: Math.floor(m.progress * 100) }), pct);
         }
       }
     });
 
     // Page 1 OCR (Demographics, Farmer ID, Enrollment)
-    onProgress?.('Recognizing Page 1 (Demographics & Photo)...', 45);
+    onProgress?.(pt.recognizingPage1, 45);
     const p1Res = await worker.recognize(p1RawCanvas);
     p1Text = p1Res.data.text;
 
     // Page 2 OCR (Mobile & Address)
     if (totalPages >= 2) {
-      onProgress?.('Recognizing Page 2 (Mobile & Address)...', 65);
+      onProgress?.(pt.recognizingPage2, 65);
       const p2RawCanvas = await renderPdfPageToCanvas(pdf, 2, 2.5);
       const p2Res = await worker.recognize(p2RawCanvas);
       p2Text = p2Res.data.text;
@@ -1416,7 +1494,7 @@ export async function extractFarmerDataFromPdf(
 
     // Page 3 OCR (Land Details)
     if (totalPages >= 3) {
-      onProgress?.('Recognizing Page 3 (Land Ownership)...', 80);
+      onProgress?.(pt.recognizingPage3, 80);
       const p3RawCanvas = await renderPdfPageToCanvas(pdf, 3, 2.5);
       const p3Res = await worker.recognize(p3RawCanvas);
       p3Text = p3Res.data.text;
@@ -1425,7 +1503,7 @@ export async function extractFarmerDataFromPdf(
     // Final Page OCR (Signature block with clean typed Farmer Name)
     let pLastText = '';
     if (totalPages >= 4) {
-      onProgress?.('Recognizing final page signature verification...', 90);
+      onProgress?.(pt.recognizingFinalPage, 90);
       const pLastCanvas = await renderPdfPageToCanvas(pdf, totalPages, 2.5);
       const pLastRes = await worker.recognize(pLastCanvas);
       pLastText = pLastRes.data.text;
@@ -1436,7 +1514,7 @@ export async function extractFarmerDataFromPdf(
     fullText = [p1Text, p2Text, p3Text, pLastText].join('\n---\n');
   }
 
-  onProgress?.('Extracting and validating credentials...', 95);
+  onProgress?.(pt.extractingCredentials, 95);
 
   // 1. Farmer ID
   let farmerId = '';
@@ -1579,7 +1657,7 @@ export async function extractFarmerDataFromPdf(
   const accountNo = extractAccountNumber(fullText);
   const ifscCode = extractIfscCode(fullText);
 
-  onProgress?.('Complete!', 100);
+  onProgress?.(pt.complete, 100);
 
   return {
     farmer_id: farmerId,

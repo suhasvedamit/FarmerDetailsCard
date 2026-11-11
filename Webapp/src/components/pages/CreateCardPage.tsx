@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { CreditCard, Home, ChevronRight, Lock, Loader2, Sparkles } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { CreditCard, Home, ChevronRight, Lock, Loader2 } from 'lucide-react';
 import { Header } from '../Header';
 import { DropZone } from '../DropZone';
 import { ProgressBar } from '../ProgressBar';
@@ -19,6 +19,7 @@ import {
   combineCardCanvases,
 } from '../../lib/cardGenerator';
 import { saveExtractedRecord, saveGeneratedRecord } from '../../lib/supabase';
+import { useLanguage } from '../../i18n';
 
 function createSessionId(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID
@@ -61,7 +62,7 @@ function hasFarmerRecordContent(record: FarmerRecord): boolean {
 
   if (
     record.land_records?.some(
-      (row) => row.survey_no || row.village || row.owner_type || row.area
+      (row) => row.khata_no || row.survey_no || row.village || row.owner_type || row.area
     )
   ) {
     return true;
@@ -69,13 +70,13 @@ function hasFarmerRecordContent(record: FarmerRecord): boolean {
 
   return Boolean(
     record.land_detail?.khata_no ||
-    record.land_detail?.total_area_hectare ||
-    record.land_detail?.survey_gat_no ||
-    record.land_detail?.village ||
-    record.land_detail?.sub_district ||
-    record.land_detail?.district ||
-    record.land_detail?.state ||
-    record.land_detail?.summary
+      record.land_detail?.total_area_hectare ||
+      record.land_detail?.survey_gat_no ||
+      record.land_detail?.village ||
+      record.land_detail?.sub_district ||
+      record.land_detail?.district ||
+      record.land_detail?.state ||
+      record.land_detail?.summary
   );
 }
 
@@ -94,6 +95,8 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
   onSelectTemplate,
   onNavigate,
 }) => {
+  const { language, t, format } = useLanguage();
+
   const [data, setData] = useState<FarmerRecord>(() => createEmptyFarmerRecord());
   const [sessionId, setSessionId] = useState<string>(() => createSessionId());
   const [originalExtractedData, setOriginalExtractedData] = useState<FarmerRecord | null>(null);
@@ -108,6 +111,13 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
   const [bothPreviewUrl, setBothPreviewUrl] = useState('');
   const [isPhotoEditorOpen, setIsPhotoEditorOpen] = useState(false);
 
+  // Reset cached card previews whenever user changes the app language
+  useEffect(() => {
+    setFrontPreviewUrl('');
+    setBackPreviewUrl('');
+    setBothPreviewUrl('');
+  }, [language]);
+
   const handleTemplateChange = (templateId: string) => {
     onSelectTemplate(templateId);
     setFrontPreviewUrl('');
@@ -118,20 +128,24 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
   // Upload custom PDF file
   const handleFileSelected = async (file: File) => {
     if (file.size > 5 * 1024 * 1024) {
-      alert('File size exceeds the 5 MB limit. Please upload a PDF under 5 MB.');
+      alert(t.createCard.fileSizeExceeded);
       return;
     }
 
     setIsProcessing(true);
-    setProgressMsg(`Reading ${file.name}...`);
+    setProgressMsg(format(t.createCard.readingFile, { fileName: file.name }));
     setProgressPct(10);
 
     try {
       const buffer = await file.arrayBuffer();
-      const extracted = await extractFarmerDataFromPdf(buffer, (msg, pct) => {
-        setProgressMsg(msg);
-        setProgressPct(pct);
-      });
+      const extracted = await extractFarmerDataFromPdf(
+        buffer,
+        (msg, pct) => {
+          setProgressMsg(msg);
+          setProgressPct(pct);
+        },
+        language
+      );
 
       const newSessionId = createSessionId();
 
@@ -146,13 +160,13 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
 
       // Non-blocking background sync (never interrupts user experience if offline/blocked)
       try {
-        saveExtractedRecord(extracted, newSessionId, file.name).catch(() => { });
+        saveExtractedRecord(extracted, newSessionId, file.name).catch(() => {});
       } catch (logErr) {
         console.warn('[Supabase] Non-fatal background sync error:', logErr);
       }
     } catch (err: any) {
       console.error('Extraction error:', err);
-      alert(`Extraction failed: ${err.message || err}`);
+      alert(format(t.createCard.extractionFailed, { error: err?.message || String(err) }));
     } finally {
       setIsProcessing(false);
     }
@@ -175,9 +189,10 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
   const handleGenerateCard = async () => {
     if (isProcessing) return;
     try {
+      const renderOptions = { language };
       const [frontCanvas, backCanvas] = await Promise.all([
-        generateFrontCardCanvas(data, selectedTemplateId),
-        generateBackCardCanvas(data, selectedTemplateId),
+        generateFrontCardCanvas(data, selectedTemplateId, renderOptions),
+        generateBackCardCanvas(data, selectedTemplateId, renderOptions),
       ]);
       const bothCanvas = combineCardCanvases(frontCanvas, backCanvas);
       setFrontPreviewUrl(frontCanvas.toDataURL('image/png'));
@@ -188,23 +203,27 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
       // Non-blocking background sync (never interrupts user experience if offline/blocked)
       if (sessionId) {
         try {
-          saveGeneratedRecord(data, sessionId, originalExtractedData).catch(() => { });
+          saveGeneratedRecord(data, sessionId, originalExtractedData).catch(() => {});
         } catch (logErr) {
           console.warn('[Supabase] Non-fatal background sync error:', logErr);
         }
       }
     } catch (err) {
       console.error('Failed to generate card:', err);
-      alert('Card generation failed');
+      alert(t.createCard.cardGenFailed);
     }
   };
 
   const generateButtonLabel =
-    dataSource === 'pdf' ? 'Review Changes and Generate Card' : 'Preview & Generate ID Card';
+    dataSource === 'pdf'
+      ? t.createCard.btnReviewAndGenerate
+      : t.createCard.btnPreviewAndGenerate;
   const canResetForm = hasFarmerRecordContent(data);
 
   const renderGenerateActionCard = (wrapperClassName = '') => (
-    <div className={`bg-emerald-50/90 rounded-2xl border border-emerald-200 p-4 space-y-3 shadow-sm ${wrapperClassName}`}>
+    <div
+      className={`bg-emerald-50/90 rounded-2xl border border-emerald-200 p-4 space-y-3 shadow-sm ${wrapperClassName}`}
+    >
       <div className="bg-white rounded-xl border border-emerald-100 p-2.5">
         <BackgroundSelector
           selectedTemplateId={selectedTemplateId}
@@ -237,10 +256,11 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
       />
 
       <div
-        className={`min-h-screen flex flex-col bg-slate-50 text-slate-800 transition-opacity duration-300 ${!hasAcceptedDisclaimer
+        className={`min-h-screen flex flex-col bg-slate-50 text-slate-800 transition-opacity duration-300 ${
+          !hasAcceptedDisclaimer
             ? 'invisible pointer-events-none select-none max-h-screen overflow-hidden'
             : 'opacity-100'
-          }`}
+        }`}
         aria-hidden={!hasAcceptedDisclaimer}
       >
         <Header currentPage="create-card" onNavigate={onNavigate} />
@@ -249,7 +269,10 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
           {/* Workspace Intro Strip & Breadcrumb */}
           <div className="bg-white rounded-2xl border border-slate-200 px-5 py-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div className="space-y-1">
-              <nav className="flex items-center space-x-1.5 text-sm text-slate-500" aria-label="Breadcrumb">
+              <nav
+                className="flex items-center space-x-1.5 text-sm text-slate-500"
+                aria-label={t.pageLayout.breadcrumbAria}
+              >
                 <a
                   href={getPageUrl('home')}
                   onClick={(e) => {
@@ -260,17 +283,17 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
                   className="hover:text-emerald-700 transition flex items-center space-x-1 font-medium"
                 >
                   <Home className="w-4 h-4" />
-                  <span>Home</span>
+                  <span>{t.common.home}</span>
                 </a>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
-                <span className="text-emerald-800 font-bold">Card Maker Studio</span>
+                <span className="text-emerald-800 font-bold">
+                  {t.createCard.breadcrumbStudio}
+                </span>
               </nav>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                Create Your Farmer Summary Card
+                {t.createCard.pageTitle}
               </h1>
             </div>
-
-
           </div>
 
           {/* Upload Zone */}
@@ -300,12 +323,12 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
               {isProcessing ? (
                 <>
                   <Lock className="w-3.5 h-3.5 shrink-0" />
-                  <span>Extracting File — Form Locked</span>
+                  <span>{t.createCard.dividerExtracting}</span>
                 </>
               ) : dataSource === 'pdf' ? (
-                'Auto-Extracted Below — Review & Edit Any Field'
+                t.createCard.dividerAutoExtracted
               ) : (
-                'Or Skip Upload & Fill Details Manually'
+                t.createCard.dividerManual
               )}
             </span>
           </div>
@@ -383,11 +406,13 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
                 <div className="sticky top-24 bg-white/95 backdrop-blur-sm border border-emerald-200 shadow-lg rounded-2xl px-5 py-3.5 max-w-md w-full text-center space-y-1">
                   <div className="flex items-center justify-center gap-2 text-emerald-900 font-bold text-sm sm:text-base">
                     <Loader2 className="w-4 h-4 animate-spin text-emerald-600 shrink-0" />
-                    <span>Form disabled while extracting file...</span>
+                    <span>{t.createCard.overlayTitle}</span>
                   </div>
                   <p className="text-xs sm:text-sm text-slate-600">
-                    {progressMsg || 'Reading uploaded document...'}{' '}
-                    <span className="font-mono font-semibold text-emerald-700">({progressPct}%)</span>
+                    {progressMsg || t.createCard.overlayFallbackMsg}{' '}
+                    <span className="font-mono font-semibold text-emerald-700">
+                      ({progressPct}%)
+                    </span>
                   </p>
                 </div>
               </div>
@@ -440,4 +465,3 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
     </>
   );
 };
-

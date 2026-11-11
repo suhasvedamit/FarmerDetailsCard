@@ -13,6 +13,7 @@ export interface FarmerVerificationData {
   aadhaar_number?: string;
   pan_card?: string;
   survey_no?: string;
+  khata_no?: string;
   village?: string;
   sub_district?: string;
   district?: string;
@@ -38,6 +39,7 @@ interface CompactFarmerPayload {
   adh?: string;   // aadhaar_number
   pan?: string;   // pan_card
   gat?: string;   // survey_no
+  kht?: string;   // khata_no
   vil?: string;   // village
   tal?: string;   // sub_district / taluka
   dist?: string;  // district
@@ -118,6 +120,9 @@ export function createVerificationPayload(record: FarmerRecord): CompactFarmerPa
   const surveyNo = record.land_records?.[0]?.survey_no || record.land_detail?.survey_gat_no;
   if (surveyNo) p.gat = surveyNo.trim();
 
+  const khataNo = record.land_records?.[0]?.khata_no || record.land_detail?.khata_no;
+  if (khataNo) p.kht = khataNo.trim();
+
   const village = record.land_records?.[0]?.village || record.land_detail?.village;
   if (village) p.vil = village.trim();
 
@@ -159,6 +164,7 @@ export function compactToVerificationData(c: CompactFarmerPayload): FarmerVerifi
     aadhaar_number: c.adh || '',
     pan_card: c.pan || '',
     survey_no: c.gat || '',
+    khata_no: c.kht || '',
     village: c.vil || '',
     sub_district: c.tal || '',
     district: c.dist || '',
@@ -257,6 +263,7 @@ export function extractVerificationDataFromUrl(): FarmerVerificationData | null 
   const aadhaar = getParam('aadhaar') || getParam('aadhaar_number') || getParam('adh');
   const pan = getParam('pan') || getParam('pan_card');
   const survey = getParam('survey_no') || getParam('gat') || getParam('gat_no');
+  const khata = getParam('khata_no') || getParam('khata') || getParam('kht');
   const village = getParam('village') || getParam('vil');
   const subDistrict = getParam('sub_district') || getParam('taluka') || getParam('tal');
   const district = getParam('district') || getParam('dist');
@@ -279,6 +286,7 @@ export function extractVerificationDataFromUrl(): FarmerVerificationData | null 
   if (aadhaar) result.aadhaar_number = aadhaar;
   if (pan) result.pan_card = pan;
   if (survey) result.survey_no = survey;
+  if (khata) result.khata_no = khata;
   if (village) result.village = village;
   if (subDistrict) result.sub_district = subDistrict;
   if (district) result.district = district;
@@ -305,6 +313,7 @@ export function extractVerificationDataFromUrl(): FarmerVerificationData | null 
       aadhaar_number: result.aadhaar_number || '',
       pan_card: result.pan_card || '',
       survey_no: result.survey_no || '',
+      khata_no: result.khata_no || '',
       village: result.village || '',
       sub_district: result.sub_district || '',
       district: result.district || '',

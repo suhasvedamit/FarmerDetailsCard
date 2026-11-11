@@ -36,8 +36,9 @@ import {
   saveAndRegisterCustomTemplate,
 } from '../lib/customTemplatesStorage';
 import { generateBackCardCanvas, generateFrontCardCanvas } from '../lib/cardGenerator';
-import { SAMPLE_FARMER_RECORD } from '../lib/samplePreview';
+import { getSampleFarmerRecord } from '../lib/samplePreview';
 import { FarmerRecord } from '../types';
+import { useLanguage } from '../i18n';
 
 interface CustomDesignModalProps {
   isOpen: boolean;
@@ -46,6 +47,17 @@ interface CustomDesignModalProps {
   previewRecord?: FarmerRecord;
   onSaveSuccess: (savedTemplate: CardTemplate) => void;
   onDeleted?: (deletedTemplateId: string) => void;
+}
+
+function hasNonEmptyRecordFields(record?: FarmerRecord): boolean {
+  if (!record) return false;
+  return Boolean(
+    record.farmer_name?.trim() ||
+      record.farmer_id?.trim() ||
+      record.mobile_number?.trim() ||
+      record.address?.trim() ||
+      record.photo_url
+  );
 }
 
 interface ImageDropSlotProps {
@@ -59,30 +71,6 @@ interface ImageDropSlotProps {
   helperText?: string;
 }
 
-const FIT_MODE_OPTIONS: { value: ImageFitMode; label: string; title: string }[] = [
-  { value: 'cover', label: 'Cover', title: 'Scale to fill entire card without stretching' },
-  { value: 'contain', label: 'Fit Inside', title: 'Show full image with padding if needed' },
-  { value: 'stretch', label: 'Stretch', title: 'Stretch edges to exact 1050×660 dimensions' },
-];
-
-const BORDER_PRESETS: { label: string; value: string; swatchClass: string }[] = [
-  { label: 'Emerald', value: '#15803d', swatchClass: 'bg-emerald-700' },
-  { label: 'Slate', value: '#334155', swatchClass: 'bg-slate-700' },
-  { label: 'Gold', value: '#b45309', swatchClass: 'bg-amber-700' },
-  { label: 'None', value: 'none', swatchClass: 'bg-white border-dashed border-slate-400' },
-];
-
-function hasNonEmptyRecordFields(record?: FarmerRecord): boolean {
-  if (!record) return false;
-  return Boolean(
-    record.farmer_name?.trim() ||
-      record.farmer_id?.trim() ||
-      record.mobile_number?.trim() ||
-      record.address?.trim() ||
-      record.photo_url
-  );
-}
-
 const DesignImageDropSlot: React.FC<ImageDropSlotProps> = ({
   label,
   imageUrl,
@@ -93,8 +81,15 @@ const DesignImageDropSlot: React.FC<ImageDropSlotProps> = ({
   onClear,
   helperText,
 }) => {
+  const { t } = useLanguage();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+
+  const fitModeOptions: { value: ImageFitMode; label: string; title: string }[] = [
+    { value: 'cover', label: t.customDesignModal.fitModes.cover, title: t.customDesignModal.fitModes.coverTitle },
+    { value: 'contain', label: t.customDesignModal.fitModes.contain, title: t.customDesignModal.fitModes.containTitle },
+    { value: 'stretch', label: t.customDesignModal.fitModes.stretch, title: t.customDesignModal.fitModes.stretchTitle },
+  ];
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -152,7 +147,7 @@ const DesignImageDropSlot: React.FC<ImageDropSlotProps> = ({
                   onClick={() => inputRef.current?.click()}
                   className="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold transition cursor-pointer"
                 >
-                  Replace
+                  {t.customDesignModal.replaceBtn}
                 </button>
                 {onClear && (
                   <button
@@ -160,7 +155,7 @@ const DesignImageDropSlot: React.FC<ImageDropSlotProps> = ({
                     onClick={onClear}
                     className="px-2 py-1 rounded-md text-rose-600 hover:bg-rose-50 text-[11px] font-semibold transition cursor-pointer"
                   >
-                    Remove
+                    {t.customDesignModal.removeBtn}
                   </button>
                 )}
               </div>
@@ -169,9 +164,9 @@ const DesignImageDropSlot: React.FC<ImageDropSlotProps> = ({
 
           {/* Image Fit Mode Pills */}
           <div className="flex items-center justify-between gap-2 mt-2.5 pt-2 border-t border-slate-100">
-            <span className="text-[11px] font-semibold text-slate-500">Image Fit:</span>
+            <span className="text-[11px] font-semibold text-slate-500">{t.customDesignModal.imageFitLabel}</span>
             <div className="inline-flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-              {FIT_MODE_OPTIONS.map((opt) => (
+              {fitModeOptions.map((opt) => (
                 <button
                   key={opt.value}
                   type="button"
@@ -209,10 +204,10 @@ const DesignImageDropSlot: React.FC<ImageDropSlotProps> = ({
               <Upload className="w-4 h-4" />
             </div>
             <div className="text-xs font-semibold text-slate-700">
-              <span className="text-emerald-700 underline">Choose image</span> or drag &amp; drop
+              <span className="text-emerald-700 underline">{t.customDesignModal.chooseImage}</span> {t.customDesignModal.orDragDrop}
             </div>
             <p className="text-[10px] text-slate-500">
-              {helperText || 'PNG, JPG, WebP or SVG • Recommended 1050×660 px (CR80)'}
+              {helperText || t.customDesignModal.defaultDropHelper}
             </p>
           </div>
         </div>
@@ -301,6 +296,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
   onSaveSuccess,
   onDeleted,
 }) => {
+  const { language, t, format } = useLanguage();
   const [designName, setDesignName] = useState('');
   const [frontRawUrl, setFrontRawUrl] = useState('');
   const [frontDimensions, setFrontDimensions] = useState('');
@@ -358,7 +354,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
       setBorderColor(editingTemplate.customStyle?.borderColor ?? '#15803d');
     } else {
       const nextIndex = getCustomCardTemplates().length + 1;
-      setDesignName(`Custom Design ${nextIndex}`);
+      setDesignName(format(t.customDesignModal.defaultDesignName, { num: nextIndex }));
       setFrontRawUrl('');
       setFrontDimensions('');
       setFrontFitMode('cover');
@@ -489,17 +485,19 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
 
         const activeRecord = hasNonEmptyRecordFields(previewRecord)
           ? previewRecord!
-          : SAMPLE_FARMER_RECORD;
+          : getSampleFarmerRecord(language);
 
         const canvas =
           previewSide === 'back'
             ? await generateBackCardCanvas(activeRecord, undefined, {
                 templateOverride: tempTemplate,
                 showSafeZones,
+                language,
               })
             : await generateFrontCardCanvas(activeRecord, undefined, {
                 templateOverride: tempTemplate,
                 showSafeZones,
+                language,
               });
 
         if (!cancelled) {
@@ -533,32 +531,40 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
     showSafeZones,
     designName,
     previewRecord,
+    language,
   ]);
 
   if (!isOpen) return null;
 
+  const borderPresets: { label: string; value: string; swatchClass: string }[] = [
+    { label: t.customDesignModal.borderPresets.emerald, value: '#15803d', swatchClass: 'bg-emerald-700' },
+    { label: t.customDesignModal.borderPresets.slate, value: '#334155', swatchClass: 'bg-slate-700' },
+    { label: t.customDesignModal.borderPresets.gold, value: '#b45309', swatchClass: 'bg-amber-700' },
+    { label: t.customDesignModal.borderPresets.none, value: 'none', swatchClass: 'bg-white border-dashed border-slate-400' },
+  ];
+
   const handleFrontFile = async (file: File) => {
     setErrorMessage(null);
     try {
-      const loaded = await readImageFileAsDataUrl(file);
+      const loaded = await readImageFileAsDataUrl(file, language);
       setFrontRawUrl(loaded.dataUrl);
       setFrontDimensions(`${loaded.width} × ${loaded.height} px`);
       setPreviewSide('front');
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Could not load front image.');
+      setErrorMessage(err?.message || t.customDesignModal.errLoadFront);
     }
   };
 
   const handleBackFile = async (file: File) => {
     setErrorMessage(null);
     try {
-      const loaded = await readImageFileAsDataUrl(file);
+      const loaded = await readImageFileAsDataUrl(file, language);
       setBackRawUrl(loaded.dataUrl);
       setBackDimensions(`${loaded.width} × ${loaded.height} px`);
       setBackMode('separate');
       setPreviewSide('back');
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Could not load back image.');
+      setErrorMessage(err?.message || t.customDesignModal.errLoadBack);
     }
   };
 
@@ -566,14 +572,12 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
     setErrorMessage(null);
 
     if (!frontRawUrl) {
-      setErrorMessage('Please upload a Front side background image for your custom design.');
+      setErrorMessage(t.customDesignModal.errNoFront);
       return;
     }
 
     if (backMode === 'separate' && !backRawUrl) {
-      setErrorMessage(
-        'Please upload a Back side image, or choose "Same as Front" / "Clean Blank".'
-      );
+      setErrorMessage(t.customDesignModal.errNoBack);
       return;
     }
 
@@ -598,7 +602,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
 
       const savedTemplate: CardTemplate = {
         id,
-        name: designName.trim() || 'Custom Card Design',
+        name: designName.trim() || t.home.gallery.customArtwork,
         folderName: id,
         frontUrl: finalFrontUrl,
         backUrl: finalBackUrl,
@@ -624,10 +628,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
       onClose();
     } catch (err: any) {
       console.error('Failed to save custom design:', err);
-      setErrorMessage(
-        err?.message ||
-          'Could not save custom design in browser storage. Try a smaller image.'
-      );
+      setErrorMessage(err?.message || t.customDesignModal.errSaveFailed);
     } finally {
       setIsSaving(false);
     }
@@ -641,7 +642,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
       onDeleted?.(editingTemplate.id);
       onClose();
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Failed to delete custom design.');
+      setErrorMessage(err?.message || t.customDesignModal.errDeleteFailed);
     } finally {
       setIsSaving(false);
     }
@@ -669,10 +670,10 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                 id="custom-design-modal-title"
                 className="font-extrabold text-slate-900 text-sm sm:text-base truncate"
               >
-                {editingTemplate ? 'Edit Custom Card Design' : 'Upload Your Custom Card Design'}
+                {editingTemplate ? t.customDesignModal.editTitle : t.customDesignModal.createTitle}
               </h3>
               <p className="text-[11px] text-slate-500 truncate">
-                Upload Front &amp; Back background artwork (CR80 1050×660) and preview live with card details
+                {t.customDesignModal.subtitle}
               </p>
             </div>
           </div>
@@ -682,18 +683,18 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
               type="button"
               onClick={downloadCardLayoutGuidePng}
               className="px-3 py-1.5 rounded-lg bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold transition flex items-center space-x-1.5 shadow-sm cursor-pointer"
-              title="Download PNG layout guide with exact safe zones for Canva / Photoshop / CorelDraw"
+              title={t.customDesignModal.downloadGuideTitle}
             >
               <Download className="w-3.5 h-3.5 text-emerald-700" />
-              <span className="hidden sm:inline">Download Layout Guide</span>
-              <span className="sm:hidden">Guide</span>
+              <span className="hidden sm:inline">{t.customDesignModal.downloadGuideBtn}</span>
+              <span className="sm:hidden">{t.customDesignModal.downloadGuideShort}</span>
             </button>
 
             <button
               type="button"
               onClick={onClose}
               disabled={isSaving}
-              aria-label="Close modal"
+              aria-label={t.common.close}
               className="text-slate-400 hover:text-slate-700 rounded-lg p-1.5 hover:bg-slate-200/70 transition cursor-pointer"
             >
               <X className="w-5 h-5" />
@@ -712,7 +713,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                   htmlFor="custom-design-name"
                   className="text-xs font-bold text-slate-700 block"
                 >
-                  Design Name
+                  {t.customDesignModal.designNameLabel}
                 </label>
                 <input
                   id="custom-design-name"
@@ -720,7 +721,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                   value={designName}
                   onChange={(e) => setDesignName(e.target.value)}
                   maxLength={40}
-                  placeholder="e.g. My Shop Green Card"
+                  placeholder={t.customDesignModal.designNamePlaceholder}
                   className="w-full px-3 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition"
                 />
               </div>
@@ -730,15 +731,15 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
                     <ImageIcon className="w-3.5 h-3.5 text-emerald-700" />
-                    <span>Front Side Design (समोरील)</span>
+                    <span>{t.customDesignModal.frontSideLabel}</span>
                   </span>
                   <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                    Required
+                    {t.customDesignModal.requiredBadge}
                   </span>
                 </div>
 
                 <DesignImageDropSlot
-                  label="Front Background"
+                  label={t.customDesignModal.frontBackgroundLabel}
                   imageUrl={frontRawUrl}
                   dimensionsLabel={frontDimensions}
                   fitMode={frontFitMode}
@@ -756,7 +757,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
                     <RefreshCw className="w-3.5 h-3.5 text-emerald-700" />
-                    <span>Back Side Design (मागील)</span>
+                    <span>{t.customDesignModal.backSideLabel}</span>
                   </span>
                 </div>
 
@@ -774,7 +775,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                         : 'text-slate-600 hover:bg-slate-100'
                     }`}
                   >
-                    Upload Back
+                    {t.customDesignModal.backModeUpload}
                   </button>
                   <button
                     type="button"
@@ -788,7 +789,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                         : 'text-slate-600 hover:bg-slate-100'
                     }`}
                   >
-                    Same as Front
+                    {t.customDesignModal.backModeSameAsFront}
                   </button>
                   <button
                     type="button"
@@ -802,13 +803,13 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                         : 'text-slate-600 hover:bg-slate-100'
                     }`}
                   >
-                    Clean Blank
+                    {t.customDesignModal.backModeBlank}
                   </button>
                 </div>
 
                 {backMode === 'separate' && (
                   <DesignImageDropSlot
-                    label="Back Background"
+                    label={t.customDesignModal.backBackgroundLabel}
                     imageUrl={backRawUrl}
                     dimensionsLabel={backDimensions}
                     fitMode={backFitMode}
@@ -818,19 +819,19 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                       setBackRawUrl('');
                       setBackDimensions('');
                     }}
-                    helperText="Upload separate artwork for Land & Bank details side"
+                    helperText={t.customDesignModal.backHelperText}
                   />
                 )}
 
                 {backMode === 'same_as_front' && (
                   <p className="text-[11px] text-slate-600 bg-white border border-slate-200 rounded-lg px-3 py-2">
-                    Your Front background artwork will automatically be used on the Back side too.
+                    {t.customDesignModal.sameAsFrontNote}
                   </p>
                 )}
 
                 {backMode === 'blank' && (
                   <p className="text-[11px] text-slate-600 bg-white border border-slate-200 rounded-lg px-3 py-2">
-                    Uses a clean solid card back so Land &amp; Bank tables stay crisp and uncluttered.
+                    {t.customDesignModal.cleanBlankNote}
                   </p>
                 )}
               </div>
@@ -839,12 +840,12 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
                 <div className="flex items-center space-x-1.5 text-xs font-bold text-slate-800">
                   <Sparkles className="w-3.5 h-3.5 text-emerald-700" />
-                  <span>Text Contrast &amp; Card Border</span>
+                  <span>{t.customDesignModal.appearanceTitle}</span>
                 </div>
 
                 {/* Text Color Theme */}
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-semibold text-slate-600">Text Color:</span>
+                  <span className="text-[11px] font-semibold text-slate-600">{t.customDesignModal.textColorLabel}</span>
                   <div className="inline-flex bg-white p-0.5 rounded-lg border border-slate-200">
                     <button
                       type="button"
@@ -855,7 +856,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
-                      Dark Text
+                      {t.customDesignModal.darkText}
                     </button>
                     <button
                       type="button"
@@ -866,7 +867,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
-                      Light Text
+                      {t.customDesignModal.lightText}
                     </button>
                   </div>
                 </div>
@@ -874,14 +875,14 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                 {/* Content Readability Backdrop */}
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[11px] font-semibold text-slate-600">
-                    Readability Panel:
+                    {t.customDesignModal.readabilityPanelLabel}
                   </span>
                   <div className="inline-flex bg-white p-0.5 rounded-lg border border-slate-200">
                     {(
                       [
-                        { value: 'none', label: 'None' },
-                        { value: 'light', label: 'White' },
-                        { value: 'dark', label: 'Dark' },
+                        { value: 'none', label: t.customDesignModal.panelNone },
+                        { value: 'light', label: t.customDesignModal.panelWhite },
+                        { value: 'dark', label: t.customDesignModal.panelDark },
                       ] as const
                     ).map((opt) => (
                       <button
@@ -902,9 +903,9 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
 
                 {/* Outer Border Color */}
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-semibold text-slate-600">Card Border:</span>
-                  <div className="flex items-center gap-1.5">
-                    {BORDER_PRESETS.map((preset) => {
+                  <span className="text-[11px] font-semibold text-slate-600">{t.customDesignModal.cardBorderLabel}</span>
+                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                    {borderPresets.map((preset) => {
                       const active = borderColor.toLowerCase() === preset.value.toLowerCase();
                       return (
                         <button
@@ -927,14 +928,14 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                     })}
                     <label
                       className="w-6 h-6 rounded-md border border-slate-300 bg-white flex items-center justify-center cursor-pointer overflow-hidden shadow-sm"
-                      title="Pick custom border color"
+                      title={t.customDesignModal.customBorderTitle}
                     >
                       <input
                         type="color"
                         value={customBorderValue}
                         onChange={(e) => setBorderColor(e.target.value)}
                         className="w-8 h-8 border-0 p-0 cursor-pointer"
-                        aria-label="Custom card border color"
+                        aria-label={t.customDesignModal.customBorderAria}
                       />
                     </label>
                   </div>
@@ -956,7 +957,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    Front Side
+                    {t.common.frontSide}
                   </button>
                   <button
                     type="button"
@@ -968,7 +969,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                     }`}
                   >
                     <Layers className="w-3.5 h-3.5" />
-                    <span>Back Side</span>
+                    <span>{t.common.backSide}</span>
                   </button>
                 </div>
 
@@ -983,7 +984,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                     }`}
                   >
                     <Eye className="w-3.5 h-3.5" />
-                    <span>Preview Fields</span>
+                    <span>{t.customDesignModal.previewFieldsBtn}</span>
                   </button>
 
                   <button
@@ -996,7 +997,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                     }`}
                   >
                     <Grid className="w-3.5 h-3.5" />
-                    <span>Safe Zones</span>
+                    <span>{t.customDesignModal.safeZonesBtn}</span>
                   </button>
                 </div>
               </div>
@@ -1007,7 +1008,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                   <div className="w-full relative flex items-center justify-center">
                     <img
                       src={livePreviewUrl}
-                      alt={`Custom Card Preview - ${previewSide}`}
+                      alt={`${t.common.preview} - ${previewSide}`}
                       className={`w-full max-w-[660px] rounded-xl shadow-xl border border-slate-300/80 object-contain transition-opacity duration-150 ${
                         isRenderingPreview ? 'opacity-65' : 'opacity-100'
                       }`}
@@ -1016,7 +1017,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                     {!frontRawUrl && previewSide === 'front' && (
                       <div className="absolute inset-x-0 bottom-3 flex justify-center pointer-events-none">
                         <span className="px-3 py-1 rounded-full bg-slate-900/80 text-white text-[11px] font-semibold shadow backdrop-blur-sm">
-                          Upload a Front image on the left to replace this blank preview
+                          {t.customDesignModal.uploadFrontOverlayHint}
                         </span>
                       </div>
                     )}
@@ -1026,7 +1027,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                     className="w-full max-w-[660px] rounded-xl bg-white/70 border border-slate-200 animate-pulse flex items-center justify-center text-xs text-slate-500"
                     style={{ aspectRatio: '1050 / 660' }}
                   >
-                    Rendering card preview...
+                    {t.customDesignModal.renderingPreview}
                   </div>
                 )}
               </div>
@@ -1035,9 +1036,10 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
               <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl px-3.5 py-2.5 text-[11px] text-emerald-900 flex items-start space-x-2">
                 <Sparkles className="w-4 h-4 text-emerald-700 flex-shrink-0 mt-0.5" />
                 <p className="leading-relaxed">
-                  <strong>Design Tip:</strong> Standard card size is <strong>1050 × 660 px</strong>{' '}
-                  (CR80 85.6 × 54 mm). Toggle <strong>Safe Zones</strong> above or{' '}
-                  <strong>Download Layout Guide</strong> to make sure your header/footer artwork does not overlap the farmer photo, details, or QR code.
+                  <strong>{t.customDesignModal.designTipTitle}</strong> {t.customDesignModal.designTipBefore}{' '}
+                  <strong>{t.customDesignModal.designTipSize}</strong> {t.customDesignModal.designTipMiddle}{' '}
+                  <strong>{t.customDesignModal.designTipSafeZones}</strong> {t.customDesignModal.designTipOr}{' '}
+                  <strong>{t.customDesignModal.designTipGuide}</strong> {t.customDesignModal.designTipAfter}
                 </p>
               </div>
 
@@ -1056,7 +1058,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                       }}
                       className="px-2.5 py-1 rounded-lg bg-white border border-rose-300 text-rose-700 text-[11px] font-bold hover:bg-rose-100 whitespace-nowrap cursor-pointer"
                     >
-                      Use Same as Front
+                      {t.customDesignModal.useSameAsFrontBtn}
                     </button>
                   )}
                 </div>
@@ -1071,14 +1073,14 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
             {editingTemplate && (
               confirmDelete ? (
                 <div className="flex items-center gap-2 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1">
-                  <span className="text-[11px] font-bold text-rose-800">Delete design?</span>
+                  <span className="text-[11px] font-bold text-rose-800">{t.customDesignModal.deleteConfirmPrompt}</span>
                   <button
                     type="button"
                     onClick={handleDelete}
                     disabled={isSaving}
                     className="px-2 py-0.5 rounded bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold cursor-pointer"
                   >
-                    Confirm
+                    {t.common.confirm}
                   </button>
                   <button
                     type="button"
@@ -1086,7 +1088,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                     disabled={isSaving}
                     className="px-2 py-0.5 rounded bg-white border border-slate-300 text-slate-700 text-[11px] font-semibold hover:bg-slate-100 cursor-pointer"
                   >
-                    Keep
+                    {t.common.keep}
                   </button>
                 </div>
               ) : (
@@ -1097,7 +1099,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
                   className="px-3 py-1.5 rounded-lg text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>Delete Design</span>
+                  <span>{t.customDesignModal.deleteDesignBtn}</span>
                 </button>
               )
             )}
@@ -1110,7 +1112,7 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
               disabled={isSaving}
               className="px-4 py-2 border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
             >
-              Cancel
+              {t.common.cancel}
             </button>
             <button
               type="button"
@@ -1121,10 +1123,10 @@ export const CustomDesignModal: React.FC<CustomDesignModalProps> = ({
               <Check className="w-4 h-4" />
               <span>
                 {isSaving
-                  ? 'Saving...'
+                  ? t.customDesignModal.savingBtn
                   : editingTemplate
-                    ? 'Save Changes & Apply'
-                    : 'Save & Use Design'}
+                    ? t.customDesignModal.saveChangesBtn
+                    : t.customDesignModal.saveUseBtn}
               </span>
             </button>
           </div>

@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { UserCheck, Image as ImageIcon, Crop, Upload, Sparkles } from 'lucide-react';
 import { PhotoTransform } from '../types';
+import { useLanguage } from '../i18n';
 
 interface PhotoCardProps {
   photoUrl?: string;
@@ -21,6 +22,7 @@ export const PhotoCard: React.FC<PhotoCardProps> = ({
   onPhotoUploaded,
   onResetToOriginal,
 }) => {
+  const { t } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const isAdjusted = Boolean(
@@ -37,7 +39,7 @@ export const PhotoCard: React.FC<PhotoCardProps> = ({
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      alert('Please upload a valid image file (JPG, PNG, or WebP).');
+      alert(t.photoCard.invalidImageAlert);
       return;
     }
 
@@ -57,12 +59,12 @@ export const PhotoCard: React.FC<PhotoCardProps> = ({
       <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
         <h2 className="text-base font-semibold text-slate-700 flex items-center">
           <UserCheck className="w-5 h-5 text-emerald-600 mr-2" />
-          Farmer Photograph
+          {t.photoCard.title}
         </h2>
         {isAdjusted && (
           <span className="inline-flex items-center space-x-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
             <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Adjusted</span>
+            <span>{t.photoCard.adjustedBadge}</span>
           </span>
         )}
       </div>
@@ -87,17 +89,17 @@ export const PhotoCard: React.FC<PhotoCardProps> = ({
           style={{ aspectRatio: '191 / 241' }}
           title={
             disabled
-              ? 'Disabled while extracting file'
+              ? t.photoCard.titleDisabled
               : photoUrl
-                ? 'Click to crop, resize or reposition photo'
-                : 'Click to upload photo'
+                ? t.photoCard.titleHasPhoto
+                : t.photoCard.titleNoPhoto
           }
         >
           {photoUrl ? (
             <>
               <img
                 src={photoUrl}
-                alt="Farmer Portrait"
+                alt={t.photoCard.photoAlt}
                 className={`w-full h-full object-cover object-bottom transition duration-200 ${
                   disabled ? '' : 'group-hover:scale-[1.02]'
                 }`}
@@ -106,16 +108,16 @@ export const PhotoCard: React.FC<PhotoCardProps> = ({
               {!disabled && (
                 <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[1px] opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-sm font-semibold p-2 text-center">
                   <Crop className="w-5 h-5 mb-1 text-emerald-400" />
-                  <span>Click to Crop & Reposition</span>
+                  <span>{t.photoCard.hoverCropHint}</span>
                 </div>
               )}
             </>
           ) : (
             <div className="flex flex-col items-center text-slate-400 text-sm p-3 text-center">
               <ImageIcon className="w-8 h-8 mb-1.5 opacity-60" />
-              <span className="font-medium text-slate-600">No Photo</span>
+              <span className="font-medium text-slate-600">{t.photoCard.noPhoto}</span>
               <span className="text-xs text-emerald-600 mt-1 font-semibold underline">
-                Click to upload
+                {t.photoCard.clickToUpload}
               </span>
             </div>
           )}
@@ -130,7 +132,7 @@ export const PhotoCard: React.FC<PhotoCardProps> = ({
             className="w-full py-2.5 px-3 bg-emerald-50 hover:bg-emerald-100/80 disabled:opacity-50 disabled:pointer-events-none text-emerald-800 text-sm font-bold rounded-lg border border-emerald-200 transition flex items-center justify-center space-x-1.5 shadow-sm"
           >
             <Crop className="w-4 h-4 text-emerald-600" />
-            <span>Crop & Reposition Photo</span>
+            <span>{t.photoCard.cropRepositionBtn}</span>
           </button>
 
           <div className="flex items-center space-x-2">
@@ -149,7 +151,7 @@ export const PhotoCard: React.FC<PhotoCardProps> = ({
               className="flex-1 py-2 px-3 bg-slate-50 hover:bg-slate-100 disabled:opacity-50 disabled:pointer-events-none text-slate-700 text-sm font-semibold rounded-lg border border-slate-200 transition flex items-center justify-center space-x-1.5"
             >
               <Upload className="w-4 h-4 text-slate-500" />
-              <span>{photoUrl ? 'Upload New' : 'Upload Photo'}</span>
+              <span>{photoUrl ? t.photoCard.uploadNewBtn : t.photoCard.uploadPhotoBtn}</span>
             </button>
 
             {isAdjusted && onResetToOriginal && (
@@ -158,9 +160,9 @@ export const PhotoCard: React.FC<PhotoCardProps> = ({
                 onClick={onResetToOriginal}
                 disabled={disabled}
                 className="py-2 px-3 text-slate-500 hover:text-slate-800 disabled:opacity-50 disabled:pointer-events-none text-sm font-semibold rounded-lg hover:bg-slate-100 transition"
-                title="Reset to original photo"
+                title={t.photoCard.resetTitle}
               >
-                Reset
+                {t.common.reset}
               </button>
             )}
           </div>

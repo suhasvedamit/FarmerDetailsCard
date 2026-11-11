@@ -12,10 +12,25 @@ import {
   getCardTemplateUrl,
 } from './cardTemplates';
 import { drawSafeZonesOverlay } from './customDesignUtils';
+import { getTranslations, Language } from '../i18n';
+
+export const CR80_WIDTH_MM = 85.6;
+export const CR80_HEIGHT_MM = 54;
+
+export type PvcPrintSides = 'both' | 'front' | 'back';
 
 export interface CardRenderOptions {
   templateOverride?: CardTemplate;
   showSafeZones?: boolean;
+  language?: Language;
+}
+
+export interface CardPdfOptions extends CardRenderOptions {
+  sides?: PvcPrintSides;
+  preRendered?: {
+    frontDataUrl?: string;
+    backDataUrl?: string;
+  };
 }
 
 const templateImageCache = new Map<string, Promise<HTMLImageElement>>();
@@ -182,6 +197,8 @@ export async function generateFrontCardCanvas(
 
   const resolvedTemplate = getResolvedTemplate(templateId, options);
   const palette = getCardTextPalette(resolvedTemplate?.customStyle);
+  const lang: Language = options?.language || 'mr';
+  const cardText = getTranslations(lang).cardCanvas;
 
   // Shared Base Frame (Front template)
   await drawCardBase(ctx, CARD_WIDTH, CARD_HEIGHT, templateId, 'front', options);
@@ -228,10 +245,10 @@ export async function generateFrontCardCanvas(
 
       ctx.drawImage(img, sx, sy, sw, sh, px, py, pw, ph);
     } catch {
-      drawPhotoPlaceholder(ctx, px, py, pw, ph, photoRadius);
+      drawPhotoPlaceholder(ctx, px, py, pw, ph, photoRadius, cardText.photoPlaceholder);
     }
   } else {
-    drawPhotoPlaceholder(ctx, px, py, pw, ph, photoRadius);
+    drawPhotoPlaceholder(ctx, px, py, pw, ph, photoRadius, cardText.photoPlaceholder);
   }
   ctx.restore();
 
@@ -244,17 +261,15 @@ export async function generateFrontCardCanvas(
   ctx.restore();
 
   // 2. Information Fields List (Middle Section)
-  // Matching the Marathi labels in the PDF:
-  // नाव, जन्म दिनांक, लिंग, मोबाईल नंबर, पॅन कार्ड, PM किसान नंबर, आधार नंबर, फार्मर नंबर
   const fields = [
-    { label: 'नाव', value: record.farmer_name || '--' },
-    { label: 'जन्म दिनांक', value: record.dob || '--' },
-    { label: 'लिंग', value: formatGender(record.gender) },
-    { label: 'मोबाईल नंबर', value: record.mobile_number || '--' },
-    { label: 'पॅन कार्ड', value: record.pan_card || '--' },
-    { label: 'PM किसान नंबर', value: record.enrollment_no || '' },
-    { label: 'आधार नंबर', value: formatAadhaar(record.aadhaar_number) },
-    { label: 'फार्मर नंबर', value: record.farmer_id || '--' },
+    { label: cardText.frontLabels.name, value: record.farmer_name || '--' },
+    { label: cardText.frontLabels.dob, value: record.dob || '--' },
+    { label: cardText.frontLabels.gender, value: formatGender(record.gender, lang) },
+    { label: cardText.frontLabels.mobile, value: record.mobile_number || '--' },
+    { label: cardText.frontLabels.pan, value: record.pan_card || '--' },
+    { label: cardText.frontLabels.pmKisan, value: record.enrollment_no || '' },
+    { label: cardText.frontLabels.aadhaar, value: formatAadhaar(record.aadhaar_number) },
+    { label: cardText.frontLabels.farmerId, value: record.farmer_id || '--' },
   ];
 
   let cy = 166;
@@ -262,11 +277,17 @@ export async function generateFrontCardCanvas(
   const labelColX = 260;
   const colonColX = 490;
   const valColX = 508;
+  const maxLabelW = colonColX - labelColX - 12;
 
   fields.forEach((field, idx) => {
-    // Label in Devanagari (Enhanced 30px font)
+    // Label (auto-scaled slightly if a translation exceeds column width)
     ctx.fillStyle = palette.labelColor;
-    ctx.font = '700 30px "Noto Sans Devanagari", Inter, sans-serif';
+    let labelFontSize = 30;
+    ctx.font = `700 ${labelFontSize}px "Noto Sans Devanagari", Inter, sans-serif`;
+    while (labelFontSize > 18 && ctx.measureText(field.label).width > maxLabelW) {
+      labelFontSize -= 1;
+      ctx.font = `700 ${labelFontSize}px "Noto Sans Devanagari", Inter, sans-serif`;
+    }
     ctx.textAlign = 'left';
     ctx.fillText(field.label, labelColX, cy);
 
@@ -276,7 +297,7 @@ export async function generateFrontCardCanvas(
     ctx.fillText(':', colonColX, cy);
 
     // Value (Enhanced 30px font, auto-scaled if long, NEVER cropped!)
-    // Rows 0-2 (नाव, जन्म दिनांक, लिंग) are above QR code and have 495px width
+    // Rows 0-2 are above QR code and have 495px width
     // Rows 3-7 have 325px width before QR code at x = 835
     const availableValW = idx < 3 ? 495 : 325;
     const valText = field.value !== undefined ? field.value : '--';
@@ -297,12 +318,17 @@ export async function generateFrontCardCanvas(
     cy += rowGap;
   });
 
-  // 3. Address (पत्ता) (Enhanced 28px/25px font, full text, never cropped)
+  // 3. Address (Enhanced 28px/25px font, full text, never cropped)
   const addrY = cy + 12;
   ctx.fillStyle = palette.labelColor;
-  ctx.font = '700 28px "Noto Sans Devanagari", Inter, sans-serif';
+  let addrLabelSize = 28;
+  ctx.font = `700 ${addrLabelSize}px "Noto Sans Devanagari", Inter, sans-serif`;
+  while (addrLabelSize > 18 && ctx.measureText(cardText.frontLabels.address).width > maxLabelW) {
+    addrLabelSize -= 1;
+    ctx.font = `700 ${addrLabelSize}px "Noto Sans Devanagari", Inter, sans-serif`;
+  }
   ctx.textAlign = 'left';
-  ctx.fillText('पत्ता', labelColX, addrY);
+  ctx.fillText(cardText.frontLabels.address, labelColX, addrY);
 
   ctx.fillStyle = palette.colonColor;
   ctx.font = '700 28px Inter, sans-serif';
@@ -363,6 +389,7 @@ export async function generateFrontCardCanvas(
       `Aadhaar: ${record.aadhaar_number || '--'}`,
       `PAN: ${record.pan_card || '--'}`,
       `Gat No: ${record.land_records?.[0]?.survey_no || record.land_detail?.survey_gat_no || '--'}`,
+      `Khata No: ${record.land_records?.[0]?.khata_no || record.land_detail?.khata_no || '--'}`,
       `Village: ${record.land_records?.[0]?.village || record.land_detail?.village || '--'}`,
       `District: ${record.land_detail?.district || '--'}`,
     ].join('\n');
@@ -541,7 +568,7 @@ function wrapBankNameToLines(
  * Generates BACK SIDE ID Card Canvas.
  * Matches the layout from the attached PDF:
  * - Top Header: MyAgriCard, माझे  किसान कार्ड, leaves with dew drops
- * - Section 1: जमिनीचा तपशील (1 to 5 rows: Survay Number, Village, Owner Type, Area)
+ * - Section 1: जमिनीचा तपशील (1 to 5 rows: Survey Number, Khata Number, Village, Owner Type, Area)
  * - Section 2: बँक तपशील (बँकचे नाव आणि शाखा, बचत खाता नंबर, IFSC CODE)
  * - Bottom Landscape: rolling hills, tractor, birds
  * - Bottom Footer: "This card is only for personal use not for Govt. issue card. —— | फार्मर आईडी"
@@ -566,6 +593,8 @@ export async function generateBackCardCanvas(
 
   const resolvedTemplate = getResolvedTemplate(templateId, options);
   const palette = getCardTextPalette(resolvedTemplate?.customStyle);
+  const lang: Language = options?.language || 'mr';
+  const backLabels = getTranslations(lang).cardCanvas.backLabels;
 
   // Shared Base Frame (Back template)
   await drawCardBase(ctx, CARD_WIDTH, CARD_HEIGHT, templateId, 'back', options);
@@ -573,18 +602,20 @@ export async function generateBackCardCanvas(
   const centerX = CARD_WIDTH / 2;
 
   // ==========================================
-  // SECTION 1: जमिनीचा तपशील (Land Details)
+  // SECTION 1: Land Details
   // Unified Table UI for 1 to 5 records (Always in sync)
-  // Columns: Survay Number, Village, Owner Type, Area
+  // Columns: Survey Number, Khata Number, Village, Owner Type, Area
   // ==========================================
-  const col1X = 165; // Survay Number (सर्वे नंबर)
-  const col2X = 405; // Village (गाव)
-  const col3X = 655; // Owner Type (मालकी प्रकार)
-  const col4X = 895; // Area (क्षेत्र)
+  const col1X = 160; // Survey Number
+  const col2X = 330; // Khata Number
+  const col3X = 515; // Village
+  const col4X = 715; // Owner Type
+  const col5X = 895; // Area
 
   const landRows = (record.land_records && record.land_records.length > 0)
     ? record.land_records.slice(0, 5)
     : [{
+      khata_no: record.land_detail?.khata_no || '--',
       survey_no: record.land_detail?.survey_gat_no || '--',
       village: record.land_detail?.village || '--',
       owner_type: '--',
@@ -599,24 +630,23 @@ export async function generateBackCardCanvas(
 
   // Dynamic layout metrics that keep the table UI completely unified and in sync
   const s1Y = numRows <= 1 ? 182 : numRows <= 2 ? 178 : numRows <= 3 ? 174 : 170;
-  const headerPillH = numRows <= 2 ? 34 : 30;
-  const headerFontSize = numRows <= 2 ? 23 : 21;
+  const headerFontSize = numRows <= 2 ? 21 : 19;
   const rowHeight = numRows <= 1 ? 42 : numRows === 2 ? 38 : numRows === 3 ? 32 : numRows === 4 ? 28 : 26;
-  const valFontSize = numRows <= 1 ? 26 : numRows === 2 ? 24 : numRows === 3 ? 21 : numRows === 4 ? 19 : 18;
+  const valFontSize = numRows <= 1 ? 25 : numRows === 2 ? 23 : numRows === 3 ? 21 : numRows === 4 ? 19 : 18;
 
-  // Title: जमिनीचा तपशील
+  // Title: Land Details
   ctx.fillStyle = palette.sectionTitleColor;
   ctx.font = '700 34px "Noto Sans Devanagari", Inter, sans-serif';
-  ctx.fillText('जमिनीचा तपशील', centerX, s1Y);
+  ctx.fillText(backLabels.landDetailsTitle, centerX, s1Y);
 
   // Table Header (No background, clean text)
   const tableHeaderY = s1Y + 38;
   ctx.fillStyle = palette.tableHeaderColor;
-  ctx.font = `700 ${headerFontSize}px "Noto Sans Devanagari", Inter, sans-serif`;
-  ctx.fillText('सर्वे नंबर', col1X, tableHeaderY);
-  ctx.fillText('गाव', col2X, tableHeaderY);
-  ctx.fillText('मालकी प्रकार', col3X, tableHeaderY);
-  ctx.fillText('क्षेत्र', col4X, tableHeaderY);
+  drawFittedText(ctx, backLabels.surveyNo, col1X, tableHeaderY, 168, headerFontSize, '"Noto Sans Devanagari", Inter, sans-serif');
+  drawFittedText(ctx, backLabels.khataNo, col2X, tableHeaderY, 148, headerFontSize, '"Noto Sans Devanagari", Inter, sans-serif');
+  drawFittedText(ctx, backLabels.village, col3X, tableHeaderY, 196, headerFontSize, '"Noto Sans Devanagari", Inter, sans-serif');
+  drawFittedText(ctx, backLabels.ownerType, col4X, tableHeaderY, 176, headerFontSize, '"Noto Sans Devanagari", Inter, sans-serif');
+  drawFittedText(ctx, backLabels.area, col5X, tableHeaderY, 158, headerFontSize, '"Noto Sans Devanagari", Inter, sans-serif');
 
   // Divider line between table header and table body
   const tableDividerY = tableHeaderY + 12;
@@ -635,10 +665,11 @@ export async function generateBackCardCanvas(
 
     // Table body text
     ctx.fillStyle = palette.tableValueColor;
-    drawFittedText(ctx, row.survey_no || '--', col1X, rY, 210, valFontSize);
-    drawFittedText(ctx, row.village || '--', col2X, rY, 230, valFontSize);
-    drawFittedText(ctx, row.owner_type || '--', col3X, rY, 230, valFontSize);
-    drawFittedText(ctx, row.area || '--', col4X, rY, 210, valFontSize);
+    drawFittedText(ctx, row.survey_no || '--', col1X, rY, 168, valFontSize);
+    drawFittedText(ctx, row.khata_no || '--', col2X, rY, 148, valFontSize);
+    drawFittedText(ctx, row.village || '--', col3X, rY, 196, valFontSize);
+    drawFittedText(ctx, row.owner_type || '--', col4X, rY, 176, valFontSize);
+    drawFittedText(ctx, row.area || '--', col5X, rY, 158, valFontSize);
   });
 
   const tableBottomY = startRowY + ((numRows - 1) * rowHeight) + (numRows <= 1 ? 16 : 10);
@@ -654,7 +685,7 @@ export async function generateBackCardCanvas(
   ctx.stroke();
 
   // ==========================================
-  // SECTION 2: बँक तपशील (Bank Details)
+  // SECTION 2: Bank Details
   // Same unified table styling as Land Details
   // ==========================================
   const bankHeaderFontSize = numRows <= 2 ? 24 : 22;
@@ -662,7 +693,7 @@ export async function generateBackCardCanvas(
 
   ctx.fillStyle = palette.sectionTitleColor;
   ctx.font = '700 34px "Noto Sans Devanagari", Inter, sans-serif';
-  ctx.fillText('बँक तपशील', centerX, s2Y);
+  ctx.fillText(backLabels.bankDetailsTitle, centerX, s2Y);
 
   const bankCol1X = 230;
   const bankCol2X = 525;
@@ -671,10 +702,9 @@ export async function generateBackCardCanvas(
   // Bank Header (No background, clean text)
   const bankHeaderY = s2Y + (numRows <= 2 ? 36 : 34);
   ctx.fillStyle = palette.tableHeaderColor;
-  ctx.font = `700 ${bankHeaderFontSize}px "Noto Sans Devanagari", Inter, sans-serif`;
-  ctx.fillText('बँकचे नाव आणि शाखा', bankCol1X, bankHeaderY);
-  ctx.fillText('बचत खाता नंबर', bankCol2X, bankHeaderY);
-  ctx.fillText('IFSC CODE', bankCol3X, bankHeaderY);
+  drawFittedText(ctx, backLabels.bankNameBranch, bankCol1X, bankHeaderY, 320, bankHeaderFontSize, '"Noto Sans Devanagari", Inter, sans-serif');
+  drawFittedText(ctx, backLabels.accountNo, bankCol2X, bankHeaderY, 250, bankHeaderFontSize, '"Noto Sans Devanagari", Inter, sans-serif');
+  drawFittedText(ctx, backLabels.ifscCode, bankCol3X, bankHeaderY, 210, bankHeaderFontSize, '"Noto Sans Devanagari", Inter, sans-serif');
 
   // Divider line between bank header and bank values
   const bankDividerY = bankHeaderY + 12;
@@ -772,14 +802,49 @@ export function combineCardCanvases(
  */
 export async function generateBothCardsCanvas(
   record: FarmerRecord,
-  templateId?: string
+  templateId?: string,
+  options?: CardRenderOptions
 ): Promise<HTMLCanvasElement> {
   const [frontCanvas, backCanvas] = await Promise.all([
-    generateFrontCardCanvas(record, templateId),
-    generateBackCardCanvas(record, templateId),
+    generateFrontCardCanvas(record, templateId, options),
+    generateBackCardCanvas(record, templateId, options),
   ]);
 
   return combineCardCanvases(frontCanvas, backCanvas);
+}
+
+function sanitizeCardFileName(farmerName?: string): string {
+  return (farmerName || 'farmer').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
+}
+
+async function resolveCardSideImages(
+  record: FarmerRecord,
+  sides: PvcPrintSides = 'both',
+  templateId?: string,
+  options?: CardPdfOptions
+): Promise<Array<{ label: string; dataUrl: string }>> {
+  const needsFront = sides === 'front' || sides === 'both';
+  const needsBack = sides === 'back' || sides === 'both';
+
+  const cachedFront = options?.preRendered?.frontDataUrl;
+  const cachedBack = options?.preRendered?.backDataUrl;
+
+  const [frontCanvas, backCanvas] = await Promise.all([
+    needsFront && !cachedFront ? generateFrontCardCanvas(record, templateId, options) : Promise.resolve(null),
+    needsBack && !cachedBack ? generateBackCardCanvas(record, templateId, options) : Promise.resolve(null),
+  ]);
+
+  const pages: Array<{ label: string; dataUrl: string }> = [];
+  if (needsFront) {
+    const dataUrl = cachedFront || frontCanvas?.toDataURL('image/png', 1.0);
+    if (dataUrl) pages.push({ label: 'Front Side', dataUrl });
+  }
+  if (needsBack) {
+    const dataUrl = cachedBack || backCanvas?.toDataURL('image/png', 1.0);
+    if (dataUrl) pages.push({ label: 'Back Side', dataUrl });
+  }
+
+  return pages;
 }
 
 /**
@@ -790,19 +855,20 @@ export async function downloadCardAsPng(
   record: FarmerRecord,
   side: 'front' | 'back' | 'both' = 'front',
   filename?: string,
-  templateId?: string
+  templateId?: string,
+  options?: CardRenderOptions
 ): Promise<void> {
   let canvas: HTMLCanvasElement;
-  const cleanName = (record.farmer_name || 'farmer').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
+  const cleanName = sanitizeCardFileName(record.farmer_name);
 
   if (side === 'both') {
-    canvas = await generateBothCardsCanvas(record, templateId);
+    canvas = await generateBothCardsCanvas(record, templateId, options);
     filename = filename || `${cleanName}_id_card_both_sides.png`;
   } else if (side === 'back') {
-    canvas = await generateBackCardCanvas(record, templateId);
+    canvas = await generateBackCardCanvas(record, templateId, options);
     filename = filename || `${cleanName}_id_card_back.png`;
   } else {
-    canvas = await generateFrontCardCanvas(record, templateId);
+    canvas = await generateFrontCardCanvas(record, templateId, options);
     filename = filename || `${cleanName}_id_card_front.png`;
   }
 
@@ -814,32 +880,32 @@ export async function downloadCardAsPng(
 }
 
 /**
- * Creates a standard 2-page duplex PDF in CR80 card size (85.6 mm x 54 mm):
- * - Page 1: Front Side
- * - Page 2: Back Side
+ * Creates a CR80 card-size PDF (85.6 mm x 54 mm) for Front, Back, or Both sides.
  */
-export async function createCardPdf(record: FarmerRecord, templateId?: string): Promise<jsPDF> {
-  const [frontCanvas, backCanvas] = await Promise.all([
-    generateFrontCardCanvas(record, templateId),
-    generateBackCardCanvas(record, templateId),
-  ]);
-
-  const frontData = frontCanvas.toDataURL('image/png', 1.0);
-  const backData = backCanvas.toDataURL('image/png', 1.0);
+export async function createCardPdf(
+  record: FarmerRecord,
+  templateId?: string,
+  options?: CardPdfOptions
+): Promise<jsPDF> {
+  const sides = options?.sides ?? 'both';
+  const pages = await resolveCardSideImages(record, sides, templateId, options);
+  if (pages.length === 0) {
+    throw new Error('No card pages available to export.');
+  }
 
   // Standard CR80 landscape card size in mm
   const pdf = new jsPDF({
     orientation: 'landscape',
     unit: 'mm',
-    format: [85.6, 54],
+    format: [CR80_WIDTH_MM, CR80_HEIGHT_MM],
   });
 
-  // Page 1: Front Side
-  pdf.addImage(frontData, 'PNG', 0, 0, 85.6, 54);
-
-  // Page 2: Back Side
-  pdf.addPage([85.6, 54], 'landscape');
-  pdf.addImage(backData, 'PNG', 0, 0, 85.6, 54);
+  pages.forEach((page, index) => {
+    if (index > 0) {
+      pdf.addPage([CR80_WIDTH_MM, CR80_HEIGHT_MM], 'landscape');
+    }
+    pdf.addImage(page.dataUrl, 'PNG', 0, 0, CR80_WIDTH_MM, CR80_HEIGHT_MM);
+  });
 
   return pdf;
 }
@@ -848,10 +914,14 @@ export async function createCardPdf(record: FarmerRecord, templateId?: string): 
  * Generates an A4 Printable Sheet PDF with Front and Back side-by-side with cut guidelines.
  * Perfect for standard desktop paper and PVC printer sheets.
  */
-export async function createPrintSheetPdf(record: FarmerRecord, templateId?: string): Promise<jsPDF> {
+export async function createPrintSheetPdf(
+  record: FarmerRecord,
+  templateId?: string,
+  options?: CardRenderOptions
+): Promise<jsPDF> {
   const [frontCanvas, backCanvas] = await Promise.all([
-    generateFrontCardCanvas(record, templateId),
-    generateBackCardCanvas(record, templateId),
+    generateFrontCardCanvas(record, templateId, options),
+    generateBackCardCanvas(record, templateId, options),
   ]);
 
   const frontData = frontCanvas.toDataURL('image/png', 1.0);
@@ -864,8 +934,8 @@ export async function createPrintSheetPdf(record: FarmerRecord, templateId?: str
     format: 'a4',
   });
 
-  const cardW = 85.6;
-  const cardH = 54;
+  const cardW = CR80_WIDTH_MM;
+  const cardH = CR80_HEIGHT_MM;
   const startX = (210 - cardW * 2 - 10) / 2; // Center horizontally
   const startY = 40;
 
@@ -899,17 +969,20 @@ export async function createPrintSheetPdf(record: FarmerRecord, templateId?: str
 }
 
 /**
- * Downloads the 2-page duplex PDF (Page 1 = Front, Page 2 = Back).
+ * Downloads the CR80 PDF (default: 2-page duplex Front + Back, or single side).
  */
 export async function downloadCardAsPdf(
   record: FarmerRecord,
   filename?: string,
-  templateId?: string
+  templateId?: string,
+  options?: CardPdfOptions
 ): Promise<void> {
-  const cleanName = (record.farmer_name || 'farmer').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
-  filename = filename || `${cleanName}_id_card_2sided.pdf`;
-  const pdf = await createCardPdf(record, templateId);
-  pdf.save(filename);
+  const sides = options?.sides ?? 'both';
+  const cleanName = sanitizeCardFileName(record.farmer_name);
+  const defaultFilename =
+    sides === 'both' ? `${cleanName}_id_card_2sided.pdf` : `${cleanName}_pvc_card_${sides}.pdf`;
+  const pdf = await createCardPdf(record, templateId, options);
+  pdf.save(filename || defaultFilename);
 }
 
 /**
@@ -918,12 +991,161 @@ export async function downloadCardAsPdf(
 export async function downloadCardPrintSheetPdf(
   record: FarmerRecord,
   filename?: string,
-  templateId?: string
+  templateId?: string,
+  options?: CardRenderOptions
 ): Promise<void> {
-  const cleanName = (record.farmer_name || 'farmer').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
+  const cleanName = sanitizeCardFileName(record.farmer_name);
   filename = filename || `${cleanName}_id_card_print_sheet.pdf`;
-  const pdf = await createPrintSheetPdf(record, templateId);
+  const pdf = await createPrintSheetPdf(record, templateId, options);
   pdf.save(filename);
+}
+
+const PVC_PRINT_IFRAME_ID = 'pvc-card-print-iframe';
+
+/**
+ * Opens the browser's Print dialog formatted directly for CR80 PVC printers (85.6 mm x 54 mm).
+ * Supports printing Front only, Back only, or Both sides (2 pages).
+ */
+export async function printCardForPvc(
+  record: FarmerRecord,
+  templateId?: string,
+  options?: CardPdfOptions
+): Promise<void> {
+  const sides = options?.sides ?? 'both';
+  const pages = await resolveCardSideImages(record, sides, templateId, options);
+  if (pages.length === 0) {
+    throw new Error('No card pages available to print.');
+  }
+
+  const existingIframe = document.getElementById(PVC_PRINT_IFRAME_ID);
+  if (existingIframe) {
+    existingIframe.remove();
+  }
+
+  const iframe = document.createElement('iframe');
+  iframe.id = PVC_PRINT_IFRAME_ID;
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '1px';
+  iframe.style.height = '1px';
+  iframe.style.border = '0';
+  iframe.style.opacity = '0';
+  iframe.style.pointerEvents = 'none';
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentDocument;
+  const win = iframe.contentWindow;
+  if (!doc || !win) {
+    iframe.remove();
+    throw new Error('Print frame is unavailable.');
+  }
+
+  const printStyles = `
+    @page {
+      size: ${CR80_WIDTH_MM}mm ${CR80_HEIGHT_MM}mm;
+      margin: 0;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    html, body {
+      width: ${CR80_WIDTH_MM}mm;
+      margin: 0;
+      padding: 0;
+      background: #ffffff;
+      font-size: 0;
+      line-height: 0;
+    }
+    .pvc-page {
+      width: ${CR80_WIDTH_MM}mm;
+      height: 53.95mm;
+      overflow: hidden;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .pvc-page + .pvc-page {
+      page-break-before: always;
+      break-before: page;
+    }
+    .pvc-page img {
+      display: block;
+      width: ${CR80_WIDTH_MM}mm;
+      height: ${CR80_HEIGHT_MM}mm;
+      object-fit: fill;
+    }
+  `;
+
+  doc.open();
+  doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>${printStyles}</style></head><body></body></html>`);
+  doc.close();
+
+  const titleLabel = (record.farmer_name || 'Farmer').trim() || 'Farmer';
+  doc.title = `${titleLabel} - PVC Card (CR80)`;
+
+  const imageReadyPromises = pages.map((page) => {
+    const wrapper = doc.createElement('div');
+    wrapper.className = 'pvc-page';
+
+    const img = doc.createElement('img');
+    img.alt = page.label;
+
+    const ready = new Promise<void>((resolve) => {
+      let settled = false;
+      const done = async () => {
+        if (settled) return;
+        settled = true;
+        if (typeof img.decode === 'function') {
+          try {
+            await img.decode();
+          } catch {
+            // Image is already loaded; ignore decode error
+          }
+        }
+        resolve();
+      };
+      img.onload = () => {
+        void done();
+      };
+      img.onerror = () => {
+        settled = true;
+        resolve();
+      };
+      img.src = page.dataUrl;
+      if (img.complete) {
+        void done();
+      }
+    });
+
+    wrapper.appendChild(img);
+    doc.body.appendChild(wrapper);
+    return ready;
+  });
+
+  await Promise.all(imageReadyPromises);
+
+  // Yield one frame so layout settles before triggering print
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+  const cleanup = () => {
+    window.setTimeout(() => {
+      iframe.remove();
+    }, 1000);
+  };
+  win.addEventListener('afterprint', cleanup, { once: true });
+  window.setTimeout(() => {
+    if (document.body.contains(iframe)) {
+      iframe.remove();
+    }
+  }, 120000);
+
+  win.focus();
+  win.print();
 }
 
 // ==========================================
@@ -1105,7 +1327,8 @@ function drawPhotoPlaceholder(
   y: number,
   w: number,
   h: number,
-  radius: number
+  radius: number,
+  label: string = 'Photo'
 ) {
   ctx.save();
   ctx.beginPath();
@@ -1115,17 +1338,19 @@ function drawPhotoPlaceholder(
   ctx.fill();
 
   ctx.fillStyle = '#ffffff';
-  ctx.font = '700 36px Inter, sans-serif';
+  ctx.font = '700 36px "Noto Sans Devanagari", Inter, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('Photo', x + w / 2, y + h / 2 + 12);
+  ctx.fillText(label, x + w / 2, y + h / 2 + 12);
   ctx.restore();
 }
 
-function formatGender(gender?: string): string {
+function formatGender(gender?: string, language: Language = 'mr'): string {
   if (!gender) return '--';
   const g = gender.trim().toLowerCase();
-  if (g === 'male' || g === 'm' || g === 'पुरुष') return 'Male';
-  if (g === 'female' || g === 'f' || g === 'स्त्री') return 'Female';
+  const labels = getTranslations(language).cardCanvas.gender;
+  if (g === 'male' || g === 'm' || g === 'पुरुष') return labels.male;
+  if (g === 'female' || g === 'f' || g === 'स्त्री') return labels.female;
+  if (g === 'transgender' || g === 'other' || g === 'इतर' || g === 'तृतीयपंथी') return labels.transgender;
   return gender;
 }
 

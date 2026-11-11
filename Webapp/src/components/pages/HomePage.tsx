@@ -14,7 +14,6 @@ import {
   AlertTriangle,
   Mail,
   Users,
-  Lock,
   RefreshCw,
   Eye,
   Plus,
@@ -29,10 +28,11 @@ import {
   useCardTemplates,
 } from '../../lib/cardTemplates';
 import { generateFrontCardCanvas, generateBackCardCanvas } from '../../lib/cardGenerator';
-import { SAMPLE_FARMER_RECORD } from '../../lib/samplePreview';
+import { getSampleFarmerRecord } from '../../lib/samplePreview';
 import { Header } from '../Header';
 import { Footer } from '../Footer';
 import { CustomDesignModal } from '../CustomDesignModal';
+import { useLanguage } from '../../i18n';
 
 interface HomePageProps {
   selectedTemplateId: string;
@@ -47,6 +47,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   onLaunchCreateCard,
   onNavigate,
 }) => {
+  const { language, t, format } = useLanguage();
   const [previewTemplateId, setPreviewTemplateId] = useState<string>(
     selectedTemplateId || DEFAULT_CARD_TEMPLATE_ID
   );
@@ -72,9 +73,10 @@ export const HomePage: React.FC<HomePageProps> = ({
     const renderSampleCard = async () => {
       setIsRenderingPreview(true);
       try {
+        const sampleRecord = getSampleFarmerRecord(language);
         const [frontCanvas, backCanvas] = await Promise.all([
-          generateFrontCardCanvas(SAMPLE_FARMER_RECORD, previewTemplateId),
-          generateBackCardCanvas(SAMPLE_FARMER_RECORD, previewTemplateId),
+          generateFrontCardCanvas(sampleRecord, previewTemplateId, { language }),
+          generateBackCardCanvas(sampleRecord, previewTemplateId, { language }),
         ]);
         if (!mounted) return;
         setFrontCardUrl(frontCanvas.toDataURL('image/png'));
@@ -91,6 +93,7 @@ export const HomePage: React.FC<HomePageProps> = ({
       mounted = false;
     };
   }, [
+    language,
     previewTemplateId,
     activeTemplate?.id,
     activeTemplate?.updatedAt,
@@ -133,16 +136,17 @@ export const HomePage: React.FC<HomePageProps> = ({
               <div className="lg:col-span-6 min-w-0 space-y-6">
                 <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-100/90 border border-emerald-200 text-emerald-800 text-[11px] sm:text-xs font-semibold max-w-full">
                   <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse shrink-0" />
-                  <span className="truncate">Smart PDF Extraction &amp; Card Studio</span>
+                  <span className="truncate">{t.home.heroBadge}</span>
                 </div>
 
                 <div className="space-y-3">
                   <h1 className="text-3xl sm:text-4xl lg:text-[2.75rem] font-extrabold text-slate-900 tracking-tight leading-[1.15]">
-                    Turn Farmer Documents into{' '}
-                    <span className="text-emerald-700">Print-Ready Summary Cards</span>
+                    {t.home.heroTitleStart}{' '}
+                    <span className="text-emerald-700">{t.home.heroTitleHighlight}</span>
                   </h1>
                   <p className="text-sm sm:text-base text-slate-600 leading-relaxed max-w-xl">
-                    <strong className="text-slate-800">Farmer Details Card</strong> extracts farmer, land, and bank details directly from registration PDFs—or lets you enter them manually—and renders crisp, two-sided CR80 pocket cards ready for printing.
+                    <strong className="text-slate-800">{t.home.heroDescBrand}</strong>{' '}
+                    {t.home.heroDescText}
                   </p>
                 </div>
 
@@ -154,7 +158,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     className="px-6 py-3.5 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white text-sm font-bold rounded-xl shadow-lg shadow-emerald-700/20 transition transform hover:-translate-y-0.5 flex items-center justify-center space-x-2 cursor-pointer"
                   >
                     <CreditCard className="w-4 h-4" />
-                    <span>Create Card</span>
+                    <span>{t.common.createCard}</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
 
@@ -163,25 +167,9 @@ export const HomePage: React.FC<HomePageProps> = ({
                     className="px-5 py-3.5 bg-white hover:bg-emerald-50/70 text-slate-800 border border-slate-300 hover:border-emerald-300 text-sm font-bold rounded-xl shadow-sm transition flex items-center justify-center space-x-2"
                   >
                     <Layers className="w-4 h-4 text-emerald-700" />
-                    <span>Explore Card Designs</span>
+                    <span>{t.home.exploreDesignsBtn}</span>
                   </a>
                 </div>
-
-                {/* Quick Trust Indicators */}
-                {/* <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-                  <div className="flex items-center space-x-2 text-xs text-slate-600 bg-white/80 px-3 py-2 rounded-lg border border-slate-200/80">
-                    <Lock className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span className="font-medium">Protected Data Handling</span>
-                  </div>
-                  <div className="flex items-center space-x-2 text-xs text-slate-600 bg-white/80 px-3 py-2 rounded-lg border border-slate-200/80">
-                    <QrCode className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span className="font-medium">Built-in Verification QR</span>
-                  </div>
-                  <div className="flex items-center space-x-2 text-xs text-slate-600 bg-white/80 px-3 py-2 rounded-lg border border-slate-200/80">
-                    <Printer className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span className="font-medium">Multiple Print Exports</span>
-                  </div>
-                </div> */}
               </div>
 
               {/* Right: Live Interactive Card Preview Studio */}
@@ -192,10 +180,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                     <div className="flex items-center space-x-2 min-w-0">
                       <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
                         <Sparkles className="w-3 h-3 text-emerald-600" />
-                        <span>Live Card Preview</span>
+                        <span>{t.home.liveCardPreview}</span>
                       </span>
                       <span className="text-xs font-semibold text-slate-500 truncate">
-                        {activeTemplate?.name || 'Template'}
+                        {activeTemplate?.name || t.home.defaultTemplateName}
                       </span>
                     </div>
 
@@ -204,23 +192,25 @@ export const HomePage: React.FC<HomePageProps> = ({
                       <button
                         type="button"
                         onClick={() => setPreviewSide('front')}
-                        className={`px-2.5 sm:px-3 py-1 rounded-md text-[11px] font-bold transition cursor-pointer ${previewSide === 'front'
-                          ? 'bg-emerald-700 text-white shadow-sm'
-                          : 'text-slate-600 hover:text-slate-900'
-                          }`}
+                        className={`px-2.5 sm:px-3 py-1 rounded-md text-[11px] font-bold transition cursor-pointer ${
+                          previewSide === 'front'
+                            ? 'bg-emerald-700 text-white shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
                       >
-                        Front Side
+                        {t.common.frontSide}
                       </button>
                       <button
                         type="button"
                         onClick={() => setPreviewSide('back')}
-                        className={`px-2.5 sm:px-3 py-1 rounded-md text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer ${previewSide === 'back'
-                          ? 'bg-emerald-700 text-white shadow-sm'
-                          : 'text-slate-600 hover:text-slate-900'
-                          }`}
+                        className={`px-2.5 sm:px-3 py-1 rounded-md text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer ${
+                          previewSide === 'back'
+                            ? 'bg-emerald-700 text-white shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
                       >
                         <RefreshCw className="w-3 h-3" />
-                        <span>Back Side</span>
+                        <span>{t.common.backSide}</span>
                       </button>
                     </div>
                   </div>
@@ -230,9 +220,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                     {displayedPreviewSrc ? (
                       <img
                         src={displayedPreviewSrc}
-                        alt={`Sample Farmer Card - ${previewSide} view`}
-                        className={`w-full rounded-xl shadow-lg border border-slate-300/80 object-contain transition-opacity duration-200 ${isRenderingPreview ? 'opacity-70' : 'opacity-100'
-                          }`}
+                        alt={`${t.home.liveCardPreview} - ${previewSide}`}
+                        className={`w-full rounded-xl shadow-lg border border-slate-300/80 object-contain transition-opacity duration-200 ${
+                          isRenderingPreview ? 'opacity-70' : 'opacity-100'
+                        }`}
                         style={{ aspectRatio: '1050 / 660' }}
                       />
                     ) : (
@@ -240,11 +231,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                         className="w-full rounded-xl bg-slate-200 animate-pulse flex items-center justify-center text-xs text-slate-500"
                         style={{ aspectRatio: '1050 / 660' }}
                       >
-                        Rendering sample card...
+                        {t.home.renderingSample}
                       </div>
                     )}
                     <span className="absolute bottom-4 right-4 sm:bottom-5 sm:right-5 px-2 py-0.5 rounded bg-slate-900/75 text-white text-[10px] font-medium backdrop-blur-sm">
-                      Illustrative Sample Data
+                      {t.home.illustrativeSample}
                     </span>
                   </div>
 
@@ -261,21 +252,23 @@ export const HomePage: React.FC<HomePageProps> = ({
                               setPreviewTemplateId(tpl.id);
                               onSelectTemplate(tpl.id);
                             }}
-                            title={`Preview ${tpl.name}`}
-                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer flex items-center gap-1 ${isSelected
-                              ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm'
-                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50'
-                              }`}
+                            title={format(t.home.previewTemplateTitle, { name: tpl.name })}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer flex items-center gap-1 ${
+                              isSelected
+                                ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm'
+                                : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50'
+                            }`}
                           >
                             <span>{tpl.name}</span>
                             {tpl.isCustom && (
                               <span
-                                className={`text-[9px] px-1 py-0.2 rounded font-extrabold uppercase ${isSelected
-                                  ? 'bg-emerald-600 text-emerald-100'
-                                  : 'bg-emerald-100 text-emerald-800'
-                                  }`}
+                                className={`text-[9px] px-1 py-0.2 rounded font-extrabold uppercase ${
+                                  isSelected
+                                    ? 'bg-emerald-600 text-emerald-100'
+                                    : 'bg-emerald-100 text-emerald-800'
+                                }`}
                               >
-                                Custom
+                                {t.common.custom}
                               </span>
                             )}
                           </button>
@@ -289,10 +282,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                           setIsCustomModalOpen(true);
                         }}
                         className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-dashed border-emerald-500 bg-emerald-50/70 hover:bg-emerald-100 text-emerald-800 transition flex items-center gap-1 cursor-pointer"
-                        title="Upload and preview your own custom card design"
+                        title={t.home.customDesignBtnTitle}
                       >
                         <Plus className="w-3 h-3" />
-                        <span>Custom Design</span>
+                        <span>{t.home.customDesignBtn}</span>
                       </button>
                     </div>
 
@@ -301,7 +294,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                       onClick={() => handleUseTemplate(previewTemplateId)}
                       className="w-full px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer"
                     >
-                      <span>Create Card With {activeTemplate?.name || 'Selected Design'}</span>
+                      <span>
+                        {format(t.home.createWithTemplate, {
+                          name: activeTemplate?.name || t.home.selectedDesignFallback,
+                        })}
+                      </span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -318,29 +315,31 @@ export const HomePage: React.FC<HomePageProps> = ({
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
               <div className="p-3 sm:p-4 rounded-xl bg-slate-50 border border-slate-200/80">
-                <div className="text-lg sm:text-xl font-extrabold text-emerald-800">Fast PDF Extraction</div>
+                <div className="text-lg sm:text-xl font-extrabold text-emerald-800">
+                  {t.home.metrics.fastPdfTitle}
+                </div>
+                <p className="text-xs text-slate-600 mt-0.5">{t.home.metrics.fastPdfDesc}</p>
+              </div>
+              <div className="p-3 sm:p-4 rounded-xl bg-slate-50 border border-slate-200/80">
+                <div className="text-lg sm:text-xl font-extrabold text-emerald-800">
+                  {t.home.metrics.multipleDesignsTitle}
+                </div>
                 <p className="text-xs text-slate-600 mt-0.5">
-                  Smart OCR reads registration documents and extracts key fields in seconds
+                  {t.home.metrics.multipleDesignsDesc}
                 </p>
               </div>
               <div className="p-3 sm:p-4 rounded-xl bg-slate-50 border border-slate-200/80">
                 <div className="text-lg sm:text-xl font-extrabold text-emerald-800">
-                  Multiple Card Designs
+                  {t.home.metrics.landRowsTitle}
+                </div>
+                <p className="text-xs text-slate-600 mt-0.5">{t.home.metrics.landRowsDesc}</p>
+              </div>
+              <div className="p-3 sm:p-4 rounded-xl bg-slate-50 border border-slate-200/80">
+                <div className="text-lg sm:text-xl font-extrabold text-emerald-800">
+                  {t.home.metrics.exportFormatsTitle}
                 </div>
                 <p className="text-xs text-slate-600 mt-0.5">
-                  Matched Front &amp; Back agricultural layouts ready to customize
-                </p>
-              </div>
-              <div className="p-3 sm:p-4 rounded-xl bg-slate-50 border border-slate-200/80">
-                <div className="text-lg sm:text-xl font-extrabold text-emerald-800">Up to 5 Land Rows</div>
-                <p className="text-xs text-slate-600 mt-0.5">
-                  Survey/Gat No, Village, Owner Type &amp; Area plus Bank details
-                </p>
-              </div>
-              <div className="p-3 sm:p-4 rounded-xl bg-slate-50 border border-slate-200/80">
-                <div className="text-lg sm:text-xl font-extrabold text-emerald-800">Flexible Export Formats</div>
-                <p className="text-xs text-slate-600 mt-0.5">
-                  Download high-resolution card images and print-ready PDF sheets
+                  {t.home.metrics.exportFormatsDesc}
                 </p>
               </div>
             </div>
@@ -353,14 +352,12 @@ export const HomePage: React.FC<HomePageProps> = ({
         <section id="how-it-works" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 space-y-8">
           <div className="text-center max-w-2xl mx-auto space-y-2">
             <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-              Simple 3-Step Workflow
+              {t.home.workflow.badge}
             </span>
             <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              From Registration PDF to Pocket Card in Under a Minute
+              {t.home.workflow.title}
             </h2>
-            <p className="text-sm text-slate-600">
-              Whether you have a farmer registration PDF or want to type details manually, the studio guides you smoothly.
-            </p>
+            <p className="text-sm text-slate-600">{t.home.workflow.subtitle}</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -371,15 +368,15 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <UploadCloud className="w-5 h-5" />
                 </div>
                 <span className="text-xs font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
-                  Step 01
+                  {t.home.workflow.step1Label}
                 </span>
               </div>
               <div className="space-y-1.5">
                 <h3 className="text-base font-bold text-slate-900">
-                  Upload PDF or Enter Details
+                  {t.home.workflow.step1Title}
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                  Drop your farmer registration PDF (up to 5 MB) to auto-extract fields and portrait photo automatically—or start straight from the blank manual form.
+                  {t.home.workflow.step1Desc}
                 </p>
               </div>
             </div>
@@ -391,15 +388,15 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <Crop className="w-5 h-5" />
                 </div>
                 <span className="text-xs font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
-                  Step 02
+                  {t.home.workflow.step2Label}
                 </span>
               </div>
               <div className="space-y-1.5">
                 <h3 className="text-base font-bold text-slate-900">
-                  Review, Edit &amp; Crop Photo
+                  {t.home.workflow.step2Title}
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                  Verify personal details, add up to 5 land survey rows and bank info, and use the built-in Photo Cropper to zoom, rotate, and align your portrait cleanly.
+                  {t.home.workflow.step2Desc}
                 </p>
               </div>
             </div>
@@ -411,15 +408,15 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <Printer className="w-5 h-5" />
                 </div>
                 <span className="text-xs font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
-                  Step 03
+                  {t.home.workflow.step3Label}
                 </span>
               </div>
               <div className="space-y-1.5">
                 <h3 className="text-base font-bold text-slate-900">
-                  Choose Design &amp; Print / Save
+                  {t.home.workflow.step3Title}
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                  Switch between multiple card templates, inspect Front &amp; Back with the generated QR code, and export in your preferred print-ready format.
+                  {t.home.workflow.step3Desc}
                 </p>
               </div>
             </div>
@@ -434,10 +431,10 @@ export const HomePage: React.FC<HomePageProps> = ({
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div className="space-y-2 max-w-2xl">
                 <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  Built-In Capabilities
+                  {t.home.capabilities.badge}
                 </span>
                 <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                  Everything Needed for Clean Farmer Summary Cards
+                  {t.home.capabilities.title}
                 </h2>
               </div>
               <button
@@ -445,7 +442,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 onClick={() => onLaunchCreateCard(previewTemplateId)}
                 className="self-start md:self-auto px-4 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center space-x-2 cursor-pointer"
               >
-                <span>Try the Card Maker</span>
+                <span>{t.home.capabilities.tryBtn}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -455,9 +452,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
                   <Sparkles className="w-5 h-5" />
                 </div>
-                <h3 className="text-sm font-bold text-slate-900">Smart PDF &amp; OCR Extraction</h3>
+                <h3 className="text-sm font-bold text-slate-900">
+                  {t.home.capabilities.cap1Title}
+                </h3>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Automatically extracts Farmer Name, Farmer ID, PM-Kisan, Aadhaar, PAN, land holdings, and bank details from registration PDFs.
+                  {t.home.capabilities.cap1Desc}
                 </p>
               </div>
 
@@ -465,9 +464,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
                   <Crop className="w-5 h-5" />
                 </div>
-                <h3 className="text-sm font-bold text-slate-900">Precision Photo Crop Studio</h3>
+                <h3 className="text-sm font-bold text-slate-900">
+                  {t.home.capabilities.cap2Title}
+                </h3>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Automatically locates the portrait box in uploaded PDFs and lets you zoom, pan, rotate, flip, or upload a new photo matched to exact 191:241 ID dimensions.
+                  {t.home.capabilities.cap2Desc}
                 </p>
               </div>
 
@@ -475,9 +476,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
                   <Layers className="w-5 h-5" />
                 </div>
-                <h3 className="text-sm font-bold text-slate-900">2-Sided Front &amp; Back Layout</h3>
+                <h3 className="text-sm font-bold text-slate-900">
+                  {t.home.capabilities.cap3Title}
+                </h3>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Front displays personal credentials, photo &amp; address; Back neatly formats up to 5 land survey/gat rows alongside Bank Name, Account Number &amp; IFSC code.
+                  {t.home.capabilities.cap3Desc}
                 </p>
               </div>
 
@@ -485,9 +488,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
                   <QrCode className="w-5 h-5" />
                 </div>
-                <h3 className="text-sm font-bold text-slate-900">Scannable QR Digital Summary</h3>
+                <h3 className="text-sm font-bold text-slate-900">
+                  {t.home.capabilities.cap4Title}
+                </h3>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Every generated card includes an encoded QR code on the front side that opens a clean, mobile-friendly verification summary page when scanned.
+                  {t.home.capabilities.cap4Desc}
                 </p>
               </div>
 
@@ -495,9 +500,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center">
                   <Printer className="w-5 h-5" />
                 </div>
-                <h3 className="text-sm font-bold text-slate-900">Print-Ready Card Exports</h3>
+                <h3 className="text-sm font-bold text-slate-900">
+                  {t.home.capabilities.cap5Title}
+                </h3>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Supports multiple output options—from crisp card images to CR80 PVC layouts and print-ready sheets suited for lamination.
+                  {t.home.capabilities.cap5Desc}
                 </p>
               </div>
 
@@ -505,9 +512,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
                   <ShieldCheck className="w-5 h-5" />
                 </div>
-                <h3 className="text-sm font-bold text-slate-900">Confidential Data Handling</h3>
+                <h3 className="text-sm font-bold text-slate-900">
+                  {t.home.capabilities.cap6Title}
+                </h3>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Your farmer records and card details are handled strictly for formatting your summary card—with zero advertising trackers and zero third-party data sales.
+                  {t.home.capabilities.cap6Desc}
                 </p>
               </div>
             </div>
@@ -520,14 +529,12 @@ export const HomePage: React.FC<HomePageProps> = ({
         <section id="designs" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 space-y-8">
           <div className="text-center max-w-2xl mx-auto space-y-2">
             <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-              Card Design Studio
+              {t.home.gallery.badge}
             </span>
             <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              Choose From Multiple Front &amp; Back Card Designs
+              {t.home.gallery.title}
             </h2>
-            <p className="text-sm text-slate-600">
-              Pick any template below to preview it in the showcase or launch the Card Maker directly with that design pre-selected.
-            </p>
+            <p className="text-sm text-slate-600">{t.home.gallery.subtitle}</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -554,24 +561,26 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </div>
                 <div className="space-y-1">
                   <h3 className="text-sm font-extrabold text-slate-900">
-                    Use Your Own Custom Design
+                    {t.home.gallery.customCardTitle}
                   </h3>
                   <p className="text-xs text-slate-600 leading-relaxed">
-                    Upload custom Front &amp; Back artwork (PNG, JPG, WebP, SVG) and preview live with farmer details.
+                    {t.home.gallery.customCardDesc}
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <div className="text-sm font-bold text-emerald-900">Custom Artwork</div>
+                  <div className="text-sm font-bold text-emerald-900">
+                    {t.home.gallery.customArtwork}
+                  </div>
                   <p className="text-[11px] text-emerald-700 font-medium">
-                    Includes safe-zone layout guide
+                    {t.home.gallery.safeZoneGuideHint}
                   </p>
                 </div>
                 <span className="px-3 py-1.5 rounded-lg bg-emerald-700 group-hover:bg-emerald-600 text-white text-[11px] font-bold shadow-sm transition flex items-center space-x-1">
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Upload</span>
+                  <span>{t.common.upload}</span>
                 </span>
               </div>
             </div>
@@ -581,33 +590,36 @@ export const HomePage: React.FC<HomePageProps> = ({
               return (
                 <div
                   key={template.id}
-                  className={`bg-white rounded-2xl border p-4 space-y-4 transition shadow-sm hover:shadow-md ${isSelected ? 'border-emerald-500 ring-2 ring-emerald-500/20' : 'border-slate-200'
-                    }`}
+                  className={`bg-white rounded-2xl border p-4 space-y-4 transition shadow-sm hover:shadow-md ${
+                    isSelected
+                      ? 'border-emerald-500 ring-2 ring-emerald-500/20'
+                      : 'border-slate-200'
+                  }`}
                 >
                   {/* Front & Back Thumbnails */}
                   <div className="grid grid-cols-2 gap-2.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
                     <div className="space-y-1">
                       <img
                         src={template.frontUrl}
-                        alt={`${template.name} Front`}
+                        alt={`${template.name} ${t.common.front}`}
                         className="w-full rounded-lg border border-slate-200 shadow-sm object-cover bg-white"
                         style={{ aspectRatio: '1050 / 660' }}
                         loading="lazy"
                       />
                       <span className="block text-center text-[10px] font-semibold text-slate-500">
-                        Front
+                        {t.common.front}
                       </span>
                     </div>
                     <div className="space-y-1">
                       <img
                         src={template.backUrl}
-                        alt={`${template.name} Back`}
+                        alt={`${template.name} ${t.common.back}`}
                         className="w-full rounded-lg border border-slate-200 shadow-sm object-cover bg-white"
                         style={{ aspectRatio: '1050 / 660' }}
                         loading="lazy"
                       />
                       <span className="block text-center text-[10px] font-semibold text-slate-500">
-                        Back
+                        {t.common.back}
                       </span>
                     </div>
                   </div>
@@ -616,15 +628,19 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <h3 className="text-sm font-bold text-slate-900 truncate">{template.name}</h3>
+                        <h3 className="text-sm font-bold text-slate-900 truncate">
+                          {template.name}
+                        </h3>
                         {template.isCustom && (
                           <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200 text-[9px] font-bold uppercase flex-shrink-0">
-                            Custom
+                            {t.common.custom}
                           </span>
                         )}
                       </div>
                       <p className="text-[11px] text-slate-500">
-                        {template.hasSeparateBack ? 'Matched Front & Back' : 'Unified Design'}
+                        {template.hasSeparateBack
+                          ? t.home.gallery.matchedFrontBack
+                          : t.home.gallery.unifiedDesign}
                       </p>
                     </div>
 
@@ -637,8 +653,8 @@ export const HomePage: React.FC<HomePageProps> = ({
                             setIsCustomModalOpen(true);
                           }}
                           className="p-1.5 rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-600 hover:text-emerald-800 transition cursor-pointer"
-                          title="Edit or delete custom design"
-                          aria-label={`Edit ${template.name}`}
+                          title={t.home.gallery.editCustomTitle}
+                          aria-label={`${t.common.edit} ${template.name}`}
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
@@ -652,10 +668,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                           window.scrollTo({ top: 0, behavior: 'smooth' });
                         }}
                         className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer"
-                        title="Preview this design in the Hero showcase"
+                        title={t.home.gallery.previewHeroTitle}
                       >
                         <Eye className="w-3 h-3" />
-                        <span>Preview</span>
+                        <span>{t.common.preview}</span>
                       </button>
 
                       <button
@@ -663,7 +679,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                         onClick={() => handleUseTemplate(template.id)}
                         className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-[11px] font-bold shadow-sm transition flex items-center space-x-1 cursor-pointer"
                       >
-                        <span>Use</span>
+                        <span>{t.common.use}</span>
                         <ArrowRight className="w-3 h-3" />
                       </button>
                     </div>
@@ -671,7 +687,6 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </div>
               );
             })}
-
           </div>
         </section>
 
@@ -684,15 +699,15 @@ export const HomePage: React.FC<HomePageProps> = ({
               {/* Who It's For */}
               <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-6 sm:p-7 space-y-4">
                 <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-700 text-white flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-700 text-white flex items-center justify-center shrink-0">
                     <Users className="w-5 h-5" />
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-900">
-                      Designed for Farmers, Families &amp; Local Centers
+                      {t.home.audience.whoTitle}
                     </h3>
                     <p className="text-xs text-emerald-800 font-medium">
-                      Practical pocket reference instead of fragile folded A4 printouts
+                      {t.home.audience.whoSubtitle}
                     </p>
                   </div>
                 </div>
@@ -701,19 +716,22 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <li className="flex items-start space-x-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                     <span>
-                      <strong>Individual Farmers:</strong> Keep Farmer ID, Survey/Gat numbers, and bank details neatly organized on one pocket card.
+                      <strong>{t.home.audience.whoItem1Label}</strong>{' '}
+                      {t.home.audience.whoItem1Text}
                     </span>
                   </li>
                   <li className="flex items-start space-x-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                     <span>
-                      <strong>Family Members:</strong> Assist elders by editing details cleanly and saving a print-ready A4 sheet.
+                      <strong>{t.home.audience.whoItem2Label}</strong>{' '}
+                      {t.home.audience.whoItem2Text}
                     </span>
                   </li>
                   <li className="flex items-start space-x-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                     <span>
-                      <strong>VLE / CSC &amp; Print Shops:</strong> Format customer-provided slips rapidly into exact CR80 duplex layouts in seconds.
+                      <strong>{t.home.audience.whoItem3Label}</strong>{' '}
+                      {t.home.audience.whoItem3Text}
                     </span>
                   </li>
                 </ul>
@@ -722,21 +740,25 @@ export const HomePage: React.FC<HomePageProps> = ({
               {/* Important Transparency Notice */}
               <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-6 sm:p-7 space-y-4">
                 <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-300 text-amber-700 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-300 text-amber-700 flex items-center justify-center shrink-0">
                     <AlertTriangle className="w-5 h-5" />
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-900">
-                      Independent Convenience Tool — Not Government Issued
+                      {t.home.audience.noticeTitle}
                     </h3>
                     <p className="text-xs text-amber-800 font-medium">
-                      Clear transparency before you generate any card
+                      {t.home.audience.noticeSubtitle}
                     </p>
                   </div>
                 </div>
 
                 <p className="text-xs sm:text-sm text-slate-700 leading-relaxed">
-                  <strong>Farmer Details Card</strong> is an independent, unofficial formatting utility. It is <strong>not affiliated with, endorsed by, or connected to</strong> the Government of India, Ministry of Agriculture, PM-KISAN, or AgriStack. Generated cards carry no statutory or legal authority and are strictly for personal reference and convenience.
+                  <strong>{t.common.appName}</strong> {t.home.audience.noticeBody1}{' '}
+                  <strong>{t.home.audience.noticeBodyHighlight1}</strong>{' '}
+                  {t.home.audience.noticeBody2}{' '}
+                  <strong>{t.home.audience.noticeBodyHighlight2}</strong>{' '}
+                  {t.home.audience.noticeBody3}
                 </p>
 
                 <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -745,14 +767,14 @@ export const HomePage: React.FC<HomePageProps> = ({
                     onClick={(e) => handleLinkClick(e, 'disclaimer')}
                     className="px-3 py-1.5 rounded-lg bg-white hover:bg-amber-100/60 text-amber-900 border border-amber-300 text-xs font-bold transition"
                   >
-                    Read Legal Disclaimer
+                    {t.home.audience.readDisclaimer}
                   </a>
                   <a
                     href={getPageUrl('privacy')}
                     onClick={(e) => handleLinkClick(e, 'privacy')}
                     className="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-bold transition"
                   >
-                    Read Privacy Policy
+                    {t.home.audience.readPrivacy}
                   </a>
                 </div>
               </div>
@@ -761,7 +783,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             {/* Rest Other Pages Quick Directory */}
             <div className="space-y-4">
               <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-                Documentation, Policies &amp; Support Pages
+                {t.home.directory.title}
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <a
@@ -772,11 +794,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <FileText className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
                   <div>
                     <div className="text-xs font-bold text-slate-900 group-hover:text-emerald-800 flex items-center space-x-1">
-                      <span>Terms &amp; Conditions</span>
+                      <span>{t.home.directory.termsTitle}</span>
                       <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition" />
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1">
-                      Permitted uses, user verification responsibility &amp; service scope.
+                      {t.home.directory.termsDesc}
                     </p>
                   </div>
                 </a>
@@ -789,11 +811,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <ShieldCheck className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
                   <div>
                     <div className="text-xs font-bold text-slate-900 group-hover:text-emerald-800 flex items-center space-x-1">
-                      <span>Privacy Policy</span>
+                      <span>{t.home.directory.privacyTitle}</span>
                       <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition" />
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1">
-                      How document handling, QR encoding, security &amp; data rights work.
+                      {t.home.directory.privacyDesc}
                     </p>
                   </div>
                 </a>
@@ -806,11 +828,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                   <div>
                     <div className="text-xs font-bold text-slate-900 group-hover:text-emerald-800 flex items-center space-x-1">
-                      <span>Legal Disclaimer</span>
+                      <span>{t.home.directory.disclaimerTitle}</span>
                       <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition" />
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1">
-                      Non-government notice, OCR accuracy &amp; non-statutory scope.
+                      {t.home.directory.disclaimerDesc}
                     </p>
                   </div>
                 </a>
@@ -823,11 +845,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <Mail className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
                   <div>
                     <div className="text-xs font-bold text-slate-900 group-hover:text-emerald-800 flex items-center space-x-1">
-                      <span>Contact &amp; Support</span>
+                      <span>{t.home.directory.contactTitle}</span>
                       <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition" />
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1">
-                      Email support, bug reporting &amp; turnaround hours.
+                      {t.home.directory.contactDesc}
                     </p>
                   </div>
                 </a>
@@ -843,10 +865,10 @@ export const HomePage: React.FC<HomePageProps> = ({
           <div className="bg-gradient-to-r from-emerald-900 via-emerald-800 to-emerald-700 rounded-2xl p-7 sm:p-10 text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="space-y-2 text-center md:text-left max-w-xl">
               <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight">
-                Ready to Format Your Farmer Summary Card?
+                {t.home.bottomCta.title}
               </h2>
               <p className="text-xs sm:text-sm text-emerald-100 leading-relaxed">
-                Open the Card Maker Studio to upload a registration PDF or fill details manually, crop your photo, and export print-ready cards in multiple formats right away.
+                {t.home.bottomCta.description}
               </p>
             </div>
 
@@ -856,7 +878,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               className="shrink-0 px-6 py-3.5 bg-white hover:bg-emerald-50 text-emerald-900 text-sm font-bold rounded-xl shadow-md transition transform hover:-translate-y-0.5 flex items-center space-x-2 cursor-pointer"
             >
               <CreditCard className="w-4 h-4 text-emerald-700" />
-              <span>Open Card Maker Studio</span>
+              <span>{t.home.bottomCta.button}</span>
               <ArrowRight className="w-4 h-4 text-emerald-700" />
             </button>
           </div>
@@ -885,4 +907,3 @@ export const HomePage: React.FC<HomePageProps> = ({
     </div>
   );
 };
-

@@ -99,6 +99,7 @@ function getModifiedFields(original: FarmerRecord, current: FarmerRecord): strin
       }
     };
 
+    checkLand('khata_no', 'khata_no');
     checkLand('total_area_hectare', 'total_area_hectare');
     checkLand('number_of_lands', 'number_of_lands');
     checkLand('survey_gat_no', 'survey_gat_no');

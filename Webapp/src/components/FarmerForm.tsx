@@ -1,6 +1,20 @@
 import React from 'react';
-import { User, Phone, MapPin, Calendar, CreditCard, Building2, Landmark, FileText, CheckCircle2, Plus, Trash2, RotateCcw } from 'lucide-react';
+import {
+  User,
+  Phone,
+  MapPin,
+  Calendar,
+  CreditCard,
+  Building2,
+  Landmark,
+  FileText,
+  CheckCircle2,
+  Plus,
+  Trash2,
+  RotateCcw,
+} from 'lucide-react';
 import { FarmerRecord, LandRow } from '../types';
+import { useLanguage } from '../i18n';
 
 interface FarmerFormProps {
   data: FarmerRecord;
@@ -19,19 +33,25 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
   onReset,
   canReset = false,
 }) => {
+  const { t, format } = useLanguage();
+
   const updateField = (field: keyof FarmerRecord, val: any) => {
     onChange({ ...data, [field]: val });
   };
 
   // Ensure there is always at least 1 land row, up to maximum 5 rows
-  const currentLandRows: LandRow[] = (data.land_records && data.land_records.length > 0)
-    ? data.land_records
-    : [{
-      survey_no: data.land_detail?.survey_gat_no || '',
-      village: data.land_detail?.village || '',
-      owner_type: '',
-      area: data.land_detail?.total_area_hectare || '',
-    }];
+  const currentLandRows: LandRow[] =
+    data.land_records && data.land_records.length > 0
+      ? data.land_records
+      : [
+          {
+            khata_no: data.land_detail?.khata_no || '',
+            survey_no: data.land_detail?.survey_gat_no || '',
+            village: data.land_detail?.village || '',
+            owner_type: '',
+            area: data.land_detail?.total_area_hectare || '',
+          },
+        ];
 
   const updateLandRow = (index: number, field: keyof LandRow, val: string) => {
     const updatedRows = currentLandRows.map((row, idx) =>
@@ -41,6 +61,7 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
     // Keep data.land_detail in sync with row 0 for backward compatibility
     const updatedLandDetail = { ...data.land_detail };
     if (index === 0) {
+      if (field === 'khata_no') updatedLandDetail.khata_no = val;
       if (field === 'survey_no') updatedLandDetail.survey_gat_no = val;
       if (field === 'village') updatedLandDetail.village = val;
       if (field === 'area') updatedLandDetail.total_area_hectare = val;
@@ -59,6 +80,7 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
     const newRows: LandRow[] = [
       ...currentLandRows,
       {
+        khata_no: '',
         survey_no: '',
         village: currentLandRows[0]?.village || '',
         owner_type: '',
@@ -110,15 +132,9 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
       <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 px-6 py-4 text-white flex items-center justify-between gap-3">
         <div>
           <h2 className="text-lg sm:text-xl font-bold flex items-center space-x-2">
-            {/* <div className="w-6 h-6 rounded-md bg-white flex items-center justify-center p-0.5 shadow-sm"> */}
-            {/* <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" /> */}
-            {/* </div> */}
-            <span>Farmer ID Card Information
-            </span>
+            <span>{t.farmerForm.title}</span>
           </h2>
-          <p className="text-sm text-emerald-100 mt-0.5">
-            Enter manually or review &amp; edit details for both Front &amp; Back sides of the ID card
-          </p>
+          <p className="text-sm text-emerald-100 mt-0.5">{t.farmerForm.subtitle}</p>
         </div>
         {onReset && canReset && (
           <button
@@ -126,15 +142,12 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
             onClick={onReset}
             disabled={disabled}
             className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-lg bg-emerald-900/50 hover:bg-emerald-900/80 disabled:opacity-50 disabled:cursor-not-allowed text-emerald-100 border border-emerald-500/40 text-sm font-semibold transition cursor-pointer shrink-0"
-            title="Clear all fields and start over"
+            title={t.farmerForm.clearFormTitle}
           >
             <RotateCcw className="w-4 h-4" />
-            <span>Clear Form</span>
+            <span>{t.farmerForm.clearForm}</span>
           </button>
         )}
-        {/* <span className="hidden sm:inline-flex items-center text-xs bg-emerald-900/60 text-emerald-200 px-3 py-1 rounded-full font-medium border border-emerald-500/30">
-          Front & Back 2-Sided
-        </span> */}
       </div>
 
       <div className="p-6">
@@ -149,41 +162,41 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
                   1
                 </span>
                 <h3 className="font-bold text-slate-800 text-base sm:text-lg">
-                  Front Side Details (समोरील बाजू)
+                  {t.farmerForm.section1Title}
                 </h3>
               </div>
               <span className="text-xs sm:text-sm font-semibold text-emerald-700 bg-emerald-50 px-3 py-0.5 rounded-full border border-emerald-200">
-                Personal Details
+                {t.farmerForm.section1Badge}
               </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* 1. Farmer Name (नाव) */}
+              {/* 1. Farmer Name */}
               <div>
                 <label className="text-sm font-bold text-slate-700 mb-1.5 flex items-center">
                   <User className="w-4 h-4 mr-1.5 text-emerald-600 shrink-0" />
-                  <span>नाव (Farmer Name)</span>
+                  <span>{t.farmerForm.farmerNameLabel}</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="Full Name of Farmer"
+                  placeholder={t.farmerForm.farmerNamePlaceholder}
                   value={data.farmer_name}
-                  onChange={e => updateField('farmer_name', e.target.value)}
+                  onChange={(e) => updateField('farmer_name', e.target.value)}
                   className="w-full px-3.5 py-2.5 text-base bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:bg-white font-medium text-slate-900"
                 />
               </div>
 
-              {/* 2. Farmer Number / ID (फार्मर नंबर) */}
+              {/* 2. Farmer Number / ID */}
               <div>
                 <label className="text-sm font-bold text-slate-700 mb-1.5 flex items-center">
                   <CreditCard className="w-4 h-4 mr-1.5 text-emerald-600 shrink-0" />
-                  <span>फार्मर नंबर (Farmer ID Number)</span>
+                  <span>{t.farmerForm.farmerIdLabel}</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. MH123456789"
+                  placeholder={t.farmerForm.farmerIdPlaceholder}
                   value={data.farmer_id}
-                  onChange={e => updateField('farmer_id', e.target.value)}
+                  onChange={(e) => updateField('farmer_id', e.target.value)}
                   className="w-full px-3.5 py-2.5 text-base bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:bg-white font-mono font-bold text-emerald-900"
                 />
               </div>
@@ -194,13 +207,13 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
               <div>
                 <label className="text-sm font-bold text-slate-700 mb-1.5 flex items-center">
                   <Calendar className="w-4 h-4 mr-1.5 text-emerald-600 shrink-0" />
-                  <span>जन्म दिनांक (Date of Birth)</span>
+                  <span>{t.farmerForm.dobLabel}</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="DD/MM/YYYY"
+                  placeholder={t.farmerForm.dobPlaceholder}
                   value={data.dob}
-                  onChange={e => updateField('dob', e.target.value)}
+                  onChange={(e) => updateField('dob', e.target.value)}
                   className="w-full px-3.5 py-2.5 text-base bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:bg-white text-slate-900"
                 />
               </div>
@@ -208,13 +221,13 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
               <div>
                 <label className="text-sm font-bold text-slate-700 mb-1.5 flex items-center">
                   <User className="w-4 h-4 mr-1.5 text-emerald-600 shrink-0" />
-                  <span>लिंग (Gender)</span>
+                  <span>{t.farmerForm.genderLabel}</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="Male / Female"
+                  placeholder={t.farmerForm.genderPlaceholder}
                   value={data.gender}
-                  onChange={e => updateField('gender', e.target.value)}
+                  onChange={(e) => updateField('gender', e.target.value)}
                   className="w-full px-3.5 py-2.5 text-base bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:bg-white text-slate-900"
                 />
               </div>
@@ -222,13 +235,13 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
               <div>
                 <label className="text-sm font-bold text-slate-700 mb-1.5 flex items-center">
                   <Phone className="w-4 h-4 mr-1.5 text-emerald-600 shrink-0" />
-                  <span>मोबाईल नंबर (Mobile)</span>
+                  <span>{t.farmerForm.mobileLabel}</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="10-digit mobile"
+                  placeholder={t.farmerForm.mobilePlaceholder}
                   value={data.mobile_number}
-                  onChange={e => updateField('mobile_number', e.target.value)}
+                  onChange={(e) => updateField('mobile_number', e.target.value)}
                   className="w-full px-3.5 py-2.5 text-base bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:bg-white font-mono text-slate-900"
                 />
               </div>
@@ -240,19 +253,19 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
                 <label className="text-sm font-bold text-slate-700 mb-1.5 flex flex-wrap items-center justify-between gap-1">
                   <span className="flex items-center">
                     <CreditCard className="w-4 h-4 mr-1.5 text-emerald-600 shrink-0" />
-                    <span>पॅन कार्ड (Farmer PAN Card)</span>
+                    <span>{t.farmerForm.panLabel}</span>
                   </span>
                   {showExtractedBadges && data.pan_card && (
                     <span className="text-xs text-emerald-600 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                      Extracted
+                      {t.farmerForm.extractedBadge}
                     </span>
                   )}
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. ABCDE1234F"
+                  placeholder={t.farmerForm.panPlaceholder}
                   value={data.pan_card || ''}
-                  onChange={e => updateField('pan_card', e.target.value.toUpperCase())}
+                  onChange={(e) => updateField('pan_card', e.target.value.toUpperCase())}
                   className="w-full px-3.5 py-2.5 text-base bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:bg-white font-mono text-slate-900"
                 />
               </div>
@@ -260,13 +273,13 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
               <div>
                 <label className="text-sm font-bold text-slate-700 mb-1.5 flex items-center">
                   <FileText className="w-4 h-4 mr-1.5 text-emerald-600 shrink-0" />
-                  <span>PM किसान नंबर</span>
+                  <span>{t.farmerForm.pmKisanLabel}</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="Enter PM Kisan No"
+                  placeholder={t.farmerForm.pmKisanPlaceholder}
                   value={data.enrollment_no || ''}
-                  onChange={e => updateField('enrollment_no', e.target.value)}
+                  onChange={(e) => updateField('enrollment_no', e.target.value)}
                   className="w-full px-3.5 py-2.5 text-base bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:bg-white font-mono text-slate-900"
                 />
               </div>
@@ -274,29 +287,29 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
               <div>
                 <label className="text-sm font-bold text-slate-700 mb-1.5 flex items-center">
                   <CreditCard className="w-4 h-4 mr-1.5 text-emerald-600 shrink-0" />
-                  <span>आधार नंबर (Aadhaar Number)</span>
+                  <span>{t.farmerForm.aadhaarLabel}</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="XXXX XXXX XXXX"
+                  placeholder={t.farmerForm.aadhaarPlaceholder}
                   value={data.aadhaar_number || ''}
-                  onChange={e => updateField('aadhaar_number', e.target.value)}
+                  onChange={(e) => updateField('aadhaar_number', e.target.value)}
                   className="w-full px-3.5 py-2.5 text-base bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:bg-white font-mono text-slate-900"
                 />
               </div>
             </div>
 
-            {/* Row 4: Address (पत्ता) */}
+            {/* Row 4: Address */}
             <div>
               <label className="text-sm font-bold text-slate-700 mb-1.5 flex items-center">
                 <MapPin className="w-4 h-4 mr-1.5 text-emerald-600 shrink-0" />
-                <span>पत्ता (Address)</span>
+                <span>{t.farmerForm.addressLabel}</span>
               </label>
               <textarea
                 rows={2}
-                placeholder="Full Residential Address"
+                placeholder={t.farmerForm.addressPlaceholder}
                 value={data.address}
-                onChange={e => updateField('address', e.target.value)}
+                onChange={(e) => updateField('address', e.target.value)}
                 className="w-full px-3.5 py-2.5 text-base bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:bg-white text-slate-900"
               />
             </div>
@@ -312,30 +325,25 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
                   2
                 </span>
                 <h3 className="font-bold text-slate-800 text-base sm:text-lg">
-                  Back Side Details (मागील बाजू)
+                  {t.farmerForm.section2Title}
                 </h3>
               </div>
               <span className="text-xs sm:text-sm font-semibold text-emerald-700 bg-emerald-50 px-3 py-0.5 rounded-full border border-emerald-200">
-                Land & Bank Details
+                {t.farmerForm.section2Badge}
               </span>
             </div>
 
-            {/* Sub-section: जमिनीचा तपशील (Land Details) */}
+            {/* Sub-section: Land Details */}
             <div className="bg-emerald-50/60 p-4 sm:p-5 rounded-xl border border-emerald-100 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h4 className="text-sm sm:text-base font-bold text-emerald-900 uppercase tracking-wider flex items-center">
                   <Building2 className="w-4 h-4 mr-1.5 text-emerald-700" />
-                  <span>जमिनीचा तपशील (Land Details)</span>
+                  <span>{t.farmerForm.landDetailsHeading}</span>
                 </h4>
                 <div className="flex items-center space-x-2">
                   <span className="text-xs sm:text-sm font-semibold text-emerald-700 bg-emerald-100/90 px-3 py-0.5 rounded-full border border-emerald-200">
-                    {currentLandRows.length} / 5 नोंदी (Records)
+                    {format(t.farmerForm.recordsCount, { count: currentLandRows.length })}
                   </span>
-                  {data.land_detail?.khata_no && (
-                    <span className="text-xs text-slate-500 bg-white/80 px-2.5 py-0.5 rounded border border-slate-200">
-                      खाता क्र: {data.land_detail.khata_no}
-                    </span>
-                  )}
                 </div>
               </div>
 
@@ -344,64 +352,74 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
                 <table className="w-full text-left text-sm">
                   <thead className="bg-transparent text-slate-800 font-bold border-b border-emerald-200">
                     <tr>
-                      <th className="py-3 px-3 w-10 text-center">#</th>
-                      <th className="py-3 px-3 w-1/4">सर्वे नंबर (Survey Number)</th>
-                      <th className="py-3 px-3 w-1/4">गाव (Village)</th>
-                      <th className="py-3 px-3 w-1/4">मालकी प्रकार (Owner Type)</th>
-                      <th className="py-3 px-3 w-1/4">क्षेत्र (Area)</th>
-                      <th className="py-3 px-2.5 w-12 text-center">कृती</th>
+                      <th className="py-3 px-2.5 w-10 text-center">#</th>
+                      <th className="py-3 px-2.5 w-[19%] min-w-[110px] whitespace-nowrap">{t.farmerForm.colSurveyNo}</th>
+                      <th className="py-3 px-2.5 w-[17%] min-w-[100px] whitespace-nowrap">{t.farmerForm.colKhataNo}</th>
+                      <th className="py-3 px-2.5 w-[22%] min-w-[120px] whitespace-nowrap">{t.farmerForm.colVillage}</th>
+                      <th className="py-3 px-2.5 w-[22%] min-w-[120px] whitespace-nowrap">{t.farmerForm.colOwnerType}</th>
+                      <th className="py-3 px-2.5 w-[20%] min-w-[105px] whitespace-nowrap">{t.farmerForm.colArea}</th>
+                      <th className="py-3 px-2 w-11 text-center whitespace-nowrap">{t.farmerForm.colAction}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-medium">
                     {currentLandRows.map((row, index) => (
                       <tr key={index} className="hover:bg-emerald-50/40 transition-colors">
-                        <td className="py-2.5 px-3 text-center text-slate-500 font-bold">
+                        <td className="py-2.5 px-2.5 text-center text-slate-500 font-bold">
                           {index + 1}
                         </td>
-                        <td className="py-2.5 px-2">
+                        <td className="py-2.5 px-1.5">
                           <input
                             type="text"
-                            placeholder="उदा. 102/9"
+                            placeholder={t.farmerForm.surveyPlaceholder}
                             value={row.survey_no}
-                            onChange={e => updateLandRow(index, 'survey_no', e.target.value)}
-                            className="w-full px-3 py-2 text-sm bg-slate-50 focus:bg-white border border-slate-200 rounded-md focus:ring-2 focus:ring-emerald-500 text-slate-900 font-medium"
+                            onChange={(e) => updateLandRow(index, 'survey_no', e.target.value)}
+                            className="w-full px-2.5 py-2 text-sm bg-slate-50 focus:bg-white border border-slate-200 rounded-md focus:ring-2 focus:ring-emerald-500 text-slate-900 font-medium"
                           />
                         </td>
-                        <td className="py-2.5 px-2">
+                        <td className="py-2.5 px-1.5">
                           <input
                             type="text"
-                            placeholder="उदा. शिरूर"
-                            value={row.village}
-                            onChange={e => updateLandRow(index, 'village', e.target.value)}
-                            className="w-full px-3 py-2 text-sm bg-slate-50 focus:bg-white border border-slate-200 rounded-md focus:ring-2 focus:ring-emerald-500 text-slate-900 font-medium"
+                            placeholder={t.farmerForm.khataPlaceholder}
+                            value={row.khata_no || ''}
+                            onChange={(e) => updateLandRow(index, 'khata_no', e.target.value)}
+                            className="w-full px-2.5 py-2 text-sm bg-slate-50 focus:bg-white border border-slate-200 rounded-md focus:ring-2 focus:ring-emerald-500 text-slate-900 font-medium"
                           />
                         </td>
-                        <td className="py-2.5 px-2">
+                        <td className="py-2.5 px-1.5">
+                          <input
+                            type="text"
+                            placeholder={t.farmerForm.villagePlaceholder}
+                            value={row.village}
+                            onChange={(e) => updateLandRow(index, 'village', e.target.value)}
+                            className="w-full px-2.5 py-2 text-sm bg-slate-50 focus:bg-white border border-slate-200 rounded-md focus:ring-2 focus:ring-emerald-500 text-slate-900 font-medium"
+                          />
+                        </td>
+                        <td className="py-2.5 px-1.5">
                           <input
                             type="text"
                             list="owner-type-options"
-                            placeholder="उदा. स्वतःची / सामाईक"
+                            placeholder={t.farmerForm.ownerTypePlaceholder}
                             value={row.owner_type}
-                            onChange={e => updateLandRow(index, 'owner_type', e.target.value)}
-                            className="w-full px-3 py-2 text-sm bg-slate-50 focus:bg-white border border-slate-200 rounded-md focus:ring-2 focus:ring-emerald-500 text-slate-900 font-medium"
+                            onChange={(e) => updateLandRow(index, 'owner_type', e.target.value)}
+                            className="w-full px-2.5 py-2 text-sm bg-slate-50 focus:bg-white border border-slate-200 rounded-md focus:ring-2 focus:ring-emerald-500 text-slate-900 font-medium"
                           />
                         </td>
-                        <td className="py-2.5 px-2">
+                        <td className="py-2.5 px-1.5">
                           <input
                             type="text"
-                            placeholder="उदा. 0.72 Ha"
+                            placeholder={t.farmerForm.areaPlaceholder}
                             value={row.area}
-                            onChange={e => updateLandRow(index, 'area', e.target.value)}
-                            className="w-full px-3 py-2 text-sm bg-slate-50 focus:bg-white border border-slate-200 rounded-md focus:ring-2 focus:ring-emerald-500 text-slate-900 font-medium"
+                            onChange={(e) => updateLandRow(index, 'area', e.target.value)}
+                            className="w-full px-2.5 py-2 text-sm bg-slate-50 focus:bg-white border border-slate-200 rounded-md focus:ring-2 focus:ring-emerald-500 text-slate-900 font-medium"
                           />
                         </td>
-                        <td className="py-2.5 px-2 text-center">
+                        <td className="py-2.5 px-1.5 text-center">
                           {index > 0 ? (
                             <button
                               type="button"
                               onClick={() => removeLandRow(index)}
                               className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-md transition-colors"
-                              title="नोंद हटवा (Remove row)"
+                              title={t.farmerForm.removeRowTitle}
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -424,10 +442,10 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
                   >
                     <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                       <span className="text-sm font-bold text-emerald-800 flex items-center">
-                        नोंद #{index + 1}
+                        {format(t.farmerForm.mobileRecordTitle, { num: index + 1 })}
                         {index === 0 && (
                           <span className="ml-2 text-xs font-normal text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                            मुख्य नोंद
+                            {t.farmerForm.mainRecordBadge}
                           </span>
                         )}
                       </span>
@@ -438,7 +456,7 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
                           className="inline-flex items-center text-sm text-rose-600 hover:text-rose-800 bg-rose-50 px-2.5 py-0.5 rounded"
                         >
                           <Trash2 className="w-3.5 h-3.5 mr-1" />
-                          <span>हटवा</span>
+                          <span>{t.farmerForm.removeBtn}</span>
                         </button>
                       )}
                     </div>
@@ -446,53 +464,66 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-sm font-bold text-slate-700 mb-1">
-                          सर्वे नंबर (Survey Number)
+                          {t.farmerForm.colSurveyNo}
                         </label>
                         <input
                           type="text"
-                          placeholder="उदा. 102/9"
+                          placeholder={t.farmerForm.surveyPlaceholder}
                           value={row.survey_no}
-                          onChange={e => updateLandRow(index, 'survey_no', e.target.value)}
+                          onChange={(e) => updateLandRow(index, 'survey_no', e.target.value)}
                           className="w-full px-3 py-2 text-base bg-slate-50 border border-slate-200 rounded-md focus:ring-2 focus:ring-emerald-500 text-slate-900 font-medium"
                         />
                       </div>
 
                       <div>
                         <label className="block text-sm font-bold text-slate-700 mb-1">
-                          गाव (Village)
+                          {t.farmerForm.colKhataNo}
                         </label>
                         <input
                           type="text"
-                          placeholder="उदा. शिरूर"
-                          value={row.village}
-                          onChange={e => updateLandRow(index, 'village', e.target.value)}
+                          placeholder={t.farmerForm.khataPlaceholder}
+                          value={row.khata_no || ''}
+                          onChange={(e) => updateLandRow(index, 'khata_no', e.target.value)}
                           className="w-full px-3 py-2 text-base bg-slate-50 border border-slate-200 rounded-md focus:ring-2 focus:ring-emerald-500 text-slate-900 font-medium"
                         />
                       </div>
 
                       <div>
                         <label className="block text-sm font-bold text-slate-700 mb-1">
-                          मालकी प्रकार (Owner Type)
+                          {t.farmerForm.colVillage}
+                        </label>
+                        <input
+                          type="text"
+                          placeholder={t.farmerForm.villagePlaceholder}
+                          value={row.village}
+                          onChange={(e) => updateLandRow(index, 'village', e.target.value)}
+                          className="w-full px-3 py-2 text-base bg-slate-50 border border-slate-200 rounded-md focus:ring-2 focus:ring-emerald-500 text-slate-900 font-medium"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-1">
+                          {t.farmerForm.colOwnerType}
                         </label>
                         <input
                           type="text"
                           list="owner-type-options"
-                          placeholder="उदा. स्वतःची / सामाईक"
+                          placeholder={t.farmerForm.ownerTypePlaceholder}
                           value={row.owner_type}
-                          onChange={e => updateLandRow(index, 'owner_type', e.target.value)}
+                          onChange={(e) => updateLandRow(index, 'owner_type', e.target.value)}
                           className="w-full px-3 py-2 text-base bg-slate-50 border border-slate-200 rounded-md focus:ring-2 focus:ring-emerald-500 text-slate-900 font-medium"
                         />
                       </div>
 
                       <div>
                         <label className="block text-sm font-bold text-slate-700 mb-1">
-                          क्षेत्र (Area)
+                          {t.farmerForm.colArea}
                         </label>
                         <input
                           type="text"
-                          placeholder="उदा. 0.72 Ha"
+                          placeholder={t.farmerForm.areaPlaceholder}
                           value={row.area}
-                          onChange={e => updateLandRow(index, 'area', e.target.value)}
+                          onChange={(e) => updateLandRow(index, 'area', e.target.value)}
                           className="w-full px-3 py-2 text-base bg-slate-50 border border-slate-200 rounded-md focus:ring-2 focus:ring-emerald-500 text-slate-900 font-medium"
                         />
                       </div>
@@ -502,8 +533,8 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
               </div>
 
               <datalist id="owner-type-options">
-                <option value="Single" />
-                <option value="Joint" />
+                <option value={t.farmerForm.ownerOptionSingle} />
+                <option value={t.farmerForm.ownerOptionJoint} />
               </datalist>
 
               {/* Add New Record Option */}
@@ -515,69 +546,72 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
                     className="inline-flex items-center text-sm font-bold text-emerald-800 bg-white hover:bg-emerald-100/60 disabled:opacity-50 disabled:cursor-not-allowed border border-emerald-300 px-3.5 py-2 rounded-lg transition-colors shadow-sm cursor-pointer"
                   >
                     <Plus className="w-4 h-4 mr-1.5 text-emerald-600" />
-                    <span>नवीन नोंद जोडा (Add New Record)</span>
+                    <span>{t.farmerForm.addNewRecord}</span>
                   </button>
                 ) : (
                   <span className="text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1 rounded-md">
-                    जास्तीत जास्त ५ नोंदींची मर्यादा पूर्ण झाली (Max 5 records limit reached)
+                    {t.farmerForm.maxRecordsReached}
                   </span>
                 )}
                 <span className="text-xs sm:text-sm text-slate-500">
-                  मर्यादा: जास्तीत जास्त ५ नोंदी (Max 5 rows)
+                  {t.farmerForm.maxRowsHint}
                 </span>
               </div>
             </div>
 
-            {/* Sub-section: बँक तपशील (Bank Details) */}
+            {/* Sub-section: Bank Details */}
             <div className="bg-sky-50/60 p-4 sm:p-5 rounded-xl border border-sky-100 space-y-3">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm sm:text-base font-bold text-sky-900 uppercase tracking-wider flex items-center">
                   <Landmark className="w-4 h-4 mr-1.5 text-sky-700" />
-                  <span>बँक तपशील (Bank Details)</span>
+                  <span>{t.farmerForm.bankDetailsHeading}</span>
                 </h4>
-                {showExtractedBadges && (data.bank_detail?.bank_name_branch || data.bank_detail?.account_no || data.bank_detail?.ifsc_code) && (
-                  <span className="inline-flex items-center text-xs font-semibold text-sky-700 bg-sky-100/80 px-2.5 py-0.5 rounded-full border border-sky-200">
-                    <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-sky-600" />
-                    Auto-extracted
-                  </span>
-                )}
+                {showExtractedBadges &&
+                  (data.bank_detail?.bank_name_branch ||
+                    data.bank_detail?.account_no ||
+                    data.bank_detail?.ifsc_code) && (
+                    <span className="inline-flex items-center text-xs font-semibold text-sky-700 bg-sky-100/80 px-2.5 py-0.5 rounded-full border border-sky-200">
+                      <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-sky-600" />
+                      {t.farmerForm.autoExtractedBadge}
+                    </span>
+                  )}
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1.5">
-                    बँकचे नाव (Bank Name)
+                    {t.farmerForm.bankNameLabel}
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. State Bank of India"
+                    placeholder={t.farmerForm.bankNamePlaceholder}
                     value={data.bank_detail?.bank_name_branch || ''}
-                    onChange={e => updateBankField('bank_name_branch', e.target.value)}
+                    onChange={(e) => updateBankField('bank_name_branch', e.target.value)}
                     className="w-full px-3.5 py-2.5 text-base bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 text-slate-900 font-medium"
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1.5">
-                    बँक खाते क्रमांक (Bank Account Number)
+                    {t.farmerForm.accountNoLabel}
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. 023200100013822"
+                    placeholder={t.farmerForm.accountNoPlaceholder}
                     value={data.bank_detail?.account_no || ''}
-                    onChange={e => updateBankField('account_no', e.target.value)}
+                    onChange={(e) => updateBankField('account_no', e.target.value)}
                     className="w-full px-3.5 py-2.5 text-base bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 font-mono text-slate-900 font-medium"
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1.5">
-                    IFSC कोड (IFSC Code)
+                    {t.farmerForm.ifscLabel}
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. SBI0000000"
+                    placeholder={t.farmerForm.ifscPlaceholder}
                     value={data.bank_detail?.ifsc_code || ''}
-                    onChange={e => updateBankField('ifsc_code', e.target.value.toUpperCase())}
+                    onChange={(e) => updateBankField('ifsc_code', e.target.value.toUpperCase())}
                     className="w-full px-3.5 py-2.5 text-base bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 font-mono text-slate-900 uppercase font-medium"
                   />
                 </div>

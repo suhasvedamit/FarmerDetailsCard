@@ -16,6 +16,7 @@ import {
 } from '../lib/cardTemplates';
 import { FarmerRecord } from '../types';
 import { CustomDesignModal } from './CustomDesignModal';
+import { useLanguage } from '../i18n';
 
 interface BackgroundSelectorProps {
   selectedTemplateId: string;
@@ -32,6 +33,7 @@ export const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
   showQuickCustomButton = false,
   disabled = false,
 }) => {
+  const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<CardTemplate | null>(null);
@@ -110,8 +112,8 @@ export const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <img
             src={template.frontUrl}
-            alt={`${template.name} front`}
-            title="Front side template"
+            alt={`${template.name} ${t.common.front}`}
+            title={t.backgroundSelector.frontSideTitle}
             className={`w-14 h-[35px] rounded object-cover bg-white border shadow-sm ${
               isSelected ? 'border-emerald-500 ring-1 ring-emerald-500/30' : 'border-slate-200'
             }`}
@@ -119,8 +121,8 @@ export const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
           {template.hasSeparateBack && (
             <img
               src={template.backUrl}
-              alt={`${template.name} back`}
-              title="Back side template"
+              alt={`${template.name} ${t.common.back}`}
+              title={t.backgroundSelector.backSideTitle}
               className={`w-14 h-[35px] rounded object-cover bg-white border shadow-sm ${
                 isSelected ? 'border-emerald-500 ring-1 ring-emerald-500/30' : 'border-slate-200'
               }`}
@@ -133,7 +135,7 @@ export const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
             <span className="text-sm font-bold truncate">{template.name}</span>
             {template.isCustom && (
               <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-bold uppercase tracking-wide flex-shrink-0">
-                Custom
+                {t.common.custom}
               </span>
             )}
           </div>
@@ -147,8 +149,8 @@ export const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
                 e.stopPropagation();
                 openEditCustom(template);
               }}
-              title="Edit custom design"
-              aria-label={`Edit ${template.name}`}
+              title={t.backgroundSelector.editCustomTitle}
+              aria-label={`${t.common.edit} ${template.name}`}
               className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-emerald-100/70 transition cursor-pointer"
             >
               <Pencil className="w-3.5 h-3.5" />
@@ -165,7 +167,7 @@ export const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
       <div className="flex items-center gap-2 w-full">
         <span className="text-xs sm:text-sm font-bold text-slate-600 whitespace-nowrap flex items-center gap-1.5">
           <ImageIcon className="w-4 h-4 text-emerald-600" />
-          <span>Card Design:</span>
+          <span>{t.backgroundSelector.cardDesignLabel}</span>
         </span>
 
         <div ref={containerRef} className="relative flex-1 min-w-0 flex items-center gap-1.5">
@@ -175,7 +177,7 @@ export const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
             disabled={disabled || allTemplates.length === 0}
             aria-haspopup="listbox"
             aria-expanded={isOpen}
-            aria-label="Select card background template"
+            aria-label={t.backgroundSelector.selectAria}
             className={`w-full flex items-center justify-between gap-2.5 bg-white border rounded-lg px-2.5 py-2 transition text-left cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
               isOpen
                 ? 'border-emerald-500 ring-2 ring-emerald-500/20'
@@ -194,12 +196,12 @@ export const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
                 </span>
                 {selectedTemplate.isCustom && (
                   <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-bold uppercase flex-shrink-0">
-                    Custom
+                    {t.common.custom}
                   </span>
                 )}
               </div>
             ) : (
-              <span className="text-sm text-slate-400">No background templates found</span>
+              <span className="text-sm text-slate-400">{t.backgroundSelector.noTemplatesFound}</span>
             )}
 
             <ChevronDown
@@ -214,8 +216,8 @@ export const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
               type="button"
               onClick={() => openEditCustom(selectedTemplate)}
               disabled={disabled}
-              title="Edit current custom design"
-              aria-label="Edit current custom design"
+              title={t.backgroundSelector.editCurrentCustomTitle}
+              aria-label={t.backgroundSelector.editCurrentCustomTitle}
               className="p-2 rounded-lg bg-white border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50 disabled:opacity-60 disabled:cursor-not-allowed text-slate-600 hover:text-emerald-700 transition flex-shrink-0 cursor-pointer"
             >
               <Pencil className="w-4 h-4" />
@@ -225,7 +227,7 @@ export const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
           {isOpen && allTemplates.length > 0 && (
             <div
               role="listbox"
-              aria-label="Card background templates"
+              aria-label={t.backgroundSelector.selectAria}
               className="absolute top-full mt-1.5 z-40 bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden left-0 right-0 sm:left-auto sm:right-0 sm:w-80 flex flex-col"
             >
               {/* Upload Custom Design Quick CTA */}
@@ -236,7 +238,7 @@ export const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
                   className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-sm font-bold shadow-sm transition cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Upload Custom Card Design</span>
+                  <span>{t.backgroundSelector.uploadCustomDesignBtn}</span>
                 </button>
               </div>
 
@@ -245,12 +247,12 @@ export const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
                   <div>
                     <div className="px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-emerald-700 flex items-center gap-1">
                       <Sparkles className="w-3.5 h-3.5" />
-                      <span>Your Custom Designs</span>
+                      <span>{t.backgroundSelector.yourCustomDesigns}</span>
                     </div>
                     {customTemplates.map(renderTemplateRow)}
                     <div className="my-1.5 border-t border-slate-100" />
                     <div className="px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-slate-400">
-                      Built-in Designs
+                      {t.backgroundSelector.builtInDesigns}
                     </div>
                   </div>
                 )}
@@ -273,8 +275,8 @@ export const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
             <Upload className="w-4 h-4 text-emerald-700 shrink-0" />
             <span>
               {customTemplates.length > 0
-                ? 'Upload Another Custom Design'
-                : 'Use Your Own Custom Design'}
+                ? t.backgroundSelector.uploadAnotherCustom
+                : t.backgroundSelector.useOwnCustom}
             </span>
           </button>
 
@@ -284,10 +286,10 @@ export const BackgroundSelector: React.FC<BackgroundSelectorProps> = ({
               onClick={() => openEditCustom(selectedTemplate)}
               disabled={disabled}
               className="py-2 px-3 rounded-lg bg-slate-50 hover:bg-slate-100 disabled:opacity-60 disabled:cursor-not-allowed text-slate-700 border border-slate-200 text-xs sm:text-sm font-bold transition flex items-center gap-1 cursor-pointer"
-              title="Edit selected custom card design"
+              title={t.backgroundSelector.editSelectedCustomTitle}
             >
               <Pencil className="w-3.5 h-3.5 text-slate-500" />
-              <span>Edit</span>
+              <span>{t.common.edit}</span>
             </button>
           )}
         </div>

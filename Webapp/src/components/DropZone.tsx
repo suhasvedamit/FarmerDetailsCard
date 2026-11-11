@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { UploadCloud, Sparkles, CheckCircle2, Zap, FileCheck2, Clock } from 'lucide-react';
+import { UploadCloud, Sparkles, Zap, FileCheck2 } from 'lucide-react';
+import { useLanguage } from '../i18n';
 
 interface DropZoneProps {
   onFileSelected: (file: File) => void;
@@ -9,25 +10,19 @@ interface DropZoneProps {
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
-const EXTRACTED_FIELDS = [
-  'Farmer Photo',
-  'Personal & ID Info',
-  'Land Survey Rows',
-  'Bank & IFSC Details',
-];
-
 export const DropZone: React.FC<DropZoneProps> = ({
   onFileSelected,
   isProcessing,
   uploadedFileName,
 }) => {
+  const { t, format } = useLanguage();
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = (file: File) => {
     if (isProcessing) return;
     if (file.size > MAX_FILE_SIZE_BYTES) {
-      alert('File size exceeds the 5 MB limit. Please upload a PDF under 5 MB.');
+      alert(t.dropZone.fileSizeAlert);
       return;
     }
     onFileSelected(file);
@@ -88,36 +83,26 @@ export const DropZone: React.FC<DropZoneProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-700 text-white text-xs sm:text-sm font-bold shadow-sm">
               <Sparkles className="w-4 h-4 text-amber-300" />
-              <span>Smart Auto-Extract • Recommended</span>
+              <span>{t.dropZone.recommendedBadge}</span>
             </span>
             <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-xs sm:text-sm font-bold">
               <Zap className="w-3.5 h-3.5 text-amber-600" />
-              <span>No Manual Typing Needed</span>
+              <span>{t.dropZone.noTypingBadge}</span>
             </span>
             {uploadedFileName && (
               <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs sm:text-sm font-bold max-w-full">
                 <FileCheck2 className="w-4 h-4 text-emerald-700 shrink-0" />
                 <span className="truncate max-w-[220px] sm:max-w-xs">
-                  Extracted: {uploadedFileName}
+                  {format(t.dropZone.extractedBadge, { fileName: uploadedFileName })}
                 </span>
               </span>
             )}
           </div>
 
           <h2 className="text-lg sm:text-2xl font-extrabold text-slate-900 tracking-tight">
-            Upload Farmer Registration PDF to Auto-Fill Everything
+            {t.dropZone.heading}
           </h2>
         </div>
-
-        {/* <button
-          type="button"
-          onClick={openFilePicker}
-          disabled={isProcessing}
-          className="self-start lg:self-center shrink-0 px-5 py-3 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white text-sm sm:text-base font-bold rounded-xl shadow-md shadow-emerald-700/20 transition flex items-center space-x-2 cursor-pointer"
-        >
-          <UploadCloud className="w-5 h-5" />
-          <span>{uploadedFileName ? 'Upload Another PDF' : 'Select PDF to Auto-Extract'}</span>
-        </button> */}
       </div>
 
       {/* Interactive Drop Area */}
@@ -144,17 +129,16 @@ export const DropZone: React.FC<DropZoneProps> = ({
           <div className="space-y-0.5">
             <div className="text-base sm:text-lg font-semibold text-slate-800">
               <span className="bg-emerald-100 px-1.5 py-0.5 rounded-md text-emerald-700 font-bold underline decoration-emerald-400 underline-offset-2">
-                Select PDF to Auto-Extract
+                {t.dropZone.selectPdfLink}
               </span>{' '}
-              or drag and drop your Farmer Registration PDF here
+              {t.dropZone.dragDropRest}
             </div>
             <p className="text-sm text-slate-500">
-              Supports PDF files up to 5 MB • Quick OCR extraction — get your card immediately
+              {t.dropZone.supportsHint}
             </p>
           </div>
         </div>
       </div>
-
     </div>
   );
 };

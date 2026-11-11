@@ -1,28 +1,17 @@
 import React, { useState } from 'react';
 import { PageLayout } from '../PageLayout';
 import { AppPage } from '../../lib/navigation';
-import {
-  Mail,
-  Clock,
-  CheckCircle2,
-  Copy,
-  Check,
-  ExternalLink,
-  MessageSquare,
-  ShieldCheck,
-  HelpCircle,
-  FileText,
-  CreditCard,
-  Printer
-} from 'lucide-react';
+import { Mail, Clock, Copy, Check } from 'lucide-react';
+import { useLanguage } from '../../i18n';
 
 interface ContactPageProps {
   onNavigate?: (page: AppPage) => void;
 }
 
 export const ContactPage: React.FC<ContactPageProps> = ({ onNavigate }) => {
+  const { t } = useLanguage();
   const [copiedEmail, setCopiedEmail] = useState(false);
-  const supportEmail = 'support@farmercard.org';
+  const supportEmail = 'sairajservice7@gmail.com';
 
   const handleCopyEmail = async () => {
     try {
@@ -34,25 +23,14 @@ export const ContactPage: React.FC<ContactPageProps> = ({ onNavigate }) => {
     }
   };
 
-  const handleOpenEmail = () => {
-    const subject = encodeURIComponent('Farmer Details Card - Support Inquiry');
-    const body = encodeURIComponent(
-      'Hello Support Team,\n\nI have an inquiry regarding:\n[ ] PDF upload / extraction\n[ ] Photo cropping\n[ ] Card printing\n[ ] Other\n\nDetails:\n\n--\nSent from Farmer Details Card Maker web app'
-    );
-    window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
-  };
-
   return (
     <PageLayout
       currentPage="contact"
-      title="Contact Us & Support"
-      subtitle="Have questions about extracting your PDF, editing photos, or printing your card? Reach out to our technical team."
-      marathiSubtitle="संपर्क व मदत केंद्र (Contact & Help Center)"
-      lastUpdated="नोव्हेंबर २०२६ / November 2026"
+      title={t.contactPage.title}
+      subtitle={t.contactPage.subtitle}
       onNavigate={onNavigate}
     >
       <div className="space-y-8 text-slate-700 leading-relaxed text-sm sm:text-base">
-
         {/* Contact Channels Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {/* Email Channel Card */}
@@ -63,13 +41,13 @@ export const ContactPage: React.FC<ContactPageProps> = ({ onNavigate }) => {
 
             <div>
               <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider block">
-                Primary Channel
+                {t.contactPage.primaryChannel}
               </span>
               <h4 className="text-base font-bold text-slate-900 mt-0.5">
-                Email Support
+                {t.contactPage.emailSupportTitle}
               </h4>
               <p className="text-xs text-slate-500 mt-1">
-                For technical issues, bug reports, and data inquiries.
+                {t.contactPage.emailSupportDesc}
               </p>
             </div>
 
@@ -85,8 +63,8 @@ export const ContactPage: React.FC<ContactPageProps> = ({ onNavigate }) => {
                   type="button"
                   onClick={handleCopyEmail}
                   className="p-1.5 hover:bg-slate-200 text-slate-600 hover:text-slate-900 rounded-lg transition shrink-0"
-                  title="Copy email address"
-                  aria-label="Copy email address"
+                  title={t.contactPage.copyEmailTitle}
+                  aria-label={t.contactPage.copyEmailTitle}
                 >
                   {copiedEmail ? (
                     <Check className="w-4 h-4 text-emerald-600" />
@@ -98,7 +76,7 @@ export const ContactPage: React.FC<ContactPageProps> = ({ onNavigate }) => {
 
               {copiedEmail && (
                 <p className="text-[11px] text-emerald-700 font-semibold text-center">
-                  Email address copied to clipboard!
+                  {t.contactPage.emailCopied}
                 </p>
               )}
             </div>
@@ -112,35 +90,34 @@ export const ContactPage: React.FC<ContactPageProps> = ({ onNavigate }) => {
 
             <div>
               <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider block">
-                Turnaround Time
+                {t.contactPage.turnaroundTime}
               </span>
               <h4 className="text-base font-bold text-slate-900 mt-0.5">
-                Support Hours & Timing
+                {t.contactPage.supportHoursTitle}
               </h4>
               <p className="text-xs text-slate-500 mt-1">
-                Our team reviews tickets Monday through Saturday.
+                {t.contactPage.supportHoursDesc}
               </p>
             </div>
 
             <div className="space-y-2 pt-1 text-xs text-slate-600">
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
                 <div className="flex items-center justify-between text-slate-800 font-semibold">
-                  <span>Mon – Fri:</span>
-                  <span>9:00 AM – 6:00 PM IST</span>
+                  <span>{t.contactPage.monFriLabel}</span>
+                  <span>{t.contactPage.monFriHours}</span>
                 </div>
                 <div className="flex items-center justify-between text-slate-500 text-[11px]">
-                  <span>Sat - Sun:</span>
-                  <span>Closed</span>
+                  <span>{t.contactPage.satSunLabel}</span>
+                  <span>{t.contactPage.satSunHours}</span>
                 </div>
               </div>
               <p className="text-[11px] text-slate-500">
-                ⚡ Typical reply time: <strong>Within 7 to 14 days</strong>
+                {t.contactPage.typicalReplyPrefix}{' '}
+                <strong>{t.contactPage.typicalReplyHighlight}</strong>
               </p>
             </div>
           </div>
-
         </div>
-
       </div>
     </PageLayout>
   );

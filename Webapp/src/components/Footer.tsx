@@ -7,6 +7,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { AppPage, getPageUrl } from '../lib/navigation';
+import { useLanguage } from '../i18n';
 
 interface FooterProps {
   onNavigate?: (page: AppPage) => void;
@@ -14,6 +15,7 @@ interface FooterProps {
 }
 
 export const Footer: React.FC<FooterProps> = ({ onNavigate, openInSameTab = true }) => {
+  const { t, format } = useLanguage();
   const currentYear = new Date().getFullYear();
 
   const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, page: AppPage) => {
@@ -37,10 +39,12 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, openInSameTab = true
             <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 text-[11px] leading-relaxed text-slate-400">
               <div className="flex items-center space-x-1.5 text-amber-400 font-semibold mb-1.5">
                 <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
-                <span>Important Disclaimer</span>
+                <span>{t.footer.disclaimerTitle}</span>
               </div>
               <p>
-                This web utility is provided solely for informational and personal convenience formatting. The cards produced are unofficial summary cards and do <strong className="text-slate-300">NOT</strong> hold statutory, official, or legal validity. All respective official marks and portal names belong strictly to their governmental authorities.
+                {t.footer.disclaimerBodyStart}{' '}
+                <strong className="text-slate-300">{t.footer.disclaimerBodyNot}</strong>
+                {t.footer.disclaimerBodyEnd.startsWith('.') ? t.footer.disclaimerBodyEnd : ` ${t.footer.disclaimerBodyEnd}`}
               </p>
             </div>
           </div>
@@ -49,7 +53,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, openInSameTab = true
           <div className="space-y-3">
             <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center space-x-1.5">
               <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Product</span>
+              <span>{t.footer.productTitle}</span>
             </h4>
             <ul className="space-y-2 text-xs">
               <li>
@@ -60,7 +64,9 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, openInSameTab = true
                   onClick={(e) => handleLinkClick(e, 'home')}
                   className="hover:text-emerald-400 transition flex items-center justify-between group py-0.5"
                 >
-                  <span className="group-hover:translate-x-0.5 transition-transform">Home &amp; Overview</span>
+                  <span className="group-hover:translate-x-0.5 transition-transform">
+                    {t.footer.homeOverview}
+                  </span>
                   <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 text-emerald-400 transition-opacity" />
                 </a>
               </li>
@@ -72,7 +78,9 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, openInSameTab = true
                   onClick={(e) => handleLinkClick(e, 'create-card')}
                   className="hover:text-emerald-400 transition flex items-center justify-between group py-0.5 font-medium text-emerald-300"
                 >
-                  <span className="group-hover:translate-x-0.5 transition-transform">Card Maker Studio</span>
+                  <span className="group-hover:translate-x-0.5 transition-transform">
+                    {t.footer.cardMakerStudio}
+                  </span>
                   <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 text-emerald-400 transition-opacity" />
                 </a>
               </li>
@@ -83,7 +91,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, openInSameTab = true
           <div className="space-y-3">
             <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center space-x-1.5">
               <FileText className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Legal &amp; Policies</span>
+              <span>{t.footer.legalPoliciesTitle}</span>
             </h4>
             <ul className="space-y-2 text-xs">
               <li>
@@ -94,7 +102,9 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, openInSameTab = true
                   onClick={(e) => handleLinkClick(e, 'terms')}
                   className="hover:text-emerald-400 transition flex items-center justify-between group py-0.5"
                 >
-                  <span className="group-hover:translate-x-0.5 transition-transform">Terms and Conditions</span>
+                  <span className="group-hover:translate-x-0.5 transition-transform">
+                    {t.footer.termsAndConditions}
+                  </span>
                   <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 text-emerald-400 transition-opacity" />
                 </a>
               </li>
@@ -106,7 +116,9 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, openInSameTab = true
                   onClick={(e) => handleLinkClick(e, 'privacy')}
                   className="hover:text-emerald-400 transition flex items-center justify-between group py-0.5"
                 >
-                  <span className="group-hover:translate-x-0.5 transition-transform">Privacy Policy</span>
+                  <span className="group-hover:translate-x-0.5 transition-transform">
+                    {t.footer.privacyPolicy}
+                  </span>
                   <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 text-emerald-400 transition-opacity" />
                 </a>
               </li>
@@ -118,7 +130,9 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, openInSameTab = true
                   onClick={(e) => handleLinkClick(e, 'disclaimer')}
                   className="hover:text-emerald-400 transition flex items-center justify-between group py-0.5"
                 >
-                  <span className="group-hover:translate-x-0.5 transition-transform">Legal Disclaimer &amp; Notice</span>
+                  <span className="group-hover:translate-x-0.5 transition-transform">
+                    {t.footer.legalDisclaimerNotice}
+                  </span>
                   <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 text-emerald-400 transition-opacity" />
                 </a>
               </li>
@@ -129,7 +143,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, openInSameTab = true
           <div className="space-y-3">
             <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center space-x-1.5">
               <Mail className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Contact Us</span>
+              <span>{t.footer.contactSupportTitle}</span>
             </h4>
             <ul className="space-y-2 text-xs">
               <li>
@@ -141,7 +155,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, openInSameTab = true
                   className="hover:text-emerald-400 transition flex items-center justify-between group py-0.5"
                 >
                   <span className="group-hover:translate-x-0.5 transition-transform font-medium text-emerald-300">
-                    Contact Us / Feedback
+                    {t.footer.contactFeedback}
                   </span>
                   <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 text-emerald-400 transition-opacity" />
                 </a>
@@ -155,13 +169,13 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, openInSameTab = true
                   className="hover:text-emerald-400 transition flex items-center justify-between group py-0.5"
                 >
                   <span className="group-hover:translate-x-0.5 transition-transform">
-                    Report an Issue / Bug
+                    {t.footer.reportIssue}
                   </span>
                   <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 text-emerald-400 transition-opacity" />
                 </a>
               </li>
               <li className="pt-2 text-[11px] text-slate-500">
-                Support: <span className="text-slate-300">support@farmercard.org</span>
+                {t.footer.supportLabel} <span className="text-slate-300">sairajservice7@gmail.com</span>
               </li>
             </ul>
           </div>
@@ -169,19 +183,17 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, openInSameTab = true
 
         {/* Bottom Copyright & Credit Bar */}
         <div className="mt-8 pt-6 border-t border-slate-900 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-400">
-          <p>
-            © {currentYear} Farmer Details Card. All rights reserved.
-          </p>
+          <p>{format(t.footer.copyright, { year: currentYear })}</p>
 
           <p className="text-slate-400 text-center sm:text-right">
-            Designed and developed by{' '}
+            {t.footer.designedBy}{' '}
             <a
               href="https://vedamit.com"
               target="_blank"
               rel="noopener noreferrer"
               className="text-emerald-400 hover:text-emerald-300 font-semibold underline-offset-2 hover:underline transition"
             >
-              Vedamit Solutions
+              {t.footer.developerName}
             </a>
           </p>
         </div>

@@ -1,4 +1,5 @@
 export interface LandRow {
+  khata_no: string;
   survey_no: string;
   village: string;
   owner_type: string;
@@ -91,6 +92,7 @@ export function createEmptyFarmerRecord(): FarmerRecord {
     },
     land_records: [
       {
+        khata_no: '',
         survey_no: '',
         village: '',
         owner_type: '',
