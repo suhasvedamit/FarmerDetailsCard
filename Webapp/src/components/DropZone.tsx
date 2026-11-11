@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { UploadCloud, ExternalLink } from 'lucide-react';
+import { UploadCloud } from 'lucide-react';
 
 interface DropZoneProps {
   onFileSelected: (file: File) => void;
@@ -43,7 +43,7 @@ export const DropZone: React.FC<DropZoneProps> = ({ onFileSelected, isProcessing
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`border-2 border-dashed rounded-xl p-5 sm:p-6 text-center transition cursor-pointer shadow-sm ${
+      className={`border-2 border-dashed rounded-2xl p-5 sm:p-6 text-center transition cursor-pointer shadow-sm ${
         isDragOver
           ? 'border-emerald-600 bg-emerald-50/70 scale-[1.005]'
           : 'border-emerald-300 hover:border-emerald-500 bg-white'
@@ -63,25 +63,14 @@ export const DropZone: React.FC<DropZoneProps> = ({ onFileSelected, isProcessing
         disabled={isProcessing}
       />
       <div className="flex flex-col items-center justify-center space-y-2">
-        <div className="w-11 h-11 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600">
+        <div className="w-12 h-12 bg-emerald-50 border border-emerald-200 rounded-full flex items-center justify-center text-emerald-600">
           <UploadCloud className="w-6 h-6" />
         </div>
         <div className="text-sm font-medium text-slate-700">
-          <span className="text-emerald-700 font-semibold hover:underline">Click to upload</span> or drag and drop Farmer Registration PDF to auto-fill
+          <span className="text-emerald-700 font-semibold hover:underline">Click to upload</span> or drag and drop Farmer Registration PDF / Image to auto-fill
         </div>
         <p className="text-xs text-slate-500">
-          Optional • Size limit 5 MB • Expecting fixed format (e.g.{' '}
-          <a
-            href="./sample_farmer_record.pdf"
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="text-emerald-700 font-semibold underline hover:text-emerald-800 inline-flex items-center gap-0.5"
-          >
-            <span>example PDF</span>
-            <ExternalLink className="w-3 h-3" />
-          </a>
-          ) — or fill the form manually below
+          Optional • Size limit 5 MB • Auto-extracts PDF details — or fill the form manually below
         </p>
       </div>
     </div>

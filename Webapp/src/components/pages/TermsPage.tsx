@@ -64,7 +64,7 @@ export const TermsPage: React.FC<TermsPageProps> = ({ onNavigate }) => {
               It allows users to upload PDF certificates or registration slips they lawfully hold from official agricultural portals.
             </li>
             <li>
-              It extracts textual information (e.g., Name, Farmer ID, Village, Land summary) and photos locally in the user's browser.
+              It extracts textual information (e.g., Name, Farmer ID, Village, Land summary) and photos from your uploaded document for formatting.
             </li>
             <li>
               It renders this information onto a standard CR-80 card template (Front and Back) for convenient printing on PVC cards, photo paper, or laminated sheets.

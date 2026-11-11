@@ -118,7 +118,7 @@ export const CardModal: React.FC<CardModalProps> = ({
             </div>
             <div>
               <h3 className="font-bold text-slate-800 text-base leading-tight">
-                माझे किसान कार्ड
+                Farmer Details Card
               </h3>
               <p className="text-xs text-slate-500">
                 Front & Back Side Printable ID Card

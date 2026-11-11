@@ -23,7 +23,7 @@ export const PrivacyPage: React.FC<PrivacyPageProps> = ({ onNavigate }) => {
     <PageLayout
       currentPage="privacy"
       title="Privacy Policy"
-      subtitle="We believe farmer data is private and confidential. Learn how your documents and personal details are protected using client-side processing."
+      subtitle="We believe farmer data is private and confidential. Learn how your uploaded documents and personal details are handled and protected."
       marathiSubtitle="गोपनीयता धोरण (Privacy Policy & Data Security)"
       lastUpdated="नोव्हेंबर २०२६ / November 2026"
       onNavigate={onNavigate}
@@ -37,36 +37,36 @@ export const PrivacyPage: React.FC<PrivacyPageProps> = ({ onNavigate }) => {
           </div>
           <p className="text-xs sm:text-sm text-emerald-950">
             <strong>Zero Data Monetization. Zero Third-Party Advertising. Zero Document Harvesting.</strong>{' '}
-            Your uploaded PDF certificates and farmer personal details belong entirely to you. Our architecture is designed to parse documents <strong>locally inside your browser</strong> whenever possible.
+            Your uploaded PDF certificates and farmer personal details belong entirely to you and are used strictly to format and generate your summary card.
           </p>
         </div>
 
-        {/* 1. Client-Side In-Browser Processing */}
+        {/* 1. Secure Processing & Card Rendering */}
         <section className="space-y-3">
           <div className="flex items-center space-x-2.5 text-slate-900 font-bold text-lg border-b border-slate-200 pb-2">
             <Cpu className="w-5 h-5 text-emerald-700" />
-            <h3>1. Client-Side In-Browser Architecture (ब्राउझरमध्येच प्रक्रिया)</h3>
+            <h3>1. Secure Document Processing &amp; Card Rendering (सुरक्षित दस्तऐवज प्रक्रिया)</h3>
           </div>
           <p>
-            Unlike traditional web tools that send your entire PDF document to remote cloud servers for processing:
+            Our platform is designed to extract and format only the information needed for your printable summary card:
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs sm:text-sm">
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
               <span className="font-bold text-slate-900 flex items-center space-x-1.5">
                 <CheckCircle className="w-4 h-4 text-emerald-600" />
-                <span>Local PDF Text & Photo Extraction</span>
+                <span>Automated PDF Text &amp; Photo Extraction</span>
               </span>
               <p className="text-slate-600">
-                PDF text reading and photo detection are executed right inside your computer or smartphone browser using <strong>PDF.js</strong> and client-side JavaScript.
+                Uploaded PDF files are parsed strictly to extract text fields and the portrait photograph needed to populate your form for review and editing.
               </p>
             </div>
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
               <span className="font-bold text-slate-900 flex items-center space-x-1.5">
                 <CheckCircle className="w-4 h-4 text-emerald-600" />
-                <span>Local Card Rendering</span>
+                <span>High-Resolution Card Rendering</span>
               </span>
               <p className="text-slate-600">
-                Card templates (Front and Back) are composited directly onto an HTML5 Canvas on your device, ensuring maximum speed, confidentiality, and offline resilience.
+                Front and Back card layouts are rendered into multiple printable image and PDF formats once you confirm your details.
               </p>
             </div>
           </div>

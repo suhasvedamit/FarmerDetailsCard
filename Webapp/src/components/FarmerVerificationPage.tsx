@@ -34,6 +34,13 @@ export const FarmerVerificationPage: React.FC<FarmerVerificationPageProps> = ({
   onNavigateHome,
   onNavigate,
 }) => {
+  const handleOpenProduct = () => {
+    if (onNavigate) {
+      onNavigate('product');
+    } else {
+      onNavigateHome();
+    }
+  };
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
@@ -102,13 +109,20 @@ export const FarmerVerificationPage: React.FC<FarmerVerificationPageProps> = ({
             कृपया ओळखपत्रावरील QR कोड पुन्हा स्कॅन करा किंवा मुख्य पृष्ठावर जाऊन नवीन कार्ड तयार करा.
           </p>
 
-          <div className="pt-2">
+          <div className="pt-2 space-y-2">
             <button
-              onClick={onNavigateHome}
+              onClick={handleOpenProduct}
               className="w-full py-2.5 px-4 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl shadow transition flex items-center justify-center space-x-1.5"
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
+              <CreditCard className="w-3.5 h-3.5" />
               <span>कार्ड जनरेटरवर जा</span>
+            </button>
+            <button
+              onClick={onNavigateHome}
+              className="w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition flex items-center justify-center space-x-1.5"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>होम पेजवर जा</span>
             </button>
           </div>
         </div>
@@ -131,7 +145,7 @@ export const FarmerVerificationPage: React.FC<FarmerVerificationPageProps> = ({
             <div>
               <div className="flex items-center space-x-1.5">
                 <span className="font-extrabold text-sm text-slate-900 tracking-tight">
-                  माझे किसान कार्ड
+                  Farmer Details Card
                 </span>
                 {/* <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-emerald-300">
                   प्रमाणीकरण
@@ -143,14 +157,23 @@ export const FarmerVerificationPage: React.FC<FarmerVerificationPageProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={onNavigateHome}
-            className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition flex items-center space-x-1.5"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">कार्ड जनरेटरवर जा</span>
-            <span className="sm:hidden">होम</span>
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={onNavigateHome}
+              className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition flex items-center space-x-1.5"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>होम</span>
+            </button>
+            <button
+              onClick={handleOpenProduct}
+              className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-600 rounded-lg transition flex items-center space-x-1.5 shadow-sm"
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">कार्ड जनरेटरवर जा</span>
+              <span className="sm:hidden">मेकर</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -435,7 +458,7 @@ export const FarmerVerificationPage: React.FC<FarmerVerificationPageProps> = ({
         {/* Footer Notice & Link Actions */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 pt-2 print:text-[10px]">
           <p className="text-center sm:text-left">
-            माझे किसान कार्ड • This is strictly for personal reference & informational reference.
+            Farmer Details Card • This is strictly for personal reference & informational reference.
           </p>
 
           <div className="flex items-center space-x-2 print:hidden">
@@ -457,7 +480,7 @@ export const FarmerVerificationPage: React.FC<FarmerVerificationPageProps> = ({
             </button>
 
             <button
-              onClick={onNavigateHome}
+              onClick={handleOpenProduct}
               className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-bold transition flex items-center space-x-1.5 shadow-sm"
             >
               <ExternalLink className="w-3.5 h-3.5" />
@@ -467,7 +490,7 @@ export const FarmerVerificationPage: React.FC<FarmerVerificationPageProps> = ({
         </div>
       </main>
 
-      <Footer onNavigate={onNavigate} />
+      <Footer onNavigate={onNavigate} openInSameTab={true} />
     </div>
   );
 };

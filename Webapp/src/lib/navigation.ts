@@ -1,10 +1,11 @@
 /**
  * Navigation helpers and routing types for the Farmer ID Card web application.
- * Supports query parameters (?page=terms), hash fragments (#terms), and history pushState.
+ * Supports query parameters (?page=product, ?page=terms), hash fragments (#product), and history pushState.
  */
 
 export type AppPage =
   | 'home'
+  | 'product'
   | 'verify'
   | 'terms'
   | 'privacy'
@@ -24,6 +25,15 @@ export function getPageFromUrl(): AppPage {
 
     const candidate = pageParam || hash;
 
+    if (
+      candidate === 'product' ||
+      candidate === 'maker' ||
+      candidate === 'card-maker' ||
+      candidate === 'generator' ||
+      candidate === 'app'
+    ) {
+      return 'product';
+    }
     if (candidate === 'terms' || candidate === 'terms-and-conditions' || candidate === 'terms-of-service') {
       return 'terms';
     }

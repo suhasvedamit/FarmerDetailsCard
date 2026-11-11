@@ -1,14 +1,16 @@
 import React from 'react';
-import { ShieldAlert, AlertTriangle, FileWarning, CheckCircle2 } from 'lucide-react';
+import { ShieldAlert, AlertTriangle, FileWarning, CheckCircle2, ArrowLeft } from 'lucide-react';
 
 interface DisclaimerModalProps {
   isOpen: boolean;
   onAccept: () => void;
+  onBackHome?: () => void;
 }
 
 export const DisclaimerModal: React.FC<DisclaimerModalProps> = ({
   isOpen,
   onAccept,
+  onBackHome,
 }) => {
   if (!isOpen) return null;
 
@@ -32,7 +34,7 @@ export const DisclaimerModal: React.FC<DisclaimerModalProps> = ({
               Unofficial Utility Tool
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Please read and acknowledge before proceeding.
+              Please read and acknowledge before using the Card Maker Studio.
             </p>
           </div>
         </div>
@@ -47,7 +49,7 @@ export const DisclaimerModal: React.FC<DisclaimerModalProps> = ({
               <strong className="text-slate-800 font-semibold">Not an Official Government Site:</strong>{' '}
               This website is an independent third-party tool and is{' '}
               <span className="text-amber-800 font-medium">NOT affiliated with, authorized, operated, or endorsed</span>{' '}
-              by the Government of India, the Ministry of Agriculture & Farmers Welfare, or any other central/state government department.
+              by the Government of India, the Ministry of Agriculture &amp; Farmers Welfare, or any other central/state government department.
             </p>
           </div>
 
@@ -75,11 +77,11 @@ export const DisclaimerModal: React.FC<DisclaimerModalProps> = ({
         </div>
 
         <p className="text-[11px] text-slate-500 text-center leading-normal">
-          By clicking <strong className="text-slate-700 font-semibold">"Accept and Proceed"</strong>, you acknowledge that you understand this tool is solely for informational use and carries no official or legal authority.
+          By clicking <strong className="text-slate-700 font-semibold">&ldquo;Accept and Proceed&rdquo;</strong>, you acknowledge that you understand this tool is solely for informational use and carries no official or legal authority.
         </p>
 
-        {/* Only Accept and Proceed Option */}
-        <div>
+        {/* Actions */}
+        <div className="space-y-2.5">
           <button
             type="button"
             onClick={onAccept}
@@ -88,6 +90,17 @@ export const DisclaimerModal: React.FC<DisclaimerModalProps> = ({
             <CheckCircle2 className="w-5 h-5" />
             <span>Accept and Proceed</span>
           </button>
+
+          {onBackHome && (
+            <button
+              type="button"
+              onClick={onBackHome}
+              className="w-full py-2 px-4 text-xs font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition flex items-center justify-center space-x-1.5 cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Return to Home Page</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

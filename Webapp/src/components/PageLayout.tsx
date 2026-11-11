@@ -6,10 +6,10 @@ import {
   AlertTriangle,
   Home,
   ChevronRight,
-  ExternalLink
+  ExternalLink,
 } from 'lucide-react';
 import { AppPage, getPageUrl } from '../lib/navigation';
-import logoImg from '../assets/logo.png';
+import { Header } from './Header';
 import { Footer } from './Footer';
 
 interface PageLayoutProps {
@@ -31,19 +31,14 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
   children,
   onNavigate,
 }) => {
-  const navItems: { page: AppPage; label: string; icon: React.ReactNode }[] = [
-    { page: 'terms', label: 'Terms & Conditions', icon: <FileText className="w-4 h-4" /> },
-    { page: 'privacy', label: 'Privacy Policy', icon: <ShieldCheck className="w-4 h-4" /> },
-    { page: 'disclaimer', label: 'Legal Disclaimer', icon: <AlertTriangle className="w-4 h-4" /> },
-    { page: 'contact', label: 'Contact Us', icon: <Mail className="w-4 h-4" /> },
+  const subNavItems: { page: AppPage; label: string; icon: React.ReactNode }[] = [
+    { page: 'terms', label: 'Terms & Conditions', icon: <FileText className="w-3.5 h-3.5" /> },
+    { page: 'privacy', label: 'Privacy Policy', icon: <ShieldCheck className="w-3.5 h-3.5" /> },
+    { page: 'disclaimer', label: 'Legal Disclaimer', icon: <AlertTriangle className="w-3.5 h-3.5" /> },
+    { page: 'contact', label: 'Contact Us', icon: <Mail className="w-3.5 h-3.5" /> },
   ];
 
-  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, page: AppPage) => {
-    // If user clicked with Ctrl/Cmd or shift or middle click, allow native new tab
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) {
-      return;
-    }
-    e.preventDefault();
+  const handleNavigate = (page: AppPage) => {
     if (onNavigate) {
       onNavigate(page);
     } else {
@@ -53,74 +48,24 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
     }
   };
 
+  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, page: AppPage) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) {
+      return;
+    }
+    e.preventDefault();
+    handleNavigate(page);
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800 antialiased selection:bg-emerald-100 selection:text-emerald-900">
-      {/* Top Navbar */}
-      <header className="bg-emerald-800 text-white shadow-md sticky top-0 z-40 print:hidden">
-        <div className="max-w-7xl mx-auto px-4 py-3 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
-          {/* Logo and Brand */}
-          <a
-            href={getPageUrl('home')}
-            onClick={(e) => handleLinkClick(e, 'home')}
-            className="flex items-center space-x-3 group cursor-pointer focus:outline-none"
-          >
-            <div className="w-10 h-10 rounded-full flex items-center justify-center p-1 shadow-sm bg-white/10 group-hover:bg-white/20 transition">
-              <img src={logoImg} alt="Logo" className="w-full h-full object-contain" />
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className="text-base sm:text-lg font-bold tracking-tight text-white group-hover:text-emerald-100 transition">
-                  Farmer Details Card
-                </span>
-              </div>
-              <p className="text-[11px] text-emerald-200/90 hidden md:block">
-                Summary card formatting utility for farmer documents
-              </p>
-            </div>
-          </a>
-
-          {/* Quick Actions */}
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            <a
-              href={getPageUrl('home')}
-              onClick={(e) => handleLinkClick(e, 'home')}
-              className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm transition flex items-center space-x-1.5"
-            >
-              <Home className="w-3.5 h-3.5" />
-              <span>Card Maker</span>
-            </a>
-          </div>
-        </div>
-
-        {/* Secondary Subnav Strip for Mobile & Desktop */}
-        <div className="bg-emerald-900/90 border-t border-emerald-700/60 overflow-x-auto scrollbar-thin">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center space-x-1 py-1.5">
-            {navItems.map((item) => {
-              const isActive = currentPage === item.page;
-              return (
-                <a
-                  key={item.page}
-                  href={getPageUrl(item.page)}
-                  onClick={(e) => handleLinkClick(e, item.page)}
-                  className={`flex items-center space-x-1.5 px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap transition ${isActive
-                      ? 'bg-white text-emerald-900 shadow-sm font-semibold'
-                      : 'text-emerald-100/90 hover:text-white hover:bg-emerald-800/80'
-                    }`}
-                >
-                  {item.icon}
-                  <span>{item.label}</span>
-                </a>
-              );
-            })}
-          </div>
-        </div>
-      </header>
+      {/* Unified Site Header */}
+      <Header currentPage={currentPage} onNavigate={handleNavigate} />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        {/* Breadcrumb */}
-        <div className="text-xs text-slate-500 border-b border-slate-200 pb-3 print:hidden">
-          <nav className="flex items-center space-x-1.5" aria-label="Breadcrumb">
+        {/* Breadcrumb + Sub-page Pill Switcher */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4 print:hidden">
+          <nav className="flex items-center space-x-1.5 text-xs text-slate-500" aria-label="Breadcrumb">
             <a
               href={getPageUrl('home')}
               onClick={(e) => handleLinkClick(e, 'home')}
@@ -132,6 +77,27 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
             <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
             <span className="text-slate-800 font-semibold">{title}</span>
           </nav>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            {subNavItems.map((item) => {
+              const isActive = currentPage === item.page;
+              return (
+                <a
+                  key={item.page}
+                  href={getPageUrl(item.page)}
+                  onClick={(e) => handleLinkClick(e, item.page)}
+                  className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
+                    isActive
+                      ? 'bg-emerald-700 text-white shadow-sm'
+                      : 'bg-white text-slate-600 hover:text-emerald-800 hover:bg-emerald-50 border border-slate-200'
+                  }`}
+                >
+                  {item.icon}
+                  <span>{item.label}</span>
+                </a>
+              );
+            })}
+          </div>
         </div>
 
         {/* Page Title & Subtitle Banner */}
@@ -141,7 +107,7 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
           <div className="relative z-10 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                Official Information & Guidelines
+                Information &amp; Guidelines
               </span>
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
                 Last Updated: {lastUpdated}
@@ -176,23 +142,22 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
               Ready to create your Farmer Summary Card?
             </h3>
             <p className="text-xs text-slate-600">
-              Upload your PM-Kisan or AgriStack PDF document to extract details and generate front & back printable cards instantly.
+              Upload your PM-Kisan or AgriStack PDF document to extract details and generate front &amp; back printable cards instantly.
             </p>
           </div>
           <a
-            href={getPageUrl('home')}
-            onClick={(e) => handleLinkClick(e, 'home')}
+            href={getPageUrl('product')}
+            onClick={(e) => handleLinkClick(e, 'product')}
             className="shrink-0 px-5 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-md transition flex items-center space-x-2"
           >
-            <span>Open Card Generator</span>
+            <span>Open Card Maker</span>
             <ExternalLink className="w-3.5 h-3.5" />
           </a>
         </section>
       </main>
 
       {/* Global Footer */}
-      <Footer onNavigate={onNavigate} />
+      <Footer onNavigate={handleNavigate} openInSameTab={true} />
     </div>
   );
 };
-

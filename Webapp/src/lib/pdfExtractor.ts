@@ -1369,7 +1369,7 @@ export async function extractFarmerDataFromPdf(
   pdfBuffer: ArrayBuffer,
   onProgress?: ExtractionProgressCallback
 ): Promise<FarmerRecord> {
-  onProgress?.('Loading PDF document in browser memory...', 10);
+  onProgress?.('Loading PDF document...', 10);
   const pdf = await pdfjsLib.getDocument({ data: pdfBuffer }).promise;
   const totalPages = pdf.numPages;
 
