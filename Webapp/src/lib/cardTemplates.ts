@@ -1,4 +1,20 @@
+import { useSyncExternalStore } from 'react';
+
 export type CardSide = 'front' | 'back';
+export type ImageFitMode = 'cover' | 'contain' | 'stretch';
+export type CustomBackMode = 'separate' | 'same_as_front' | 'blank';
+
+export const CARD_CANVAS_WIDTH = 1050;
+export const CARD_CANVAS_HEIGHT = 660;
+
+export interface CustomCardStyle {
+  textTheme?: 'dark' | 'light';
+  contentBackdrop?: 'none' | 'light' | 'dark';
+  borderColor?: string;
+  frontFitMode?: ImageFitMode;
+  backFitMode?: ImageFitMode;
+  backMode?: CustomBackMode;
+}
 
 export interface CardTemplate {
   id: string;
@@ -8,6 +24,12 @@ export interface CardTemplate {
   backUrl: string;
   url: string;
   hasSeparateBack: boolean;
+  isCustom?: boolean;
+  createdAt?: number;
+  updatedAt?: number;
+  rawFrontUrl?: string;
+  rawBackUrl?: string;
+  customStyle?: CustomCardStyle;
 }
 
 const templateModules = import.meta.glob(
@@ -165,13 +187,107 @@ export const CARD_TEMPLATES: CardTemplate[] = Array.from(templateEntries.values(
     });
   });
 
+export const BUILT_IN_CARD_TEMPLATES: CardTemplate[] = CARD_TEMPLATES;
+
 export const DEFAULT_CARD_TEMPLATE_ID: string = CARD_TEMPLATES[0]?.id ?? '';
 
-export function getCardTemplate(templateId?: string): CardTemplate | undefined {
-  if (!templateId) return CARD_TEMPLATES[0];
+export interface CardTemplatesSnapshot {
+  all: CardTemplate[];
+  builtIn: CardTemplate[];
+  custom: CardTemplate[];
+}
+
+let customTemplatesList: CardTemplate[] = [];
+const listeners = new Set<() => void>();
+
+let cachedSnapshot: CardTemplatesSnapshot = {
+  all: CARD_TEMPLATES,
+  builtIn: CARD_TEMPLATES,
+  custom: [],
+};
+
+function sortCustomTemplates(templates: CardTemplate[]): CardTemplate[] {
+  return [...templates].sort((a, b) => {
+    const timeA = a.updatedAt ?? a.createdAt ?? 0;
+    const timeB = b.updatedAt ?? b.createdAt ?? 0;
+    if (timeA !== timeB) return timeB - timeA;
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+  });
+}
+
+function rebuildAndNotify(): void {
+  cachedSnapshot = {
+    all: [...customTemplatesList, ...CARD_TEMPLATES],
+    builtIn: CARD_TEMPLATES,
+    custom: customTemplatesList,
+  };
+  listeners.forEach((listener) => listener());
+}
+
+export function getCustomCardTemplates(): CardTemplate[] {
+  return customTemplatesList;
+}
+
+export function getAllCardTemplates(): CardTemplate[] {
+  return cachedSnapshot.all;
+}
+
+export function setCustomCardTemplates(templates: CardTemplate[]): void {
+  customTemplatesList = sortCustomTemplates(templates.map((t) => ({ ...t, isCustom: true })));
+  rebuildAndNotify();
+}
+
+export function upsertCustomCardTemplate(template: CardTemplate): void {
+  const normalized: CardTemplate = { ...template, isCustom: true };
+  const existingIdx = customTemplatesList.findIndex((t) => t.id === normalized.id);
+  const next = [...customTemplatesList];
+  if (existingIdx >= 0) {
+    next[existingIdx] = normalized;
+  } else {
+    next.unshift(normalized);
+  }
+  customTemplatesList = sortCustomTemplates(next);
+  rebuildAndNotify();
+}
+
+export function removeCustomCardTemplate(templateId: string): void {
+  customTemplatesList = customTemplatesList.filter((t) => t.id !== templateId);
+  rebuildAndNotify();
+}
+
+export function subscribeCardTemplates(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+export function getCardTemplatesSnapshot(): CardTemplatesSnapshot {
+  return cachedSnapshot;
+}
+
+export function useCardTemplates(): CardTemplatesSnapshot {
+  return useSyncExternalStore(
+    subscribeCardTemplates,
+    getCardTemplatesSnapshot,
+    getCardTemplatesSnapshot
+  );
+}
+
+export function getCardTemplateById(templateId?: string): CardTemplate | undefined {
+  if (!templateId) return undefined;
   return (
-    CARD_TEMPLATES.find((t) => t.id === templateId || t.folderName === templateId) ||
-    CARD_TEMPLATES[0]
+    customTemplatesList.find((t) => t.id === templateId || t.folderName === templateId) ||
+    CARD_TEMPLATES.find((t) => t.id === templateId || t.folderName === templateId)
+  );
+}
+
+export function getCardTemplate(templateId?: string): CardTemplate | undefined {
+  if (!templateId) return CARD_TEMPLATES[0] || customTemplatesList[0];
+  return (
+    getCardTemplateById(templateId) ||
+    CARD_TEMPLATES[0] ||
+    customTemplatesList[0]
   );
 }
 

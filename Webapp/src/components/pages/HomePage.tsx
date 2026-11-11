@@ -17,25 +17,34 @@ import {
   Lock,
   RefreshCw,
   Eye,
+  Plus,
+  Pencil,
+  Upload,
 } from 'lucide-react';
 import { AppPage, getPageUrl } from '../../lib/navigation';
-import { CARD_TEMPLATES, DEFAULT_CARD_TEMPLATE_ID, getCardTemplate } from '../../lib/cardTemplates';
+import {
+  CardTemplate,
+  DEFAULT_CARD_TEMPLATE_ID,
+  getCardTemplate,
+  useCardTemplates,
+} from '../../lib/cardTemplates';
 import { generateFrontCardCanvas, generateBackCardCanvas } from '../../lib/cardGenerator';
 import { SAMPLE_FARMER_RECORD } from '../../lib/samplePreview';
 import { Header } from '../Header';
 import { Footer } from '../Footer';
+import { CustomDesignModal } from '../CustomDesignModal';
 
 interface HomePageProps {
   selectedTemplateId: string;
   onSelectTemplate: (templateId: string) => void;
-  onLaunchProduct: (templateId?: string) => void;
+  onLaunchCreateCard: (templateId?: string) => void;
   onNavigate: (page: AppPage) => void;
 }
 
 export const HomePage: React.FC<HomePageProps> = ({
   selectedTemplateId,
   onSelectTemplate,
-  onLaunchProduct,
+  onLaunchCreateCard,
   onNavigate,
 }) => {
   const [previewTemplateId, setPreviewTemplateId] = useState<string>(
@@ -45,8 +54,17 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [frontCardUrl, setFrontCardUrl] = useState<string>('');
   const [backCardUrl, setBackCardUrl] = useState<string>('');
   const [isRenderingPreview, setIsRenderingPreview] = useState<boolean>(false);
+  const [isCustomModalOpen, setIsCustomModalOpen] = useState<boolean>(false);
+  const [editingTemplate, setEditingTemplate] = useState<CardTemplate | null>(null);
 
+  const { all: allTemplates } = useCardTemplates();
   const activeTemplate = getCardTemplate(previewTemplateId);
+
+  useEffect(() => {
+    if (selectedTemplateId) {
+      setPreviewTemplateId(selectedTemplateId);
+    }
+  }, [selectedTemplateId]);
 
   useEffect(() => {
     let mounted = true;
@@ -72,7 +90,13 @@ export const HomePage: React.FC<HomePageProps> = ({
     return () => {
       mounted = false;
     };
-  }, [previewTemplateId]);
+  }, [
+    previewTemplateId,
+    activeTemplate?.id,
+    activeTemplate?.updatedAt,
+    activeTemplate?.frontUrl,
+    activeTemplate?.backUrl,
+  ]);
 
   const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, page: AppPage) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
@@ -82,7 +106,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   const handleUseTemplate = (templateId: string) => {
     onSelectTemplate(templateId);
-    onLaunchProduct(templateId);
+    onLaunchCreateCard(templateId);
   };
 
   const displayedPreviewSrc =
@@ -126,7 +150,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
                   <button
                     type="button"
-                    onClick={() => onLaunchProduct(previewTemplateId)}
+                    onClick={() => onLaunchCreateCard(previewTemplateId)}
                     className="px-6 py-3.5 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white text-sm font-bold rounded-xl shadow-lg shadow-emerald-700/20 transition transform hover:-translate-y-0.5 flex items-center justify-center space-x-2 cursor-pointer"
                   >
                     <CreditCard className="w-4 h-4" />
@@ -230,7 +254,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   {/* Quick Template Selector Strip + Use Design CTA */}
                   <div className="space-y-2.5 pt-1">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      {CARD_TEMPLATES.map((tpl) => {
+                      {allTemplates.map((tpl) => {
                         const isSelected = tpl.id === previewTemplateId;
                         return (
                           <button
@@ -241,16 +265,40 @@ export const HomePage: React.FC<HomePageProps> = ({
                               onSelectTemplate(tpl.id);
                             }}
                             title={`Preview ${tpl.name}`}
-                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer flex items-center gap-1 ${
                               isSelected
                                 ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm'
                                 : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50'
                             }`}
                           >
-                            {tpl.name}
+                            <span>{tpl.name}</span>
+                            {tpl.isCustom && (
+                              <span
+                                className={`text-[9px] px-1 py-0.2 rounded font-extrabold uppercase ${
+                                  isSelected
+                                    ? 'bg-emerald-600 text-emerald-100'
+                                    : 'bg-emerald-100 text-emerald-800'
+                                }`}
+                              >
+                                Custom
+                              </span>
+                            )}
                           </button>
                         );
                       })}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingTemplate(null);
+                          setIsCustomModalOpen(true);
+                        }}
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-dashed border-emerald-500 bg-emerald-50/70 hover:bg-emerald-100 text-emerald-800 transition flex items-center gap-1 cursor-pointer"
+                        title="Upload and preview your own custom card design"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Custom Design</span>
+                      </button>
                     </div>
 
                     <button
@@ -399,7 +447,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => onLaunchProduct(previewTemplateId)}
+                onClick={() => onLaunchCreateCard(previewTemplateId)}
                 className="self-start md:self-auto px-4 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center space-x-2 cursor-pointer"
               >
                 <span>Try the Card Maker</span>
@@ -488,7 +536,52 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {CARD_TEMPLATES.map((template) => {
+            {/* Upload Custom Card Design Tile */}
+            <div
+              onClick={() => {
+                setEditingTemplate(null);
+                setIsCustomModalOpen(true);
+              }}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setEditingTemplate(null);
+                  setIsCustomModalOpen(true);
+                }
+              }}
+              className="bg-emerald-50/50 hover:bg-emerald-50 rounded-2xl border-2 border-dashed border-emerald-300 hover:border-emerald-500 p-4 flex flex-col justify-between gap-4 transition shadow-sm hover:shadow-md cursor-pointer group"
+            >
+              <div className="flex-1 bg-white/80 rounded-xl border border-emerald-200/80 p-5 flex flex-col items-center justify-center text-center space-y-2.5">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-100 border border-emerald-200 text-emerald-700 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <Upload className="w-6 h-6" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-extrabold text-slate-900">
+                    Use Your Own Custom Design
+                  </h3>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Upload custom Front &amp; Back artwork (PNG, JPG, WebP, SVG) and preview live with farmer details.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <div className="text-sm font-bold text-emerald-900">Custom Artwork</div>
+                  <p className="text-[11px] text-emerald-700 font-medium">
+                    Includes safe-zone layout guide
+                  </p>
+                </div>
+                <span className="px-3 py-1.5 rounded-lg bg-emerald-700 group-hover:bg-emerald-600 text-white text-[11px] font-bold shadow-sm transition flex items-center space-x-1">
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Upload</span>
+                </span>
+              </div>
+            </div>
+
+            {allTemplates.map((template) => {
               const isSelected = template.id === previewTemplateId;
               return (
                 <div
@@ -527,14 +620,36 @@ export const HomePage: React.FC<HomePageProps> = ({
 
                   {/* Card Footer */}
                   <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900">{template.name}</h3>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <h3 className="text-sm font-bold text-slate-900 truncate">{template.name}</h3>
+                        {template.isCustom && (
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200 text-[9px] font-bold uppercase flex-shrink-0">
+                            Custom
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[11px] text-slate-500">
                         {template.hasSeparateBack ? 'Matched Front & Back' : 'Unified Design'}
                       </p>
                     </div>
 
-                    <div className="flex items-center space-x-1.5">
+                    <div className="flex items-center space-x-1.5 flex-shrink-0">
+                      {template.isCustom && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingTemplate(template);
+                            setIsCustomModalOpen(true);
+                          }}
+                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-600 hover:text-emerald-800 transition cursor-pointer"
+                          title="Edit or delete custom design"
+                          aria-label={`Edit ${template.name}`}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         onClick={() => {
@@ -564,7 +679,15 @@ export const HomePage: React.FC<HomePageProps> = ({
             })}
 
             {/* Balanced Studio Callout Tile to complete the 3-col grid symmetrically */}
-            <div className="sm:col-span-2 lg:col-span-2 bg-gradient-to-br from-emerald-50 via-white to-emerald-50/70 rounded-2xl border border-emerald-200 p-6 flex flex-col justify-between gap-4 shadow-sm">
+            <div
+              className={`sm:col-span-2 ${
+                (allTemplates.length + 1) % 3 === 0
+                  ? 'lg:col-span-3'
+                  : (allTemplates.length + 1) % 3 === 1
+                    ? 'lg:col-span-2'
+                    : 'lg:col-span-1'
+              } bg-gradient-to-br from-emerald-50 via-white to-emerald-50/70 rounded-2xl border border-emerald-200 p-6 flex flex-col justify-between gap-4 shadow-sm`}
+            >
               <div className="space-y-2">
                 <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                   <Sparkles className="w-3 h-3 text-emerald-700" />
@@ -580,7 +703,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               <div>
                 <button
                   type="button"
-                  onClick={() => onLaunchProduct(previewTemplateId)}
+                  onClick={() => onLaunchCreateCard(previewTemplateId)}
                   className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-sm transition inline-flex items-center space-x-2 cursor-pointer"
                 >
                   <CreditCard className="w-4 h-4" />
@@ -769,7 +892,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
             <button
               type="button"
-              onClick={() => onLaunchProduct(previewTemplateId)}
+              onClick={() => onLaunchCreateCard(previewTemplateId)}
               className="shrink-0 px-6 py-3.5 bg-white hover:bg-emerald-50 text-emerald-900 text-sm font-bold rounded-xl shadow-md transition transform hover:-translate-y-0.5 flex items-center space-x-2 cursor-pointer"
             >
               <CreditCard className="w-4 h-4 text-emerald-700" />
@@ -781,6 +904,24 @@ export const HomePage: React.FC<HomePageProps> = ({
       </main>
 
       <Footer onNavigate={onNavigate} openInSameTab={true} />
+
+      <CustomDesignModal
+        isOpen={isCustomModalOpen}
+        onClose={() => setIsCustomModalOpen(false)}
+        editingTemplate={editingTemplate}
+        onSaveSuccess={(saved) => {
+          setPreviewTemplateId(saved.id);
+          onSelectTemplate(saved.id);
+        }}
+        onDeleted={(deletedId) => {
+          if (previewTemplateId === deletedId) {
+            setPreviewTemplateId(DEFAULT_CARD_TEMPLATE_ID);
+          }
+          if (selectedTemplateId === deletedId) {
+            onSelectTemplate(DEFAULT_CARD_TEMPLATE_ID);
+          }
+        }}
+      />
     </div>
   );
 };

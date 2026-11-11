@@ -34,9 +34,9 @@ export const FarmerVerificationPage: React.FC<FarmerVerificationPageProps> = ({
   onNavigateHome,
   onNavigate,
 }) => {
-  const handleOpenProduct = () => {
+  const handleOpenCreateCard = () => {
     if (onNavigate) {
-      onNavigate('product');
+      onNavigate('create-card');
     } else {
       onNavigateHome();
     }
@@ -111,7 +111,7 @@ export const FarmerVerificationPage: React.FC<FarmerVerificationPageProps> = ({
 
           <div className="pt-2 space-y-2">
             <button
-              onClick={handleOpenProduct}
+              onClick={handleOpenCreateCard}
               className="w-full py-2.5 px-4 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl shadow transition flex items-center justify-center space-x-1.5"
             >
               <CreditCard className="w-3.5 h-3.5" />
@@ -166,7 +166,7 @@ export const FarmerVerificationPage: React.FC<FarmerVerificationPageProps> = ({
               <span>होम</span>
             </button>
             <button
-              onClick={handleOpenProduct}
+              onClick={handleOpenCreateCard}
               className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-600 rounded-lg transition flex items-center space-x-1.5 shadow-sm"
             >
               <CreditCard className="w-3.5 h-3.5" />
@@ -480,7 +480,7 @@ export const FarmerVerificationPage: React.FC<FarmerVerificationPageProps> = ({
             </button>
 
             <button
-              onClick={handleOpenProduct}
+              onClick={handleOpenCreateCard}
               className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg font-bold transition flex items-center space-x-1.5 shadow-sm"
             >
               <ExternalLink className="w-3.5 h-3.5" />

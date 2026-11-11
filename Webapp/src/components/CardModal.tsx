@@ -10,6 +10,7 @@ import {
 import { FarmerRecord } from '../types';
 import logoImg from '../assets/logo.png';
 import { BackgroundSelector } from './BackgroundSelector';
+import { getCardTemplate, useCardTemplates } from '../lib/cardTemplates';
 import {
   downloadCardAsPng,
   downloadCardAsPdf,
@@ -47,7 +48,10 @@ export const CardModal: React.FC<CardModalProps> = ({
   const [bothUrl, setBothUrl] = useState<string>(initialBothUrl || '');
   const [isLoadingPreviews, setIsLoadingPreviews] = useState<boolean>(false);
 
-  // Generate missing previews whenever modal opens, record changes, or selected background changes
+  useCardTemplates();
+  const activeTemplate = getCardTemplate(selectedTemplateId);
+
+  // Generate missing previews whenever modal opens, record changes, or selected background changes/updates
   useEffect(() => {
     if (!isOpen) return;
 
@@ -100,7 +104,17 @@ export const CardModal: React.FC<CardModalProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [isOpen, record, initialFrontUrl, initialBackUrl, initialBothUrl, selectedTemplateId]);
+  }, [
+    isOpen,
+    record,
+    initialFrontUrl,
+    initialBackUrl,
+    initialBothUrl,
+    selectedTemplateId,
+    activeTemplate?.updatedAt,
+    activeTemplate?.frontUrl,
+    activeTemplate?.backUrl,
+  ]);
 
   if (!isOpen) return null;
 
@@ -169,10 +183,11 @@ export const CardModal: React.FC<CardModalProps> = ({
             </button>
           </div>
 
-          <div className="w-full md:w-72">
+          <div className="w-full md:w-80">
             <BackgroundSelector
               selectedTemplateId={selectedTemplateId}
               onChange={onSelectTemplate}
+              previewRecord={record}
             />
           </div>
         </div>

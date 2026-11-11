@@ -2,15 +2,78 @@ import { jsPDF } from 'jspdf';
 import QRCode from 'qrcode';
 import { FarmerRecord } from '../types';
 import { buildVerificationUrl } from './verificationUrl';
-import { CardSide, getCardTemplateUrl } from './cardTemplates';
+import {
+  CARD_CANVAS_HEIGHT,
+  CARD_CANVAS_WIDTH,
+  CardSide,
+  CardTemplate,
+  CustomCardStyle,
+  getCardTemplate,
+  getCardTemplateUrl,
+} from './cardTemplates';
+import { drawSafeZonesOverlay } from './customDesignUtils';
+
+export interface CardRenderOptions {
+  templateOverride?: CardTemplate;
+  showSafeZones?: boolean;
+}
 
 const templateImageCache = new Map<string, Promise<HTMLImageElement>>();
 
+function getResolvedTemplate(
+  templateId?: string,
+  options?: CardRenderOptions
+): CardTemplate | undefined {
+  return options?.templateOverride || getCardTemplate(templateId);
+}
+
+function getResolvedTemplateUrl(
+  templateId?: string,
+  side: CardSide = 'front',
+  options?: CardRenderOptions
+): string | undefined {
+  if (options?.templateOverride) {
+    return side === 'back'
+      ? options.templateOverride.backUrl || options.templateOverride.frontUrl
+      : options.templateOverride.frontUrl || options.templateOverride.backUrl;
+  }
+  return getCardTemplateUrl(templateId, side);
+}
+
+function getCardTextPalette(customStyle?: CustomCardStyle) {
+  if (customStyle?.textTheme === 'light') {
+    return {
+      labelColor: '#ffffff',
+      colonColor: '#cbd5e1',
+      valueColor: '#f1f5f9',
+      photoBorderColor: '#cbd5e1',
+      sectionTitleColor: '#ffffff',
+      tableHeaderColor: '#e2e8f0',
+      tableDividerColor: 'rgba(203, 213, 225, 0.45)',
+      sectionSeparatorColor: 'rgba(226, 232, 240, 0.35)',
+      tableValueColor: '#f8fafc',
+    };
+  }
+
+  return {
+    labelColor: '#0f172a',
+    colonColor: '#64748b',
+    valueColor: '#1e293b',
+    photoBorderColor: '#94a3b8',
+    sectionTitleColor: '#0f172a',
+    tableHeaderColor: '#1e293b',
+    tableDividerColor: '#cbd5e1',
+    sectionSeparatorColor: '#e2e8f0',
+    tableValueColor: '#0c2d19ff',
+  };
+}
+
 async function getCardTemplateImage(
   templateId?: string,
-  side: CardSide = 'front'
+  side: CardSide = 'front',
+  options?: CardRenderOptions
 ): Promise<HTMLImageElement> {
-  const imageUrl = getCardTemplateUrl(templateId, side);
+  const imageUrl = getResolvedTemplateUrl(templateId, side, options);
   if (!imageUrl) {
     throw new Error('No card template images found in src/assets/card_template/');
   }
@@ -18,6 +81,13 @@ async function getCardTemplateImage(
   const cached = templateImageCache.get(imageUrl);
   if (cached) {
     return cached;
+  }
+
+  if (templateImageCache.size >= 40) {
+    const oldestKey = templateImageCache.keys().next().value;
+    if (oldestKey) {
+      templateImageCache.delete(oldestKey);
+    }
   }
 
   const loadPromise = loadImage(imageUrl).catch((err) => {
@@ -31,38 +101,61 @@ async function getCardTemplateImage(
 /**
  * High-resolution canvas dimensions matching standard CR80 ID Card aspect ratio (85.6 x 54 mm).
  */
-export const CARD_WIDTH = 1050;
-export const CARD_HEIGHT = 660;
+export const CARD_WIDTH = CARD_CANVAS_WIDTH;
+export const CARD_HEIGHT = CARD_CANVAS_HEIGHT;
 
 /**
- * Draws the shared ID Card base using the selected template front/back image from src/assets/card_template/.
+ * Draws the shared ID Card base using the selected template front/back image.
  */
 async function drawCardBase(
   ctx: CanvasRenderingContext2D,
   w: number,
   h: number,
   templateId?: string,
-  side: CardSide = 'front'
+  side: CardSide = 'front',
+  options?: CardRenderOptions
 ) {
+  const template = getResolvedTemplate(templateId, options);
+  const customStyle = template?.customStyle;
+
   // 1. Clear background
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = customStyle?.textTheme === 'light' ? '#0f172a' : '#ffffff';
   ctx.fillRect(0, 0, w, h);
 
-  // 2. Draw user-provided background card template for the requested side
+  // 2. Draw user-provided or built-in background card template for the requested side
   try {
-    const templateImg = await getCardTemplateImage(templateId, side);
+    const templateImg = await getCardTemplateImage(templateId, side, options);
     ctx.drawImage(templateImg, 0, 0, w, h);
   } catch (err) {
     console.warn(`Could not draw card ${side} template image:`, err);
   }
 
-  // 3. Crisp outer rounded card border
-  ctx.save();
-  ctx.strokeStyle = '#15803d';
-  ctx.lineWidth = 2.5;
-  roundRect(ctx, 2, 2, w - 4, h - 4, 20);
-  ctx.stroke();
-  ctx.restore();
+  // 2b. Optional readability panel behind data fields/tables for busy custom backgrounds
+  if (customStyle?.contentBackdrop === 'light' || customStyle?.contentBackdrop === 'dark') {
+    const isLightPanel = customStyle.contentBackdrop === 'light';
+    ctx.save();
+    ctx.fillStyle = isLightPanel ? 'rgba(255, 255, 255, 0.86)' : 'rgba(15, 23, 42, 0.78)';
+    ctx.strokeStyle = isLightPanel ? 'rgba(226, 232, 240, 0.9)' : 'rgba(51, 65, 85, 0.85)';
+    ctx.lineWidth = 1.5;
+    if (side === 'front') {
+      roundRect(ctx, 10, 130, 1030, 472, 16);
+    } else {
+      roundRect(ctx, 32, 130, 986, 452, 16);
+    }
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // 3. Crisp outer rounded card border (unless disabled on custom template)
+  if (customStyle?.borderColor !== 'none') {
+    ctx.save();
+    ctx.strokeStyle = customStyle?.borderColor || '#15803d';
+    ctx.lineWidth = 2.5;
+    roundRect(ctx, 2, 2, w - 4, h - 4, 20);
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 /**
@@ -70,7 +163,8 @@ async function drawCardBase(
  */
 export async function generateFrontCardCanvas(
   record: FarmerRecord,
-  templateId?: string
+  templateId?: string,
+  options?: CardRenderOptions
 ): Promise<HTMLCanvasElement> {
   // Wait for Google Fonts to be ready for perfect Devanagari text rendering
   if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
@@ -86,8 +180,11 @@ export async function generateFrontCardCanvas(
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Could not get 2D context for card generation');
 
+  const resolvedTemplate = getResolvedTemplate(templateId, options);
+  const palette = getCardTextPalette(resolvedTemplate?.customStyle);
+
   // Shared Base Frame (Front template)
-  await drawCardBase(ctx, CARD_WIDTH, CARD_HEIGHT, templateId, 'front');
+  await drawCardBase(ctx, CARD_WIDTH, CARD_HEIGHT, templateId, 'front', options);
 
   // 1. Photo Frame (Left side matching template)
   const px = 36;
@@ -140,7 +237,7 @@ export async function generateFrontCardCanvas(
 
   // Photo border
   ctx.save();
-  ctx.strokeStyle = '#94a3b8';
+  ctx.strokeStyle = palette.photoBorderColor;
   ctx.lineWidth = 1.5;
   roundRect(ctx, px, py, pw, ph, photoRadius);
   ctx.stroke();
@@ -168,13 +265,13 @@ export async function generateFrontCardCanvas(
 
   fields.forEach((field, idx) => {
     // Label in Devanagari (Enhanced 30px font)
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = palette.labelColor;
     ctx.font = '700 30px "Noto Sans Devanagari", Inter, sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(field.label, labelColX, cy);
 
     // Separator colon (Enhanced 30px font)
-    ctx.fillStyle = '#64748b';
+    ctx.fillStyle = palette.colonColor;
     ctx.font = '700 30px Inter, sans-serif';
     ctx.fillText(':', colonColX, cy);
 
@@ -184,7 +281,7 @@ export async function generateFrontCardCanvas(
     const availableValW = idx < 3 ? 495 : 325;
     const valText = field.value !== undefined ? field.value : '--';
 
-    ctx.fillStyle = '#1e293b';
+    ctx.fillStyle = palette.valueColor;
     let valFontSize = 30;
     ctx.font = `600 ${valFontSize}px Inter, "Noto Sans Devanagari", sans-serif`;
 
@@ -202,12 +299,12 @@ export async function generateFrontCardCanvas(
 
   // 3. Address (पत्ता) (Enhanced 28px/25px font, full text, never cropped)
   const addrY = cy + 12;
-  ctx.fillStyle = '#0f172a';
+  ctx.fillStyle = palette.labelColor;
   ctx.font = '700 28px "Noto Sans Devanagari", Inter, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText('पत्ता', labelColX, addrY);
 
-  ctx.fillStyle = '#64748b';
+  ctx.fillStyle = palette.colonColor;
   ctx.font = '700 28px Inter, sans-serif';
   ctx.fillText(':', colonColX, addrY);
 
@@ -232,7 +329,7 @@ export async function generateFrontCardCanvas(
   }
 
   // Draw ALL address lines without slicing or cropping
-  ctx.fillStyle = '#1e293b';
+  ctx.fillStyle = palette.valueColor;
   addrLines.forEach((line, i) => {
     ctx.fillText(line, valColX, addrY + i * addrLineH);
   });
@@ -284,6 +381,10 @@ export async function generateFrontCardCanvas(
     ctx.drawImage(qrImg, qx + 8, qy + 8, qw - 16, qh - 16);
   } catch (qrErr) {
     console.warn('QR Code generation failed:', qrErr);
+  }
+
+  if (options?.showSafeZones) {
+    drawSafeZonesOverlay(ctx, CARD_WIDTH, CARD_HEIGHT, 'front');
   }
 
   return canvas;
@@ -447,7 +548,8 @@ function wrapBankNameToLines(
  */
 export async function generateBackCardCanvas(
   record: FarmerRecord,
-  templateId?: string
+  templateId?: string,
+  options?: CardRenderOptions
 ): Promise<HTMLCanvasElement> {
   if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
     try {
@@ -462,8 +564,11 @@ export async function generateBackCardCanvas(
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Could not get 2D context for card generation');
 
+  const resolvedTemplate = getResolvedTemplate(templateId, options);
+  const palette = getCardTextPalette(resolvedTemplate?.customStyle);
+
   // Shared Base Frame (Back template)
-  await drawCardBase(ctx, CARD_WIDTH, CARD_HEIGHT, templateId, 'back');
+  await drawCardBase(ctx, CARD_WIDTH, CARD_HEIGHT, templateId, 'back', options);
 
   const centerX = CARD_WIDTH / 2;
 
@@ -500,13 +605,13 @@ export async function generateBackCardCanvas(
   const valFontSize = numRows <= 1 ? 26 : numRows === 2 ? 24 : numRows === 3 ? 21 : numRows === 4 ? 19 : 18;
 
   // Title: जमिनीचा तपशील
-  ctx.fillStyle = '#0f172a';
+  ctx.fillStyle = palette.sectionTitleColor;
   ctx.font = '700 34px "Noto Sans Devanagari", Inter, sans-serif';
   ctx.fillText('जमिनीचा तपशील', centerX, s1Y);
 
   // Table Header (No background, clean text)
   const tableHeaderY = s1Y + 38;
-  ctx.fillStyle = '#1e293b';
+  ctx.fillStyle = palette.tableHeaderColor;
   ctx.font = `700 ${headerFontSize}px "Noto Sans Devanagari", Inter, sans-serif`;
   ctx.fillText('सर्वे नंबर', col1X, tableHeaderY);
   ctx.fillText('गाव', col2X, tableHeaderY);
@@ -515,7 +620,7 @@ export async function generateBackCardCanvas(
 
   // Divider line between table header and table body
   const tableDividerY = tableHeaderY + 12;
-  ctx.strokeStyle = '#cbd5e1';
+  ctx.strokeStyle = palette.tableDividerColor;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.moveTo(70, tableDividerY);
@@ -528,8 +633,8 @@ export async function generateBackCardCanvas(
   landRows.forEach((row, i) => {
     const rY = startRowY + (i * rowHeight);
 
-    // Dark green table body text on transparent background
-    ctx.fillStyle = '#0c2d19ff';
+    // Table body text
+    ctx.fillStyle = palette.tableValueColor;
     drawFittedText(ctx, row.survey_no || '--', col1X, rY, 210, valFontSize);
     drawFittedText(ctx, row.village || '--', col2X, rY, 230, valFontSize);
     drawFittedText(ctx, row.owner_type || '--', col3X, rY, 230, valFontSize);
@@ -541,7 +646,7 @@ export async function generateBackCardCanvas(
   const s2Y = separatorY + 34;
 
   // Subtle separator line
-  ctx.strokeStyle = '#e2e8f0';
+  ctx.strokeStyle = palette.sectionSeparatorColor;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.moveTo(80, separatorY);
@@ -555,7 +660,7 @@ export async function generateBackCardCanvas(
   const bankHeaderFontSize = numRows <= 2 ? 24 : 22;
   const bankValFontSize = numRows <= 2 ? 26 : 24;
 
-  ctx.fillStyle = '#0f172a';
+  ctx.fillStyle = palette.sectionTitleColor;
   ctx.font = '700 34px "Noto Sans Devanagari", Inter, sans-serif';
   ctx.fillText('बँक तपशील', centerX, s2Y);
 
@@ -565,7 +670,7 @@ export async function generateBackCardCanvas(
 
   // Bank Header (No background, clean text)
   const bankHeaderY = s2Y + (numRows <= 2 ? 36 : 34);
-  ctx.fillStyle = '#1e293b';
+  ctx.fillStyle = palette.tableHeaderColor;
   ctx.font = `700 ${bankHeaderFontSize}px "Noto Sans Devanagari", Inter, sans-serif`;
   ctx.fillText('बँकचे नाव आणि शाखा', bankCol1X, bankHeaderY);
   ctx.fillText('बचत खाता नंबर', bankCol2X, bankHeaderY);
@@ -573,16 +678,16 @@ export async function generateBackCardCanvas(
 
   // Divider line between bank header and bank values
   const bankDividerY = bankHeaderY + 12;
-  ctx.strokeStyle = '#cbd5e1';
+  ctx.strokeStyle = palette.tableDividerColor;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.moveTo(70, bankDividerY);
   ctx.lineTo(CARD_WIDTH - 70, bankDividerY);
   ctx.stroke();
 
-  // Bank Values row (Dark green table body text)
+  // Bank Values row
   const bankValY = bankDividerY + (numRows <= 2 ? 28 : 25);
-  ctx.fillStyle = '#0c2d19ff';
+  ctx.fillStyle = palette.tableValueColor;
 
   const bankNameVal = record.bank_detail?.bank_name_branch || '--';
   const accountVal = record.bank_detail?.account_no || '--';
@@ -606,6 +711,10 @@ export async function generateBackCardCanvas(
   drawFittedText(ctx, ifscVal, bankCol3X, bankValY, 220, bankValFontSize);
   ctx.restore();
 
+  if (options?.showSafeZones) {
+    drawSafeZonesOverlay(ctx, CARD_WIDTH, CARD_HEIGHT, 'back');
+  }
+
   return canvas;
 }
 
@@ -617,11 +726,12 @@ export async function generateBackCardCanvas(
 export async function generateCardCanvas(
   record: FarmerRecord,
   side: 'front' | 'back' = 'front',
-  templateId?: string
+  templateId?: string,
+  options?: CardRenderOptions
 ): Promise<HTMLCanvasElement> {
   return side === 'back'
-    ? generateBackCardCanvas(record, templateId)
-    : generateFrontCardCanvas(record, templateId);
+    ? generateBackCardCanvas(record, templateId, options)
+    : generateFrontCardCanvas(record, templateId, options);
 }
 
 /**

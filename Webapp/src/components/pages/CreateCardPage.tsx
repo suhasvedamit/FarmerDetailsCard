@@ -1,24 +1,24 @@
 import React, { useState } from 'react';
 import { CreditCard, Home, ChevronRight, Lock, Sparkles } from 'lucide-react';
-import { Header } from './Header';
-import { DropZone } from './DropZone';
-import { ProgressBar } from './ProgressBar';
-import { PhotoCard } from './PhotoCard';
-import { FarmerForm } from './FarmerForm';
-import { CardModal } from './CardModal';
-import { DisclaimerModal } from './DisclaimerModal';
-import { PhotoEditorModal } from './PhotoEditorModal';
-import { BackgroundSelector } from './BackgroundSelector';
-import { Footer } from './Footer';
-import { AppPage, getPageUrl } from '../lib/navigation';
-import { FarmerRecord, createEmptyFarmerRecord } from '../types';
-import { extractFarmerDataFromPdf } from '../lib/pdfExtractor';
+import { Header } from '../Header';
+import { DropZone } from '../DropZone';
+import { ProgressBar } from '../ProgressBar';
+import { PhotoCard } from '../PhotoCard';
+import { FarmerForm } from '../FarmerForm';
+import { CardModal } from '../CardModal';
+import { DisclaimerModal } from '../DisclaimerModal';
+import { PhotoEditorModal } from '../PhotoEditorModal';
+import { BackgroundSelector } from '../BackgroundSelector';
+import { Footer } from '../Footer';
+import { AppPage, getPageUrl } from '../../lib/navigation';
+import { FarmerRecord, createEmptyFarmerRecord } from '../../types';
+import { extractFarmerDataFromPdf } from '../../lib/pdfExtractor';
 import {
   generateFrontCardCanvas,
   generateBackCardCanvas,
   combineCardCanvases,
-} from '../lib/cardGenerator';
-import { saveExtractedRecord, saveGeneratedRecord } from '../lib/supabase';
+} from '../../lib/cardGenerator';
+import { saveExtractedRecord, saveGeneratedRecord } from '../../lib/supabase';
 
 function createSessionId(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID
@@ -79,7 +79,7 @@ function hasFarmerRecordContent(record: FarmerRecord): boolean {
   );
 }
 
-interface ProductWorkspaceProps {
+interface CreateCardPageProps {
   hasAcceptedDisclaimer: boolean;
   onAcceptDisclaimer: () => void;
   selectedTemplateId: string;
@@ -87,7 +87,7 @@ interface ProductWorkspaceProps {
   onNavigate: (page: AppPage) => void;
 }
 
-export const ProductWorkspace: React.FC<ProductWorkspaceProps> = ({
+export const CreateCardPage: React.FC<CreateCardPageProps> = ({
   hasAcceptedDisclaimer,
   onAcceptDisclaimer,
   selectedTemplateId,
@@ -204,6 +204,8 @@ export const ProductWorkspace: React.FC<ProductWorkspaceProps> = ({
         <BackgroundSelector
           selectedTemplateId={selectedTemplateId}
           onChange={handleTemplateChange}
+          previewRecord={data}
+          showQuickCustomButton={true}
         />
       </div>
 
@@ -235,7 +237,7 @@ export const ProductWorkspace: React.FC<ProductWorkspaceProps> = ({
         }`}
         aria-hidden={!hasAcceptedDisclaimer}
       >
-        <Header currentPage="product" onNavigate={onNavigate} />
+        <Header currentPage="create-card" onNavigate={onNavigate} />
 
         <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
           {/* Workspace Intro Strip & Breadcrumb */}

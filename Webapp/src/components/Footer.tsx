@@ -66,10 +66,10 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, openInSameTab = true
               </li>
               <li>
                 <a
-                  href={getPageUrl('product')}
+                  href={getPageUrl('create-card')}
                   target={linkTarget}
                   rel={linkRel}
-                  onClick={(e) => handleLinkClick(e, 'product')}
+                  onClick={(e) => handleLinkClick(e, 'create-card')}
                   className="hover:text-emerald-400 transition flex items-center justify-between group py-0.5 font-medium text-emerald-300"
                 >
                   <span className="group-hover:translate-x-0.5 transition-transform">Card Maker Studio</span>

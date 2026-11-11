@@ -72,10 +72,10 @@ export const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate }) => {
           </nav>
 
           <a
-            href={getPageUrl('product')}
-            onClick={(e) => handleNavClick(e, 'product')}
+            href={getPageUrl('create-card')}
+            onClick={(e) => handleNavClick(e, 'create-card')}
             className={`px-3 sm:px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition flex items-center space-x-1.5 whitespace-nowrap ${
-              currentPage === 'product'
+              currentPage === 'create-card'
                 ? 'bg-emerald-100 text-emerald-950 ring-2 ring-emerald-300/60'
                 : 'bg-white hover:bg-emerald-50 text-emerald-900'
             }`}

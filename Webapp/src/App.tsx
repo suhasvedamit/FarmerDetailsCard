@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { FarmerVerificationPage } from './components/FarmerVerificationPage';
 import { HomePage } from './components/pages/HomePage';
-import { ProductWorkspace } from './components/ProductWorkspace';
+import { CreateCardPage } from './components/pages/CreateCardPage';
 import { TermsPage } from './components/pages/TermsPage';
 import { PrivacyPage } from './components/pages/PrivacyPage';
 import { ContactPage } from './components/pages/ContactPage';
 import { DisclaimerPage } from './components/pages/DisclaimerPage';
 import { AppPage, getPageFromUrl, navigateToPage } from './lib/navigation';
-import { DEFAULT_CARD_TEMPLATE_ID } from './lib/cardTemplates';
+import { DEFAULT_CARD_TEMPLATE_ID, getCardTemplateById } from './lib/cardTemplates';
+import {
+  getSavedSelectedTemplateId,
+  hydrateCustomCardTemplates,
+  persistSelectedTemplateId,
+} from './lib/customTemplatesStorage';
 import {
   isVerificationMode,
   extractVerificationDataFromUrl,
@@ -18,10 +23,33 @@ export const App: React.FC = () => {
   // Navigation & Page routing state
   const [currentPage, setCurrentPage] = useState<AppPage>(() => getPageFromUrl());
 
-  // Selected card template persists across Home showcase & Product workspace
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(DEFAULT_CARD_TEMPLATE_ID);
+  // Selected card template persists across Home showcase, Create Card studio, and reloads
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(
+    () => getSavedSelectedTemplateId() || DEFAULT_CARD_TEMPLATE_ID
+  );
 
-  // Disclaimer state for accessing the Card Maker product tool
+  useEffect(() => {
+    let active = true;
+    hydrateCustomCardTemplates().then(() => {
+      if (!active) return;
+      setSelectedTemplateId((currentId) => {
+        if (currentId && getCardTemplateById(currentId)) {
+          return currentId;
+        }
+        return DEFAULT_CARD_TEMPLATE_ID;
+      });
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleSelectTemplate = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    persistSelectedTemplateId(templateId);
+  };
+
+  // Disclaimer state for accessing the Card Maker Studio
   const [hasAcceptedDisclaimer, setHasAcceptedDisclaimer] = useState(false);
 
   // Check if page opened via QR code scan (or verification URL parameter)
@@ -60,11 +88,11 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleLaunchProduct = (templateId?: string) => {
+  const handleLaunchCreateCard = (templateId?: string) => {
     if (templateId) {
-      setSelectedTemplateId(templateId);
+      handleSelectTemplate(templateId);
     }
-    handleNavigate('product');
+    handleNavigate('create-card');
   };
 
   const handleNavigateHome = () => {
@@ -96,25 +124,25 @@ export const App: React.FC = () => {
     );
   }
 
-  // Product Page (Card Maker Studio)
-  if (currentPage === 'product') {
+  // Create Card Page (Card Maker Studio)
+  if (currentPage === 'create-card') {
     return (
-      <ProductWorkspace
+      <CreateCardPage
         hasAcceptedDisclaimer={hasAcceptedDisclaimer}
         onAcceptDisclaimer={() => setHasAcceptedDisclaimer(true)}
         selectedTemplateId={selectedTemplateId}
-        onSelectTemplate={setSelectedTemplateId}
+        onSelectTemplate={handleSelectTemplate}
         onNavigate={handleNavigate}
       />
     );
   }
 
-  // Default Home Page (Product Branding & Showcase)
+  // Default Home Page (Showcase & Overview)
   return (
     <HomePage
       selectedTemplateId={selectedTemplateId}
-      onSelectTemplate={setSelectedTemplateId}
-      onLaunchProduct={handleLaunchProduct}
+      onSelectTemplate={handleSelectTemplate}
+      onLaunchCreateCard={handleLaunchCreateCard}
       onNavigate={handleNavigate}
     />
   );
