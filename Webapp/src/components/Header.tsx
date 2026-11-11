@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Menu, X, CreditCard, ArrowRight, Home, Mail } from 'lucide-react';
+import { Menu, X, CreditCard, ArrowRight, Home, Mail, ShoppingBag } from 'lucide-react';
 import logoImg from '../assets/logo.png';
 import { AppPage, getPageUrl } from '../lib/navigation';
 import { useLanguage } from '../i18n';
@@ -16,6 +16,7 @@ export const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate }) => {
 
   const navItems: { page: AppPage; label: string; icon: React.ReactNode }[] = [
     { page: 'home', label: t.common.home, icon: <Home className="w-4 h-4" /> },
+    { page: 'pvc-makers', label: t.common.orderPvc, icon: <ShoppingBag className="w-4 h-4" /> },
     { page: 'contact', label: t.common.contact, icon: <Mail className="w-4 h-4" /> },
   ];
 
@@ -105,7 +106,7 @@ export const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate }) => {
       {/* Mobile Navigation Drawer */}
       {mobileMenuOpen && (
         <div className="md:hidden bg-emerald-900/95 border-t border-emerald-700/60 px-4 py-3 animate-fadeIn">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="flex flex-wrap gap-2">
             {navItems.map((item) => {
               const isActive = currentPage === item.page;
               return (
@@ -113,7 +114,7 @@ export const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate }) => {
                   key={item.page}
                   href={getPageUrl(item.page)}
                   onClick={(e) => handleNavClick(e, item.page)}
-                  className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-xs font-semibold transition ${
+                  className={`flex-1 min-w-[110px] flex items-center justify-center space-x-2 px-3 py-2 rounded-lg text-xs font-semibold transition ${
                     isActive
                       ? 'bg-white text-emerald-900 shadow-sm'
                       : 'text-emerald-100 hover:bg-emerald-800 hover:text-white'

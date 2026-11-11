@@ -6,6 +6,7 @@
 export type AppPage =
   | 'home'
   | 'create-card'
+  | 'pvc-makers'
   | 'verify'
   | 'terms'
   | 'privacy'
@@ -35,6 +36,15 @@ export function getPageFromUrl(): AppPage {
       candidate === 'product'
     ) {
       return 'create-card';
+    }
+    if (
+      candidate === 'pvc-makers' ||
+      candidate === 'order-pvc' ||
+      candidate === 'pvc' ||
+      candidate === 'pvc-agents' ||
+      candidate === 'agents'
+    ) {
+      return 'pvc-makers';
     }
     if (candidate === 'terms' || candidate === 'terms-and-conditions' || candidate === 'terms-of-service') {
       return 'terms';

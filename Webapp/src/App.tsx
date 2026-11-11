@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { FarmerVerificationPage } from './components/FarmerVerificationPage';
 import { HomePage } from './components/pages/HomePage';
 import { CreateCardPage } from './components/pages/CreateCardPage';
+import { PvcMakersPage } from './components/pages/PvcMakersPage';
 import { TermsPage } from './components/pages/TermsPage';
 import { PrivacyPage } from './components/pages/PrivacyPage';
 import { ContactPage } from './components/pages/ContactPage';
@@ -13,6 +14,16 @@ import {
   hydrateCustomCardTemplates,
   persistSelectedTemplateId,
 } from './lib/customTemplatesStorage';
+import {
+  CardDraftState,
+  clearCardDraft,
+  createInitialCardDraft,
+  hasFarmerRecordContent,
+  loadCardDraft,
+  loadDisclaimerAccepted,
+  saveCardDraft,
+  saveDisclaimerAccepted,
+} from './lib/cardDraftStorage';
 import {
   isVerificationMode,
   extractVerificationDataFromUrl,
@@ -50,7 +61,42 @@ export const App: React.FC = () => {
   };
 
   // Disclaimer state for accessing the Card Maker Studio
-  const [hasAcceptedDisclaimer, setHasAcceptedDisclaimer] = useState(false);
+  const [hasAcceptedDisclaimer, setHasAcceptedDisclaimer] = useState<boolean>(
+    () => loadDisclaimerAccepted()
+  );
+
+  // Active card draft preserved across in-app navigation and refreshes
+  const [cardDraft, setCardDraft] = useState<CardDraftState>(() => loadCardDraft());
+  const [autoOpenPreview, setAutoOpenPreview] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (hasFarmerRecordContent(cardDraft.data) || cardDraft.dataSource === 'pdf') {
+      saveCardDraft(cardDraft);
+    } else {
+      clearCardDraft();
+    }
+  }, [cardDraft]);
+
+  const handleAcceptDisclaimer = useCallback(() => {
+    setHasAcceptedDisclaimer(true);
+    saveDisclaimerAccepted(true);
+  }, []);
+
+  const handleUpdateDraft = useCallback(
+    (updater: (prev: CardDraftState) => CardDraftState) => {
+      setCardDraft(updater);
+    },
+    []
+  );
+
+  const handleResetDraft = useCallback(() => {
+    clearCardDraft();
+    setCardDraft(createInitialCardDraft());
+  }, []);
+
+  const handleConsumedAutoOpenPreview = useCallback(() => {
+    setAutoOpenPreview(false);
+  }, []);
 
   // Check if page opened via QR code scan (or verification URL parameter)
   const [isVerifying, setIsVerifying] = useState<boolean>(
@@ -99,6 +145,11 @@ export const App: React.FC = () => {
     handleNavigate('home');
   };
 
+  const handleBackToPreview = () => {
+    setAutoOpenPreview(true);
+    handleNavigate('create-card');
+  };
+
   // Dedicated Informational & Policy Pages
   if (currentPage === 'terms') {
     return <TermsPage onNavigate={handleNavigate} />;
@@ -111,6 +162,16 @@ export const App: React.FC = () => {
   }
   if (currentPage === 'disclaimer') {
     return <DisclaimerPage onNavigate={handleNavigate} />;
+  }
+  if (currentPage === 'pvc-makers') {
+    return (
+      <PvcMakersPage
+        activeRecord={cardDraft.data}
+        selectedTemplateId={selectedTemplateId}
+        onNavigate={handleNavigate}
+        onBackToPreview={handleBackToPreview}
+      />
+    );
   }
 
   // QR Verification Page
@@ -129,10 +190,15 @@ export const App: React.FC = () => {
     return (
       <CreateCardPage
         hasAcceptedDisclaimer={hasAcceptedDisclaimer}
-        onAcceptDisclaimer={() => setHasAcceptedDisclaimer(true)}
+        onAcceptDisclaimer={handleAcceptDisclaimer}
         selectedTemplateId={selectedTemplateId}
         onSelectTemplate={handleSelectTemplate}
         onNavigate={handleNavigate}
+        draft={cardDraft}
+        onUpdateDraft={handleUpdateDraft}
+        onResetDraft={handleResetDraft}
+        autoOpenPreview={autoOpenPreview}
+        onConsumedAutoOpenPreview={handleConsumedAutoOpenPreview}
       />
     );
   }

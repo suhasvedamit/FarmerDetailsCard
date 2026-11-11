@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
+  Download,
   FileText,
   Image as ImageIcon,
   Printer,
@@ -9,6 +10,7 @@ import {
   CreditCard,
   ChevronDown,
   Loader2,
+  ShoppingBag,
 } from 'lucide-react';
 import { FarmerRecord } from '../types';
 import logoImg from '../assets/logo.png';
@@ -19,7 +21,6 @@ import {
   downloadCardAsPdf,
   downloadCardPrintSheetPdf,
   printCardForPvc,
-  PvcPrintSides,
   generateFrontCardCanvas,
   generateBackCardCanvas,
   generateBothCardsCanvas,
@@ -36,6 +37,7 @@ interface CardModalProps {
   bothPreviewUrl?: string;
   selectedTemplateId: string;
   onSelectTemplate: (templateId: string) => void;
+  onOrderPvc?: () => void;
 }
 
 export const CardModal: React.FC<CardModalProps> = ({
@@ -47,33 +49,39 @@ export const CardModal: React.FC<CardModalProps> = ({
   bothPreviewUrl: initialBothUrl,
   selectedTemplateId,
   onSelectTemplate,
+  onOrderPvc,
 }) => {
   const { language, t } = useLanguage();
 
-  const [activeSide, setActiveSide] = useState<'front' | 'back' | 'both'>('front');
+  const [activeSide, setActiveSide] = useState<'front' | 'back' | 'both'>('both');
   const [frontUrl, setFrontUrl] = useState<string>(initialFrontUrl || '');
   const [backUrl, setBackUrl] = useState<string>(initialBackUrl || '');
   const [bothUrl, setBothUrl] = useState<string>(initialBothUrl || '');
   const [isLoadingPreviews, setIsLoadingPreviews] = useState<boolean>(false);
-  const [pvcMenuOpen, setPvcMenuOpen] = useState<boolean>(false);
-  const [isPvcBusy, setIsPvcBusy] = useState<boolean>(false);
-  const pvcMenuRef = useRef<HTMLDivElement>(null);
+  const [openMenu, setOpenMenu] = useState<'download' | 'print' | null>(null);
+  const [busyAction, setBusyAction] = useState<'download' | 'print' | null>(null);
+  const downloadMenuRef = useRef<HTMLDivElement>(null);
+  const printMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isOpen) {
-      setPvcMenuOpen(false);
+      setOpenMenu(null);
+      setActiveSide('both');
       return;
     }
-    if (!pvcMenuOpen) return;
+    if (!openMenu) return;
 
     const handleMouseDown = (event: MouseEvent) => {
-      if (pvcMenuRef.current && !pvcMenuRef.current.contains(event.target as Node)) {
-        setPvcMenuOpen(false);
+      const target = event.target as Node;
+      const inDownload = downloadMenuRef.current?.contains(target);
+      const inPrint = printMenuRef.current?.contains(target);
+      if (!inDownload && !inPrint) {
+        setOpenMenu(null);
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setPvcMenuOpen(false);
+        setOpenMenu(null);
       }
     };
 
@@ -83,7 +91,7 @@ export const CardModal: React.FC<CardModalProps> = ({
       document.removeEventListener('mousedown', handleMouseDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen, pvcMenuOpen]);
+  }, [isOpen, openMenu]);
 
   useCardTemplates();
   const activeTemplate = getCardTemplate(selectedTemplateId);
@@ -160,61 +168,108 @@ export const CardModal: React.FC<CardModalProps> = ({
   const currentPreview =
     activeSide === 'both' ? bothUrl || frontUrl : activeSide === 'back' ? backUrl : frontUrl;
 
-  const downloadImageTitle =
-    activeSide === 'both'
-      ? t.cardModal.downloadImageTitleBoth
-      : activeSide === 'back'
-        ? t.cardModal.downloadImageTitleBack
-        : t.cardModal.downloadImageTitleFront;
+  const byActiveSide = <T,>(front: T, back: T, both: T): T =>
+    ({ front, back, both })[activeSide];
 
-  const buildCr80Options = (sides: PvcPrintSides) => ({
+  const preRenderedCards = !isLoadingPreviews
+    ? {
+      frontDataUrl: frontUrl || undefined,
+      backDataUrl: backUrl || undefined,
+    }
+    : undefined;
+
+  const sideExportOptions = {
     language,
-    sides,
-    preRendered: !isLoadingPreviews
-      ? {
-          frontDataUrl: frontUrl || undefined,
-          backDataUrl: backUrl || undefined,
-        }
-      : undefined,
-  });
+    sides: activeSide,
+    preRendered: preRenderedCards,
+  };
 
-  const handlePvcPrint = async (sides: PvcPrintSides = 'both') => {
-    if (isPvcBusy || isLoadingPreviews) return;
-    setPvcMenuOpen(false);
-    setIsPvcBusy(true);
+  const isBusy = busyAction !== null;
+
+  const runExportAction = async (
+    kind: 'download' | 'print',
+    action: () => Promise<void>,
+    onErrorMsg?: string
+  ) => {
+    if (isBusy || isLoadingPreviews) return;
+    setOpenMenu(null);
+    setBusyAction(kind);
     try {
-      await printCardForPvc(record, selectedTemplateId, buildCr80Options(sides));
+      await action();
     } catch (err) {
-      console.error('PVC print failed:', err);
-      alert(t.cardModal.pvcPrintFailed);
+      console.error('Export action failed:', err);
+      if (onErrorMsg) alert(onErrorMsg);
     } finally {
-      setIsPvcBusy(false);
+      setBusyAction(null);
     }
   };
 
-  const handlePvcSavePdf = async (sides: PvcPrintSides = 'both') => {
-    if (isPvcBusy || isLoadingPreviews) return;
-    setPvcMenuOpen(false);
-    setIsPvcBusy(true);
-    try {
-      await downloadCardAsPdf(record, undefined, selectedTemplateId, buildCr80Options(sides));
-    } catch (err) {
-      console.error('PVC PDF download failed:', err);
-    } finally {
-      setIsPvcBusy(false);
-    }
-  };
-
-  const pvcPrintActions: Array<{ sides: PvcPrintSides; label: string }> = [
-    { sides: 'both', label: t.cardModal.pvcPrintBoth },
-    { sides: 'front', label: t.cardModal.pvcPrintFront },
-    { sides: 'back', label: t.cardModal.pvcPrintBack },
+  const downloadMenuItems = [
+    {
+      key: 'image',
+      label: byActiveSide(
+        t.cardModal.downloadImageFront,
+        t.cardModal.downloadImageBack,
+        t.cardModal.downloadImageBoth
+      ),
+      sub: t.cardModal.downloadImageSub,
+      hoverClass: 'hover:bg-emerald-50 hover:text-emerald-800',
+      icon: <ImageIcon className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />,
+      onClick: () =>
+        runExportAction('download', () =>
+          downloadCardAsPng(record, activeSide, undefined, selectedTemplateId, { language })
+        ),
+    },
+    {
+      key: 'pdf',
+      label: byActiveSide(
+        t.cardModal.downloadPdfFront,
+        t.cardModal.downloadPdfBack,
+        t.cardModal.downloadPdfBoth
+      ),
+      sub: t.cardModal.downloadPdfSub,
+      hoverClass: 'hover:bg-teal-50 hover:text-teal-800',
+      icon: <FileText className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />,
+      onClick: () =>
+        runExportAction('download', () =>
+          downloadCardAsPdf(record, undefined, selectedTemplateId, sideExportOptions)
+        ),
+    },
   ];
 
-  const pvcPdfActions: Array<{ sides: PvcPrintSides; label: string }> = [
-    { sides: 'both', label: t.cardModal.pvcSavePdfBoth },
-    { sides: 'front', label: t.cardModal.pvcSavePdfFront },
-    { sides: 'back', label: t.cardModal.pvcSavePdfBack },
+  const printMenuItems = [
+    {
+      key: 'pvc',
+      label: byActiveSide(
+        t.cardModal.pvcPrintFront,
+        t.cardModal.pvcPrintBack,
+        t.cardModal.pvcPrintBoth
+      ),
+      sub: t.cardModal.pvcPrintSub,
+      hoverClass: 'hover:bg-indigo-50 hover:text-indigo-800',
+      icon: <CreditCard className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />,
+      onClick: () =>
+        runExportAction(
+          'print',
+          () => printCardForPvc(record, selectedTemplateId, sideExportOptions),
+          t.cardModal.pvcPrintFailed
+        ),
+    },
+    {
+      key: 'a4',
+      label: byActiveSide(
+        t.cardModal.a4PrintFront,
+        t.cardModal.a4PrintBack,
+        t.cardModal.a4PrintBoth
+      ),
+      sub: t.cardModal.a4PrintSub,
+      hoverClass: 'hover:bg-sky-50 hover:text-sky-800',
+      icon: <FileText className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />,
+      onClick: () =>
+        runExportAction('print', () =>
+          downloadCardPrintSheetPdf(record, undefined, selectedTemplateId, sideExportOptions)
+        ),
+    },
   ];
 
   return (
@@ -297,9 +352,8 @@ export const CardModal: React.FC<CardModalProps> = ({
               <img
                 src={currentPreview}
                 alt={`${t.cardModal.title} - ${activeSide}`}
-                className={`max-h-[60vh] max-w-full rounded-xl shadow-xl border border-slate-300 object-contain transition-opacity duration-150 ${
-                  isLoadingPreviews ? 'opacity-50' : 'opacity-100'
-                }`}
+                className={`max-h-[60vh] max-w-full rounded-xl shadow-xl border border-slate-300 object-contain transition-opacity duration-150 ${isLoadingPreviews ? 'opacity-50' : 'opacity-100'
+                  }`}
               />
               {isLoadingPreviews && (
                 <div className="absolute inset-0 flex items-center justify-center">
@@ -329,124 +383,151 @@ export const CardModal: React.FC<CardModalProps> = ({
           </p>
 
           <div className="relative flex flex-wrap items-center gap-2 w-full lg:w-auto justify-center sm:justify-end">
-            {/* Single Image Download Button */}
-            <button
-              onClick={() =>
-                downloadCardAsPng(record, activeSide, undefined, selectedTemplateId, {
-                  language,
-                })
-              }
-              className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-600 active:scale-95 text-white text-sm font-bold rounded-lg shadow-sm hover:shadow transition flex items-center space-x-1.5"
-              title={downloadImageTitle}
-            >
-              <ImageIcon className="w-4 h-4 text-white" />
-              <span>{t.cardModal.downloadImageBtn}</span>
-            </button>
-
-            {/* Download A4 Print Sheet */}
-            <button
-              onClick={() =>
-                downloadCardPrintSheetPdf(record, undefined, selectedTemplateId, {
-                  language,
-                })
-              }
-              className="px-4 py-2.5 bg-sky-700 hover:bg-sky-600 active:scale-95 text-white text-sm font-bold rounded-lg shadow-sm hover:shadow transition flex items-center space-x-1.5"
-              title={t.cardModal.a4PrintSheetTitle}
-            >
-              <Printer className="w-4 h-4" />
-              <span>{t.cardModal.a4PrintSheetBtn}</span>
-            </button>
-
-            {/* Download 2-Page CR80 PDF */}
-            <button
-              onClick={() =>
-                downloadCardAsPdf(record, undefined, selectedTemplateId, buildCr80Options('both'))
-              }
-              className="px-4 py-2.5 bg-emerald-800 hover:bg-emerald-700 active:scale-95 text-white text-sm font-bold rounded-lg shadow-sm hover:shadow transition flex items-center space-x-1.5"
-              title={t.cardModal.downloadPdfTitle}
-            >
-              <FileText className="w-4 h-4 text-emerald-200" />
-              <span>{t.cardModal.downloadPdfBtn}</span>
-            </button>
-
-            {/* Direct CR80 PVC Print Split Button + Options Menu */}
-            <div ref={pvcMenuRef} className="sm:relative inline-flex rounded-lg shadow-sm">
+            {/* Unified Download Dropdown Button + Options Menu (Image + PDF) */}
+            <div ref={downloadMenuRef} className="sm:relative inline-flex">
               <button
                 type="button"
-                onClick={() => handlePvcPrint('both')}
-                disabled={isPvcBusy || isLoadingPreviews}
-                title={t.cardModal.pvcPrintTitle}
-                className="px-3.5 py-2.5 bg-indigo-700 hover:bg-indigo-600 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-bold rounded-l-lg transition flex items-center space-x-1.5 cursor-pointer"
+                onClick={() => setOpenMenu((prev) => (prev === 'download' ? null : 'download'))}
+                disabled={isBusy || isLoadingPreviews}
+                title={t.cardModal.downloadTitle}
+                aria-haspopup="menu"
+                aria-expanded={openMenu === 'download'}
+                className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-600 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-bold rounded-lg shadow-sm hover:shadow transition flex items-center space-x-1.5 cursor-pointer"
               >
-                {isPvcBusy ? (
+                {busyAction === 'download' ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  <CreditCard className="w-4 h-4 text-indigo-100" />
+                  <Download className="w-4 h-4 text-emerald-100" />
                 )}
-                <span>{t.cardModal.pvcPrintBtn}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setPvcMenuOpen((prev) => !prev)}
-                disabled={isPvcBusy || isLoadingPreviews}
-                aria-label={t.cardModal.pvcOptionsAria}
-                aria-haspopup="menu"
-                aria-expanded={pvcMenuOpen}
-                className="px-2 py-2.5 bg-indigo-800 hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed text-indigo-100 hover:text-white rounded-r-lg border-l border-indigo-500/40 transition flex items-center justify-center cursor-pointer"
-              >
+                <span>{t.cardModal.downloadBtn}</span>
                 <ChevronDown
-                  className={`w-4 h-4 transition-transform duration-150 ${
-                    pvcMenuOpen ? 'rotate-180' : ''
-                  }`}
+                  className={`w-4 h-4 text-emerald-100 transition-transform duration-150 ${openMenu === 'download' ? 'rotate-180' : ''
+                    }`}
                 />
               </button>
 
-              {pvcMenuOpen && (
+              {openMenu === 'download' && (
                 <div
                   role="menu"
-                  aria-label={t.cardModal.pvcOptionsAria}
+                  aria-label={t.cardModal.downloadOptionsAria}
+                  className="absolute bottom-full left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-0 mb-2 w-full max-w-sm sm:w-96 sm:max-w-[calc(100vw-2.5rem)] bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-30 text-left"
+                >
+                  <div className="px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    {t.cardModal.downloadMenuSection}
+                  </div>
+
+                  {downloadMenuItems.map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      role="menuitem"
+                      onClick={item.onClick}
+                      className={`w-full px-3.5 py-2.5 text-left text-slate-700 ${item.hoverClass} flex items-start space-x-2.5 transition cursor-pointer`}
+                    >
+                      {item.icon}
+                      <div className="min-w-0">
+                        <div className="text-xs sm:text-sm font-semibold leading-tight">
+                          {item.label}
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          {item.sub}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Unified Print Dropdown Button + Options Menu (PVC + A4) */}
+            <div ref={printMenuRef} className="sm:relative inline-flex">
+              <button
+                type="button"
+                onClick={() => setOpenMenu((prev) => (prev === 'print' ? null : 'print'))}
+                disabled={isBusy || isLoadingPreviews}
+                title={t.cardModal.printTitle}
+                aria-haspopup="menu"
+                aria-expanded={openMenu === 'print'}
+                className="px-4 py-2.5 bg-indigo-700 hover:bg-indigo-600 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-bold rounded-lg shadow-sm hover:shadow transition flex items-center space-x-1.5 cursor-pointer"
+              >
+                {busyAction === 'print' ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Printer className="w-4 h-4 text-indigo-100" />
+                )}
+                <span>{t.cardModal.printBtn}</span>
+                <ChevronDown
+                  className={`w-4 h-4 text-indigo-100 transition-transform duration-150 ${openMenu === 'print' ? 'rotate-180' : ''
+                    }`}
+                />
+              </button>
+
+              {openMenu === 'print' && (
+                <div
+                  role="menu"
+                  aria-label={t.cardModal.printOptionsAria}
                   className="absolute bottom-full left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-0 mb-2 w-full max-w-sm sm:w-96 sm:max-w-[calc(100vw-2.5rem)] bg-white rounded-xl shadow-xl border border-slate-200 pt-1.5 z-30 text-left"
                 >
                   <div className="px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                    {t.cardModal.pvcMenuPrintSection}
+                    {t.cardModal.printMenuSection}
                   </div>
-                  {pvcPrintActions.map((item) => (
+
+                  {printMenuItems.map((item) => (
                     <button
-                      key={`print-${item.sides}`}
+                      key={item.key}
                       type="button"
                       role="menuitem"
-                      onClick={() => handlePvcPrint(item.sides)}
-                      className="w-full px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-800 flex items-center space-x-2.5 transition cursor-pointer"
+                      onClick={item.onClick}
+                      className={`w-full px-3.5 py-2.5 text-left text-slate-700 ${item.hoverClass} flex items-start space-x-2.5 transition cursor-pointer`}
                     >
-                      <Printer className="w-4 h-4 text-indigo-600 shrink-0" />
-                      <span className="sm:whitespace-nowrap">{item.label}</span>
+                      {item.icon}
+                      <div className="min-w-0">
+                        <div className="text-xs sm:text-sm font-semibold leading-tight">
+                          {item.label}
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          {item.sub}
+                        </div>
+                      </div>
                     </button>
                   ))}
 
-                  <div className="my-1.5 border-t border-slate-100" />
-
-                  <div className="px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                    {t.cardModal.pvcMenuPdfSection}
-                  </div>
-                  {pvcPdfActions.map((item) => (
-                    <button
-                      key={`pdf-${item.sides}`}
-                      type="button"
-                      role="menuitem"
-                      onClick={() => handlePvcSavePdf(item.sides)}
-                      className="w-full px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 flex items-center space-x-2.5 transition cursor-pointer"
-                    >
-                      <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span className="sm:whitespace-nowrap">{item.label}</span>
-                    </button>
-                  ))}
-
-                  <div className="mt-1.5 px-3.5 py-2 bg-slate-50 border-t border-slate-100 text-[11px] text-slate-500 leading-snug rounded-b-xl">
-                    {t.cardModal.pvcPrintHint}
+                  <div className="mt-1.5 px-3.5 py-2 bg-slate-50 border-t border-slate-100 text-[11px] text-slate-500 leading-snug rounded-b-xl space-y-1">
+                    <div>{t.cardModal.pvcPrintHint}</div>
+                    {onOrderPvc && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenMenu(null);
+                          onClose();
+                          onOrderPvc();
+                        }}
+                        className="text-amber-700 hover:text-amber-800 font-semibold underline underline-offset-2 text-left cursor-pointer block"
+                      >
+                        {t.cardModal.orderPvcHint}
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
             </div>
+
+            {onOrderPvc && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenMenu(null);
+                  onClose();
+                  onOrderPvc();
+                }}
+                disabled={isBusy}
+                title={t.cardModal.orderPvcTitle}
+                className="px-4 py-2.5 bg-amber-600 hover:bg-amber-500 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-bold rounded-lg shadow-sm hover:shadow transition flex items-center space-x-1.5 cursor-pointer"
+              >
+                <ShoppingBag className="w-4 h-4 text-amber-100" />
+                <span>{t.cardModal.orderPvcBtn}</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

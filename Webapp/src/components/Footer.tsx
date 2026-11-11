@@ -84,6 +84,20 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, openInSameTab = true
                   <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 text-emerald-400 transition-opacity" />
                 </a>
               </li>
+              <li>
+                <a
+                  href={getPageUrl('pvc-makers')}
+                  target={linkTarget}
+                  rel={linkRel}
+                  onClick={(e) => handleLinkClick(e, 'pvc-makers')}
+                  className="hover:text-emerald-400 transition flex items-center justify-between group py-0.5 font-medium text-amber-300"
+                >
+                  <span className="group-hover:translate-x-0.5 transition-transform">
+                    {t.footer.orderPvcCard}
+                  </span>
+                  <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 text-emerald-400 transition-opacity" />
+                </a>
+              </li>
             </ul>
           </div>
 

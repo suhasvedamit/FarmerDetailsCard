@@ -11,7 +11,12 @@ import { PhotoEditorModal } from '../PhotoEditorModal';
 import { BackgroundSelector } from '../BackgroundSelector';
 import { Footer } from '../Footer';
 import { AppPage, getPageUrl } from '../../lib/navigation';
-import { FarmerRecord, createEmptyFarmerRecord } from '../../types';
+import { FarmerRecord } from '../../types';
+import {
+  CardDraftState,
+  createSessionId,
+  hasFarmerRecordContent,
+} from '../../lib/cardDraftStorage';
 import { extractFarmerDataFromPdf } from '../../lib/pdfExtractor';
 import {
   generateFrontCardCanvas,
@@ -21,71 +26,17 @@ import {
 import { saveExtractedRecord, saveGeneratedRecord } from '../../lib/supabase';
 import { useLanguage } from '../../i18n';
 
-function createSessionId(): string {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-}
-
-function hasFarmerRecordContent(record: FarmerRecord): boolean {
-  if (
-    record.farmer_id ||
-    record.enrollment_no ||
-    record.farmer_name ||
-    record.identifier_name ||
-    record.dob ||
-    record.age ||
-    record.gender ||
-    record.caste_category ||
-    record.mobile_number ||
-    record.aadhaar_number ||
-    record.pan_card ||
-    record.address ||
-    record.photo_url ||
-    record.raw_photo_url
-  ) {
-    return true;
-  }
-
-  if (
-    record.bank_detail?.bank_name_branch ||
-    record.bank_detail?.bank_name ||
-    record.bank_detail?.account_no ||
-    record.bank_detail?.ifsc_code
-  ) {
-    return true;
-  }
-
-  if (record.land_records && record.land_records.length > 1) {
-    return true;
-  }
-
-  if (
-    record.land_records?.some(
-      (row) => row.khata_no || row.survey_no || row.village || row.owner_type || row.area
-    )
-  ) {
-    return true;
-  }
-
-  return Boolean(
-    record.land_detail?.khata_no ||
-      record.land_detail?.total_area_hectare ||
-      record.land_detail?.survey_gat_no ||
-      record.land_detail?.village ||
-      record.land_detail?.sub_district ||
-      record.land_detail?.district ||
-      record.land_detail?.state ||
-      record.land_detail?.summary
-  );
-}
-
 interface CreateCardPageProps {
   hasAcceptedDisclaimer: boolean;
   onAcceptDisclaimer: () => void;
   selectedTemplateId: string;
   onSelectTemplate: (templateId: string) => void;
   onNavigate: (page: AppPage) => void;
+  draft: CardDraftState;
+  onUpdateDraft: (updater: (prev: CardDraftState) => CardDraftState) => void;
+  onResetDraft: () => void;
+  autoOpenPreview?: boolean;
+  onConsumedAutoOpenPreview?: () => void;
 }
 
 export const CreateCardPage: React.FC<CreateCardPageProps> = ({
@@ -94,14 +45,19 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
   selectedTemplateId,
   onSelectTemplate,
   onNavigate,
+  draft,
+  onUpdateDraft,
+  onResetDraft,
+  autoOpenPreview = false,
+  onConsumedAutoOpenPreview,
 }) => {
   const { language, t, format } = useLanguage();
 
-  const [data, setData] = useState<FarmerRecord>(() => createEmptyFarmerRecord());
-  const [sessionId, setSessionId] = useState<string>(() => createSessionId());
-  const [originalExtractedData, setOriginalExtractedData] = useState<FarmerRecord | null>(null);
-  const [dataSource, setDataSource] = useState<'manual' | 'pdf'>('manual');
-  const [uploadedFileName, setUploadedFileName] = useState('');
+  const { data, sessionId, originalExtractedData, dataSource, uploadedFileName } = draft;
+  const setData = (updated: FarmerRecord) => {
+    onUpdateDraft((prev) => ({ ...prev, data: updated }));
+  };
+
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
   const [progressPct, setProgressPct] = useState(0);
@@ -110,6 +66,14 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
   const [backPreviewUrl, setBackPreviewUrl] = useState('');
   const [bothPreviewUrl, setBothPreviewUrl] = useState('');
   const [isPhotoEditorOpen, setIsPhotoEditorOpen] = useState(false);
+
+  // Re-open Card Preview modal when returning from PVC Makers page
+  useEffect(() => {
+    if (autoOpenPreview && hasAcceptedDisclaimer) {
+      setCardModalOpen(true);
+      onConsumedAutoOpenPreview?.();
+    }
+  }, [autoOpenPreview, hasAcceptedDisclaimer, onConsumedAutoOpenPreview]);
 
   // Reset cached card previews whenever user changes the app language
   useEffect(() => {
@@ -149,11 +113,13 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
 
       const newSessionId = createSessionId();
 
-      setSessionId(newSessionId);
-      setOriginalExtractedData(extracted);
-      setData(extracted);
-      setDataSource('pdf');
-      setUploadedFileName(file.name);
+      onUpdateDraft(() => ({
+        sessionId: newSessionId,
+        originalExtractedData: extracted,
+        data: extracted,
+        dataSource: 'pdf',
+        uploadedFileName: file.name,
+      }));
       setFrontPreviewUrl('');
       setBackPreviewUrl('');
       setBothPreviewUrl('');
@@ -175,11 +141,7 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
   // Reset form back to blank manual entry
   const handleResetForm = () => {
     if (isProcessing) return;
-    setSessionId(createSessionId());
-    setOriginalExtractedData(null);
-    setData(createEmptyFarmerRecord());
-    setDataSource('manual');
-    setUploadedFileName('');
+    onResetDraft();
     setFrontPreviewUrl('');
     setBackPreviewUrl('');
     setBothPreviewUrl('');
@@ -430,6 +392,7 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
           bothPreviewUrl={bothPreviewUrl}
           selectedTemplateId={selectedTemplateId}
           onSelectTemplate={handleTemplateChange}
+          onOrderPvc={() => onNavigate('pvc-makers')}
         />
 
         {/* Photo Editor & Cropper Modal */}

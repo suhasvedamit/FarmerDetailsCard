@@ -1,5 +1,5 @@
 import * as pdfjsLib from 'pdfjs-dist';
-import { createWorker } from 'tesseract.js';
+import { createWorker, PSM } from 'tesseract.js';
 import { FarmerRecord, LandRow } from '../types';
 import { formatMessage, getTranslations, Language } from '../i18n';
 
@@ -528,59 +528,106 @@ export function extractPhotoFromCanvas(canvas: HTMLCanvasElement): string | null
   return extractPhotoDetailsFromCanvas(canvas)?.photoUrl || null;
 }
 
+export interface DigitalTextItem {
+  str: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /**
- * Extracts digital text directly from PDF pages if available.
- * Groups text items by vertical Y coordinates into natural lines,
- * sorting horizontally left-to-right to preserve table layouts.
+ * Extracts rotation-normalized digital text and positioned items from all PDF pages.
+ * Applies the page viewport transform so landscape / rotated PDFs (/Rotate 90, 180, 270)
+ * always sort top-to-bottom and left-to-right in visual reading order.
  */
-async function extractDigitalPageTexts(pdf: pdfjsLib.PDFDocumentProxy): Promise<string[]> {
+export async function extractDigitalPages(
+  pdf: pdfjsLib.PDFDocumentProxy
+): Promise<{ texts: string[]; pageItems: DigitalTextItem[][] }> {
   const pageTexts: string[] = [];
+  const allPageItems: DigitalTextItem[][] = [];
+
   for (let i = 1; i <= pdf.numPages; i++) {
     try {
       const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 1.0 });
       const textContent = await page.getTextContent();
-      const items = (textContent.items as any[]).filter(
-        it => it && typeof it.str === 'string' && it.str.length > 0
+      const rawItems = (textContent.items as any[]).filter(
+        it => it && typeof it.str === 'string' && it.str.trim().length > 0
       );
 
-      if (items.length === 0) {
+      if (rawItems.length === 0) {
         pageTexts.push('');
+        allPageItems.push([]);
         continue;
       }
 
-      // Group items into lines by Y coordinate (tolerance ~4 points)
+      const items: DigitalTextItem[] = rawItems.map(it => {
+        const tx = it.transform
+          ? pdfjsLib.Util.transform(viewport.transform, it.transform)
+          : [1, 0, 0, 1, 0, 0];
+        const height = Math.hypot(tx[2], tx[3]) || Math.hypot(tx[0], tx[1]) || it.height || 10;
+        return {
+          str: it.str,
+          x: tx[4],
+          y: tx[5],
+          width: Math.abs(it.width || 0),
+          height,
+        };
+      });
+
+      allPageItems.push(items);
+
+      // Group items into lines by visual Y coordinate (tolerance ~4 points)
       const lineTolerance = 4;
-      const lines: { y: number; items: any[] }[] = [];
+      const lines: { y: number; items: DigitalTextItem[] }[] = [];
 
       for (const item of items) {
-        const y = item.transform ? item.transform[5] : 0;
-        let existingLine = lines.find(l => Math.abs(l.y - y) <= lineTolerance);
+        let existingLine = lines.find(l => Math.abs(l.y - item.y) <= lineTolerance);
         if (!existingLine) {
-          existingLine = { y, items: [] };
+          existingLine = { y: item.y, items: [] };
           lines.push(existingLine);
         }
         existingLine.items.push(item);
       }
 
-      // Sort lines top to bottom (in PDF space, higher Y is higher on page)
-      lines.sort((a, b) => b.y - a.y);
+      // Sort lines top to bottom (in viewport space, smaller Y is higher on page)
+      lines.sort((a, b) => a.y - b.y);
 
       // Sort items within each line left to right (X ascending)
       const pageLines = lines.map(line => {
-        line.items.sort((a, b) => {
-          const ax = a.transform ? a.transform[4] : 0;
-          const bx = b.transform ? b.transform[4] : 0;
-          return ax - bx;
-        });
-        return line.items.map(it => it.str).join(' ');
+        line.items.sort((a, b) => a.x - b.x);
+        let lineStr = '';
+        for (let k = 0; k < line.items.length; k++) {
+          const cur = line.items[k];
+          if (k === 0) {
+            lineStr = cur.str;
+          } else {
+            const prev = line.items[k - 1];
+            const gap = cur.x - (prev.x + prev.width);
+            const glue = gap < 0.8 && prev.width > 0 && !prev.str.endsWith(' ') && !cur.str.startsWith(' ');
+            lineStr += (glue ? '' : ' ') + cur.str;
+          }
+        }
+        return lineStr.trim();
       });
 
       pageTexts.push(pageLines.join('\n'));
     } catch {
       pageTexts.push('');
+      allPageItems.push([]);
     }
   }
-  return pageTexts;
+
+  return { texts: pageTexts, pageItems: allPageItems };
+}
+
+/**
+ * Extracts digital text directly from PDF pages if available.
+ */
+async function extractDigitalPageTexts(pdf: pdfjsLib.PDFDocumentProxy): Promise<string[]> {
+  const { texts } = await extractDigitalPages(pdf);
+  return texts;
 }
 
 /**
@@ -962,6 +1009,42 @@ export interface ExtractedLandData {
   landSummary: string;
 }
 
+interface OcrWordBox {
+  text: string;
+  confidence?: number;
+  bbox: { x0: number; y0: number; x1: number; y1: number };
+}
+
+interface LandTableHeaderCols {
+  village: number;
+  survey: number;
+  subSurvey: number;
+  owner: number;
+  area: number;
+  totalArea: number;
+  assignedArea: number;
+  khata: number;
+  subDistrict: number;
+  district: number;
+  state: number;
+}
+
+interface GridBand {
+  start: number;
+  end: number;
+  x0?: number;
+  x1?: number;
+}
+
+export interface DetectedGridTable {
+  hBands: GridBand[];
+  vBands: GridBand[];
+  xStart: number;
+  xEnd: number;
+  yStart: number;
+  yEnd: number;
+}
+
 /**
  * Splits a line into distinct table column cells based on |, tab, or 2+ spaces.
  */
@@ -973,15 +1056,31 @@ function splitLineIntoCols(line: string): string[] {
 
 function cleanAreaVal(raw: string): string {
   if (!raw) return '';
-  const m = raw.match(/\b\d+(?:\.\d+)?\b/);
-  return m ? m[0] : raw.replace(/,/g, '').trim();
+  // Repair OCR '.' -> ',' confusion in 4-6 decimal hectare values (e.g. "0,050000," -> "0.050000")
+  const normalized = raw.replace(/\b(\d+),(\d{4,6})\b/g, '$1.$2');
+  const m = normalized.match(/\b\d+(?:\.\d+)?\b/);
+  return m ? m[0] : '';
 }
 
 function cleanSurveyNo(sNo?: string, ssNo?: string): string {
-  const s = (sNo || '').trim();
-  const ss = (ssNo || '').trim();
+  const s = (sNo || '').replace(/\s+/g, '').replace(/[,;]+$/, '').trim();
+  const ss = (ssNo || '').replace(/\s+/g, '').replace(/[,;]+$/, '').trim();
   if (!ss || ss === '*' || ss === '-') return s;
+  if (!s) return ss;
   return `${s}/${ss}`;
+}
+
+function isValidSubSurveyToken(token: string): boolean {
+  const t = token.replace(/[,;]+$/, '').trim();
+  if (!t) return false;
+  if (/^(Single|Sole|Joint|Individual|Ancestral|Self|Owner|Co-Owner|Tenant|Male|Female|PUNE|MAHARAS|HTRA)$/i.test(t)) {
+    return false;
+  }
+  if (/^[*\/\-]+$/.test(t)) return t === '*';
+  if (/\d/.test(t) && /^[0-9A-Za-z\u0900-\u097F\/\*\-]+$/.test(t)) return true;
+  if (/^[\u0900-\u097F]+(?:\/[0-9A-Za-z\u0900-\u097F]+)*$/.test(t) && t.length <= 8) return true;
+  if (/^[A-Za-z0-9]{1,3}$/.test(t)) return true;
+  return false;
 }
 
 function cleanKhataVal(raw?: string): string {
@@ -992,72 +1091,1026 @@ function cleanKhataVal(raw?: string): string {
   return v;
 }
 
-interface LandTableHeaderCols {
-  village: number;
-  survey: number;
-  owner: number;
-  area: number;
-  khata: number;
-  subDistrict: number;
-  district: number;
-  state: number;
+function normalizeStateText(raw: string): string {
+  const compact = (raw || '').replace(/[^A-Za-z]/g, '').toUpperCase();
+  if (!compact) return '';
+  if (compact.includes('MAHARA') || compact === 'MH') return 'MAHARASHTRA';
+  return raw.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Joins multi-line wrapped text extracted from inside a single table cell.
+ */
+function joinWrappedCellLines(lines: string[]): string {
+  const cleaned = lines.map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  if (cleaned.length === 0) return '';
+  if (cleaned.length === 1) return cleaned[0];
+
+  let result = cleaned[0];
+  for (let i = 1; i < cleaned.length; i++) {
+    const prev = result;
+    const next = cleaned[i];
+    const endsWithJoiner = /[\/\-]$/.test(prev);
+    const prevLastWord = prev.split(/\s+/).pop() || '';
+    const nextFirstWord = next.split(/\s+/)[0] || '';
+    const isLowercaseContinuation =
+      /^[a-z]/.test(nextFirstWord) &&
+      !/^(no\.?|name|type|share|area|default|hectare|unit|of|and|in)$/i.test(nextFirstWord) &&
+      /^[A-Za-z]{2,}$/.test(prevLastWord);
+    const isUpperWordSplit =
+      /^[A-Z]{4,}$/.test(prevLastWord) &&
+      /^[A-Z]{2,}$/.test(nextFirstWord) &&
+      !MAHARASHTRA_DISTRICTS.includes(prevLastWord);
+
+    if (endsWithJoiner || isLowercaseContinuation || isUpperWordSplit) {
+      result = prev + next;
+    } else {
+      result = prev + ' ' + next;
+    }
+  }
+  return result.trim();
 }
 
 function detectLandHeaderCols(parts: string[]): LandTableHeaderCols | null {
   if (parts.length < 3) return null;
-  const lower = parts.map(p => p.toLowerCase());
-  const hasVillage = lower.some(p => p.includes('village') || p.includes('गाव'));
-  const hasSurvey = lower.some(p => /s\s*no|s\/s|survey|gat|सर्व्हे/i.test(p));
-  const hasArea = lower.some(p => /extent|assigned\s*area|area|क्षेत्र/i.test(p));
+  const lower = parts.map(p => p.replace(/\s+/g, ' ').trim().toLowerCase());
 
-  if (!hasVillage && !(hasSurvey && hasArea)) return null;
+  const stateIdx = lower.findIndex(p => /\bstate\b|state\s*\/?\s*ut|राज्य/i.test(p));
+  const districtIdx = lower.findIndex(p => /\bdistrict\b|जिल्हा/i.test(p) && !/sub[\s\-]*district/i.test(p));
+  const subDistrictIdx = lower.findIndex(p => /sub[\s\-]*district|taluk|tehsil|tahsil|तालुका/i.test(p));
+  const villageIdx = lower.findIndex(p => /\bvillage\b|गाव/i.test(p));
+  const subSurveyIdx = lower.findIndex(p => /s\s*\/\s*s|sub[\s\-]*survey/i.test(p));
+  const surveyIdx = lower.findIndex(
+    (p, idx) => idx !== subSurveyIdx && (/s\s*\.?\s*no\.?\b|survey|gat|सर्व्हे/i.test(p))
+  );
+  const khataIdx = lower.findIndex(
+    p => (p.includes('khata') || p.includes('khate') || p.includes('खाते') || p.includes('खाता')) && !p.includes('बचत') && !p.includes('bank')
+  );
+  const ownerTypeIdx = lower.findIndex(p => /owner\s*type|मालकी\s*प्रकार/i.test(p));
+  const ownerIdx = ownerTypeIdx >= 0
+    ? ownerTypeIdx
+    : lower.findIndex(p => p.includes('owner') && !p.includes('name') && !p.includes('share'));
+  const assignedAreaIdx = lower.findIndex(p => /assigned\s*area/i.test(p));
+  const totalAreaIdx = lower.findIndex(p => /total\s*area/i.test(p));
+  const anyAreaIdx = lower.findIndex(p => /extent|assigned\s*area|area|क्षेत्र/i.test(p));
+  const areaIdx = assignedAreaIdx >= 0 ? assignedAreaIdx : (totalAreaIdx >= 0 ? totalAreaIdx : anyAreaIdx);
 
-  const ownerIdx = lower.findIndex(p => /owner\s*type|मालकी\s*प्रकार/i.test(p));
+  const signalCount = [
+    stateIdx >= 0,
+    districtIdx >= 0,
+    subDistrictIdx >= 0,
+    villageIdx >= 0,
+    surveyIdx >= 0 || subSurveyIdx >= 0,
+    ownerIdx >= 0,
+    areaIdx >= 0,
+    khataIdx >= 0,
+  ].filter(Boolean).length;
+
+  if (signalCount < 3 && !(villageIdx >= 0 && (surveyIdx >= 0 || areaIdx >= 0))) {
+    return null;
+  }
+
   return {
-    village: lower.findIndex(p => p.includes('village') || p.includes('गाव')),
-    survey: lower.findIndex(p => /s\s*no|s\/s|survey|gat|सर्व्हे/i.test(p)),
-    owner: ownerIdx >= 0
-      ? ownerIdx
-      : lower.findIndex(p => p.includes('owner') && !p.includes('name') && !p.includes('share')),
-    area: lower.findIndex(p => /extent|assigned\s*area|area|क्षेत्र/i.test(p)),
-    khata: lower.findIndex(
-      p => (p.includes('khata') || p.includes('खाते') || p.includes('खाता')) && !p.includes('बचत') && !p.includes('bank')
-    ),
-    subDistrict: lower.findIndex(p => /sub\s*district|taluk|tehsil|तालुका/i.test(p)),
-    district: lower.findIndex(p => p.includes('district') && !p.includes('sub')),
-    state: lower.findIndex(p => p.includes('state')),
+    village: villageIdx,
+    survey: surveyIdx >= 0 ? surveyIdx : subSurveyIdx,
+    subSurvey: subSurveyIdx,
+    owner: ownerIdx,
+    area: areaIdx,
+    totalArea: totalAreaIdx,
+    assignedArea: assignedAreaIdx,
+    khata: khataIdx,
+    subDistrict: subDistrictIdx,
+    district: districtIdx,
+    state: stateIdx,
   };
 }
 
 function resolveVillage(rawVillage: string, address?: string, nextLine?: string): string {
-  let v = (rawVillage || '').trim();
+  let v = (rawVillage || '').replace(/[^A-Za-z\u0900-\u097F\s\-]/g, '').replace(/\s+/g, ' ').trim();
   if (!v) return '';
 
+  // Join wrapped village suffix inside single cell/string (e.g. "Gunjalw adi" -> "Gunjalwadi")
+  v = v.replace(/\b([A-Za-z]{3,})\s+(adi|wadi|gaon|pur|khed|bad|ner|oli|pada)\b/gi, '$1$2');
+
   // 1. Check if next line contains wrapped syllable (e.g. "adi", "wadi", "gaon", "pur", "khed", "bad", "ner", "oli", "pada")
-  if (nextLine) {
+  //    Skip if nextLine is actually another table row (contains decimal area or known district).
+  if (
+    nextLine &&
+    !/\d+\.\d+/.test(nextLine) &&
+    !MAHARASHTRA_DISTRICTS.some(d => nextLine.toUpperCase().includes(d))
+  ) {
     const nextWords = nextLine.split(/\s+/);
     for (const nw of nextWords) {
-      if (/^(adi|wadi|gaon|pur|khed|bad|ner|oli|pada)\b/i.test(nw)) {
+      if (
+        /^(adi|wadi|gaon|pur|khed|bad|ner|oli|pada)\b/i.test(nw) &&
+        !v.toLowerCase().endsWith(nw.toLowerCase())
+      ) {
         v = v + nw;
         break;
       }
     }
   }
 
-  // 2. Cross-reference with address (e.g. if address contains village name)
-  if (address) {
-    const cleanAddr = address.toLowerCase();
+  // 2. If still looks truncated (does not end with common village suffixes), check if a SINGLE word in address completes it
+  const hasCompleteSuffix = /(adi|wadi|gaon|pur|khed|bad|ner|oli|pada|nagar|ghar|palli|pet|ganj)$/i.test(v);
+  if (address && !hasCompleteSuffix) {
     const cleanV = v.toLowerCase().replace(/[^a-z]/g, '');
-    if (cleanV.length >= 3 && cleanAddr.includes(cleanV.slice(0, Math.min(4, cleanV.length)))) {
-      const words = address.split(/[\s,]+/);
-      const matchWords = words.filter(w => /^[A-Za-z]+$/.test(w));
-      if (matchWords.length > 0) {
-        return matchWords.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+    if (cleanV.length >= 4) {
+      const addrWords = address.split(/[\s,.\-]+/).filter(w => /^[A-Za-z]{4,}$/.test(w));
+      const prefixMatch = addrWords.find(w => {
+        const lw = w.toLowerCase();
+        return lw.startsWith(cleanV) && lw.length > cleanV.length;
+      });
+      if (prefixMatch) {
+        return prefixMatch.charAt(0).toUpperCase() + prefixMatch.slice(1).toLowerCase();
       }
     }
   }
 
   return v.charAt(0).toUpperCase() + v.slice(1);
+}
+
+/**
+ * Infers column indices from data rows when a table continues onto a page without headers.
+ */
+function inferLandColsFromDataRows(rows: string[][]): LandTableHeaderCols | null {
+  if (rows.length === 0) return null;
+  const numCols = Math.max(...rows.map(r => r.length));
+  if (numCols < 4) return null;
+
+  const colVals = Array.from({ length: numCols }, (_, c) =>
+    rows.map(r => (r[c] || '').replace(/\s+/g, ' ').trim()).filter(Boolean)
+  );
+
+  // 1. Area columns (decimal numbers, usually rightmost 1-2 columns)
+  const areaCols: number[] = [];
+  for (let c = 0; c < numCols; c++) {
+    const vals = colVals[c];
+    if (vals.length === 0) continue;
+    const decCount = vals.filter(v => /^\s*\d+(?:[.,]\d{2,6})?\s*,?\s*$/.test(v) && /[.,]\d{2,6}/.test(v)).length;
+    if (decCount / vals.length >= 0.5) {
+      areaCols.push(c);
+    }
+  }
+  const assignedAreaIdx = areaCols.length > 0 ? areaCols[areaCols.length - 1] : -1;
+  const totalAreaIdx = areaCols.length >= 2 ? areaCols[areaCols.length - 2] : -1;
+
+  // 2. Owner type columns
+  const ownerRegex = /\b(Single|Sole|Joint|Individual|Ancestral|Self|Owner|Co-Owner|Tenant|स्वतःची|सामाईक|वारसाहक्क|इतर)\b/i;
+  const ownerCols: number[] = [];
+  for (let c = 0; c < numCols; c++) {
+    const vals = colVals[c];
+    if (vals.length === 0) continue;
+    const matchCount = vals.filter(v => ownerRegex.test(v)).length;
+    if (matchCount / vals.length >= 0.4) {
+      ownerCols.push(c);
+    }
+  }
+  const ownerIdx = ownerCols.length > 0 ? ownerCols[0] : -1;
+
+  // 3. District column
+  let districtIdx = -1;
+  for (let c = 0; c < numCols; c++) {
+    const vals = colVals[c];
+    if (vals.length === 0) continue;
+    const dMatches = vals.filter(v => {
+      const upper = v.toUpperCase();
+      return MAHARASHTRA_DISTRICTS.some(d => upper.includes(d));
+    }).length;
+    if (dMatches / vals.length >= 0.4) {
+      districtIdx = c;
+      break;
+    }
+  }
+
+  // 4. State column (typically immediately left of district)
+  let stateIdx = -1;
+  if (districtIdx >= 1) {
+    const leftVals = colVals[districtIdx - 1];
+    if (leftVals.some(v => /maharas/i.test(v) || /^[A-Z\s]{4,}$/.test(v))) {
+      stateIdx = districtIdx - 1;
+    }
+  }
+
+  // 5. Sub-district and Village (alphabetic columns after district, before numeric/owner cols)
+  const rightBound = ownerIdx >= 0 ? ownerIdx : (assignedAreaIdx >= 0 ? assignedAreaIdx : numCols);
+  let subDistrictIdx = -1;
+  let villageIdx = -1;
+  if (districtIdx >= 0) {
+    const alphaCols: number[] = [];
+    for (let c = districtIdx + 1; c < rightBound; c++) {
+      const vals = colVals[c];
+      if (vals.length === 0) continue;
+      const alphaCount = vals.filter(v => /^[A-Za-z][A-Za-z\s.\-]*$/.test(v) && !ownerRegex.test(v)).length;
+      if (alphaCount / vals.length >= 0.5) {
+        alphaCols.push(c);
+      } else {
+        break;
+      }
+    }
+    if (alphaCols.length >= 2) {
+      subDistrictIdx = alphaCols[0];
+      villageIdx = alphaCols[1];
+    } else if (alphaCols.length === 1) {
+      villageIdx = alphaCols[0];
+    }
+  }
+
+  // 6. Survey No. & Sub-Survey No.
+  const searchStart = villageIdx >= 0 ? villageIdx + 1 : (subDistrictIdx >= 0 ? subDistrictIdx + 1 : (districtIdx >= 0 ? districtIdx + 1 : 0));
+  let surveyIdx = -1;
+  let subSurveyIdx = -1;
+  for (let c = searchStart; c < rightBound; c++) {
+    const vals = colVals[c];
+    if (vals.length === 0) continue;
+    const numCount = vals.filter(v => /^\d{1,5}(?:[\/\-][0-9A-Za-z\u0900-\u097F]+)?$/.test(v.replace(/[,;\s]+/g, ''))).length;
+    if (numCount / vals.length >= 0.5) {
+      surveyIdx = c;
+      if (c + 1 < rightBound) {
+        const nextVals = colVals[c + 1];
+        const looksLikeSubSurvey =
+          nextVals.length > 0 &&
+          nextVals.filter(v => v.length <= 12 && !ownerRegex.test(v)).length / nextVals.length >= 0.5 &&
+          nextVals.some(v => /[\d\/\*]/.test(v));
+        if (looksLikeSubSurvey) {
+          subSurveyIdx = c + 1;
+        }
+      }
+      break;
+    }
+  }
+
+  if (assignedAreaIdx < 0 && surveyIdx < 0) return null;
+
+  return {
+    village: villageIdx,
+    survey: surveyIdx,
+    subSurvey: subSurveyIdx,
+    owner: ownerIdx,
+    area: assignedAreaIdx,
+    totalArea: totalAreaIdx,
+    assignedArea: assignedAreaIdx,
+    khata: -1,
+    subDistrict: subDistrictIdx,
+    district: districtIdx,
+    state: stateIdx,
+  };
+}
+
+function buildLandSummary(
+  finalRows: LandRow[],
+  foundTotalArea: string,
+  foundSubDistrict: string,
+  foundDistrict: string,
+  foundState: string
+): string {
+  const primaryRow = finalRows[0];
+  const summaryParts: string[] = [];
+  if (foundTotalArea) summaryParts.push(`${foundTotalArea} Hectare`);
+  if (primaryRow?.survey_no) summaryParts.push(`Gat No: ${primaryRow.survey_no}`);
+  if (primaryRow?.village) summaryParts.push(primaryRow.village);
+  if (foundSubDistrict) summaryParts.push(foundSubDistrict);
+  if (foundDistrict) summaryParts.push(foundDistrict);
+  if (foundState) summaryParts.push(foundState);
+  return summaryParts.join(', ');
+}
+
+/**
+ * Parses extracted table matrices (from either digital 2D PDF items or visual grid OCR)
+ * into LandRow records, carrying column headers across page breaks (e.g. Page 1 header -> Page 2 rows).
+ */
+export function parseTableMatrixToLandData(
+  tables: string[][][],
+  address?: string
+): ExtractedLandData | null {
+  const extractedRows: LandRow[] = [];
+  let activeHeaderCols: LandTableHeaderCols | null = null;
+  let activeHeaderColCount = 0;
+
+  let foundState = '';
+  let foundDistrict = '';
+  let foundSubDistrict = '';
+  let foundKhataNo = '';
+  let foundTotalArea = '';
+
+  const ownerRegex = /\b(Single|Sole|Joint|Individual|Ancestral|Self|Owner|Co-Owner|Tenant|स्वतःची|सामाईक|वारसाहक्क|इतर)\b/i;
+
+  for (const table of tables) {
+    if (!table || table.length === 0) continue;
+
+    let dataStartIdx = 0;
+    const maybeHeader = detectLandHeaderCols(table[0]);
+    if (maybeHeader) {
+      activeHeaderCols = maybeHeader;
+      activeHeaderColCount = table[0].length;
+      dataStartIdx = 1;
+    }
+
+    const dataRows = table.slice(dataStartIdx);
+    if (dataRows.length === 0) continue;
+
+    const colCount = dataRows[0].length;
+    const inferred = inferLandColsFromDataRows(dataRows);
+    const headerMatch =
+      activeHeaderCols && (activeHeaderColCount === colCount || Math.abs(activeHeaderColCount - colCount) <= 1)
+        ? activeHeaderCols
+        : null;
+
+    if (!headerMatch && !inferred) continue;
+
+    const cols: LandTableHeaderCols = {
+      state: headerMatch && headerMatch.state >= 0 ? headerMatch.state : (inferred?.state ?? -1),
+      district: headerMatch && headerMatch.district >= 0 ? headerMatch.district : (inferred?.district ?? -1),
+      subDistrict: headerMatch && headerMatch.subDistrict >= 0 ? headerMatch.subDistrict : (inferred?.subDistrict ?? -1),
+      village: headerMatch && headerMatch.village >= 0 ? headerMatch.village : (inferred?.village ?? -1),
+      survey: headerMatch && headerMatch.survey >= 0 ? headerMatch.survey : (inferred?.survey ?? -1),
+      subSurvey: headerMatch && headerMatch.subSurvey >= 0 ? headerMatch.subSurvey : (inferred?.subSurvey ?? -1),
+      khata: headerMatch && headerMatch.khata >= 0 ? headerMatch.khata : (inferred?.khata ?? -1),
+      owner: headerMatch && headerMatch.owner >= 0 ? headerMatch.owner : (inferred?.owner ?? -1),
+      assignedArea: headerMatch && headerMatch.assignedArea >= 0 ? headerMatch.assignedArea : (inferred?.assignedArea ?? -1),
+      totalArea: headerMatch && headerMatch.totalArea >= 0 ? headerMatch.totalArea : (inferred?.totalArea ?? -1),
+      area: headerMatch && headerMatch.area >= 0 ? headerMatch.area : (inferred?.area ?? -1),
+    };
+
+    for (const row of dataRows) {
+      const joinedRow = row.join(' ');
+      if (/\b(?:Consent\s*by\s*Farmer|Annexure|Declaration)\b/i.test(joinedRow)) break;
+      if (detectLandHeaderCols(row)) continue;
+
+      const getCell = (idx: number) => (idx >= 0 && idx < row.length ? row[idx].trim() : '');
+
+      const rawArea = getCell(cols.assignedArea) || getCell(cols.area) || getCell(cols.totalArea);
+      const area = cleanAreaVal(rawArea);
+
+      let ownerType = '';
+      const rawOwner = getCell(cols.owner);
+      const om = rawOwner.match(ownerRegex);
+      if (om) {
+        ownerType = om[1];
+      } else {
+        for (let c = Math.max(0, cols.survey + 1); c < row.length; c++) {
+          const fallbackOm = row[c].match(ownerRegex);
+          if (fallbackOm) {
+            ownerType = fallbackOm[1];
+            break;
+          }
+        }
+      }
+
+      const rawSNo = getCell(cols.survey);
+      const rawSSNo = cols.subSurvey >= 0 && cols.subSurvey !== cols.survey ? getCell(cols.subSurvey) : '';
+
+      let sNo = '';
+      let ssNo = '';
+      const sMatch = rawSNo.match(/(\d{1,5}(?:\s*\/\s*[0-9A-Za-z\u0900-\u097F]+)*)/);
+      if (sMatch) {
+        sNo = sMatch[1].replace(/\s+/g, '');
+      }
+      if (rawSSNo) {
+        const cleanedSS = rawSSNo.replace(/\s+/g, '').replace(/[,;]+$/, '');
+        if (cleanedSS && cleanedSS !== '*' && cleanedSS !== '-') {
+          ssNo = cleanedSS;
+        }
+      }
+
+      const surveyFinal = cleanSurveyNo(sNo, ssNo);
+      let villageFinal = resolveVillage(getCell(cols.village), address);
+      if (!villageFinal && extractedRows.length > 0) {
+        villageFinal = extractedRows[extractedRows.length - 1].village;
+      }
+
+      const khata = cleanKhataVal(getCell(cols.khata));
+      const stateVal = normalizeStateText(getCell(cols.state));
+      const districtVal = getCell(cols.district) ? correctDistrict(getCell(cols.district)) : '';
+      const subDistrictVal = getCell(cols.subDistrict).replace(/[^A-Za-z\s\-]/g, '').trim();
+
+      if (!area && !(surveyFinal && (villageFinal || districtVal))) {
+        continue;
+      }
+
+      extractedRows.push({
+        khata_no: khata,
+        survey_no: surveyFinal,
+        village: villageFinal,
+        owner_type: ownerType,
+        area,
+      });
+
+      if (!foundState && stateVal) foundState = stateVal;
+      if (!foundDistrict && districtVal) foundDistrict = districtVal;
+      if (!foundSubDistrict && subDistrictVal) foundSubDistrict = subDistrictVal;
+      if (!foundKhataNo && khata) foundKhataNo = khata;
+      if (!foundTotalArea && area) foundTotalArea = area;
+
+      if (extractedRows.length >= 5) break;
+    }
+    if (extractedRows.length >= 5) break;
+  }
+
+  if (extractedRows.length === 0) return null;
+
+  const finalRows = extractedRows.slice(0, 5);
+  const primaryRow = finalRows[0];
+  return {
+    rows: finalRows,
+    village: primaryRow.village || '',
+    surveyNo: primaryRow.survey_no || '',
+    totalArea: foundTotalArea || primaryRow.area || '',
+    khataNo: primaryRow.khata_no || foundKhataNo,
+    subDistrict: foundSubDistrict,
+    district: foundDistrict,
+    state: foundState,
+    landSummary: buildLandSummary(finalRows, foundTotalArea, foundSubDistrict, foundDistrict, foundState),
+  };
+}
+
+/**
+ * Extracts Land Ownership tables directly from 2D digital PDF text coordinates,
+ * supporting multi-page split tables (header on Page N, data rows on Page N+1).
+ */
+export function extractLandDataFromDigitalPages(
+  pageItems: DigitalTextItem[][],
+  address?: string
+): ExtractedLandData | null {
+  if (!pageItems || pageItems.length === 0) return null;
+
+  // 1. Locate the header band across pages
+  let headerPageIdx = -1;
+  let headerBotY = 0;
+  let colBounds: { minX: number; maxX: number }[] = [];
+  let headerRowTexts: string[] = [];
+  let headerCols: LandTableHeaderCols | null = null;
+
+  for (let pIdx = 0; pIdx < pageItems.length; pIdx++) {
+    const items = pageItems[pIdx];
+    if (items.length === 0) continue;
+
+    // Group into Y-lines
+    const lines: { y: number; items: DigitalTextItem[] }[] = [];
+    for (const it of items) {
+      let line = lines.find(l => Math.abs(l.y - it.y) <= 4);
+      if (!line) {
+        line = { y: it.y, items: [] };
+        lines.push(line);
+      }
+      line.items.push(it);
+    }
+    lines.sort((a, b) => a.y - b.y);
+
+    for (let li = 0; li < lines.length; li++) {
+      const startLineStr = lines[li].items.map(b => b.str).join(' ');
+      if (lines[li].items.length < 3) continue;
+      if (/\b(?:Land\s+Ownership\s+Details|Consent|Act,\s*2016|I\s+agree)\b/i.test(startLineStr)) continue;
+      if (!/(?:State|District|Village|Extent|Survey|Gat|S\s*No|Khata|Owner)/i.test(startLineStr)) continue;
+
+      const startY = lines[li].y;
+      const bandItems: DigitalTextItem[] = [];
+      let endY = startY;
+      for (let lj = li; lj < lines.length && lines[lj].y - startY <= 46; lj++) {
+        if (lj > li && lines[lj].y - lines[lj - 1].y > 18) break;
+        const ljStr = lines[lj].items.map(b => b.str).join(' ');
+        if (/\b\d+\.\d{2,}\b/.test(ljStr) || /\bMAHARAS/i.test(ljStr)) break;
+        bandItems.push(...lines[lj].items);
+        endY = lines[lj].y;
+      }
+
+      const bandStr = bandItems.map(b => b.str).join(' ');
+      if (/\b(?:Consent|Act,\s*2016|I\s+agree)\b/i.test(bandStr)) continue;
+      if (!/(?:State|District|Village|Extent|Survey|Gat|S\s*No)/i.test(bandStr)) continue;
+
+      // Cluster bandItems horizontally into columns by overlapping X spans (tolerance 4pt)
+      const sorted = [...bandItems].sort((a, b) => a.x - b.x);
+      const xClusters: { x0: number; x1: number; items: DigitalTextItem[] }[] = [];
+      for (const it of sorted) {
+        const ix0 = it.x;
+        const ix1 = it.x + Math.max(it.width, 6);
+        const last = xClusters[xClusters.length - 1];
+        if (last && ix0 <= last.x1 + 4) {
+          last.x1 = Math.max(last.x1, ix1);
+          last.items.push(it);
+        } else {
+          xClusters.push({ x0: ix0, x1: ix1, items: [it] });
+        }
+      }
+
+      if (xClusters.length < 4) continue;
+
+      const texts = xClusters.map(cl => {
+        cl.items.sort((a, b) => (Math.abs(a.y - b.y) <= 3 ? a.x - b.x : a.y - b.y));
+        return cl.items.map(i => i.str.trim()).join(' ').replace(/\s+/g, ' ').trim();
+      });
+
+      const detected = detectLandHeaderCols(texts);
+      if (detected) {
+        headerPageIdx = pIdx;
+        headerBotY = endY;
+        headerRowTexts = texts;
+        headerCols = detected;
+        colBounds = xClusters.map((cl, idx) => {
+          const prevX1 = idx > 0 ? xClusters[idx - 1].x1 : cl.x0 - 20;
+          const nextX0 = idx + 1 < xClusters.length ? xClusters[idx + 1].x0 : cl.x1 + 40;
+          return {
+            minX: idx === 0 ? cl.x0 - 20 : (prevX1 + cl.x0) / 2,
+            maxX: idx + 1 === xClusters.length ? cl.x1 + 40 : (cl.x1 + nextX0) / 2,
+          };
+        });
+        break;
+      }
+    }
+    if (headerPageIdx >= 0) break;
+  }
+
+  if (headerPageIdx < 0 || !headerCols || colBounds.length === 0) {
+    return null;
+  }
+
+  // 2. Collect rows from headerPageIdx (below header) and following pages until Annexure/Consent
+  const allDataRows: string[][] = [];
+  const tableMinX = colBounds[0].minX;
+  const tableMaxX = colBounds[colBounds.length - 1].maxX;
+
+  const findColIdx = (it: DigitalTextItem): number => {
+    const cx = it.x + Math.min(it.width, 16) / 2;
+    for (let c = 0; c < colBounds.length; c++) {
+      if (cx >= colBounds[c].minX && cx < colBounds[c].maxX) return c;
+    }
+    return -1;
+  };
+
+  for (let pIdx = headerPageIdx; pIdx < pageItems.length; pIdx++) {
+    const rawItems = pageItems[pIdx];
+    const minY = pIdx === headerPageIdx ? headerBotY + 4 : -Infinity;
+
+    // Check stop Y from Annexure / Consent / Signature
+    let stopY = Infinity;
+    for (const it of rawItems) {
+      if (it.y > minY && /\b(?:Annexure|Consent\s*by\s*Farmer|Declaration|Signature)\b/i.test(it.str)) {
+        if (it.y < stopY) stopY = it.y;
+      }
+    }
+
+    const bodyItems = rawItems.filter(
+      it => it.y > minY && it.y < stopY - 2 && it.x >= tableMinX && it.x <= tableMaxX
+    );
+    if (bodyItems.length === 0) {
+      if (allDataRows.length > 0) break;
+      continue;
+    }
+
+    const colBuckets: DigitalTextItem[][] = Array.from({ length: colBounds.length }, () => []);
+    for (const it of bodyItems) {
+      const c = findColIdx(it);
+      if (c >= 0) colBuckets[c].push(it);
+    }
+
+    // Choose anchor column to delimit rows vertically
+    const anchorCandidates = [
+      headerCols.assignedArea,
+      headerCols.area,
+      headerCols.totalArea,
+      headerCols.owner,
+      headerCols.district,
+      headerCols.survey,
+    ].filter(c => c >= 0 && colBuckets[c].length > 0);
+
+    if (anchorCandidates.length === 0) {
+      if (allDataRows.length > 0) break;
+      continue;
+    }
+
+    let anchorYs: number[] = [];
+    for (const ac of anchorCandidates) {
+      let colItems = colBuckets[ac];
+      if (ac === headerCols.assignedArea || ac === headerCols.area || ac === headerCols.totalArea || ac === headerCols.survey) {
+        colItems = colItems.filter(it => /\d/.test(it.str));
+      } else if (ac === headerCols.owner) {
+        colItems = colItems.filter(it => /\b(Single|Sole|Joint|Individual|Ancestral|Self|Owner|Co-Owner|Tenant|स्वतःची|सामाईक|वारसाहक्क|इतर)\b/i.test(it.str));
+      } else if (ac === headerCols.district) {
+        colItems = colItems.filter(it => MAHARASHTRA_DISTRICTS.some(d => it.str.toUpperCase().includes(d)));
+      }
+      if (colItems.length === 0) continue;
+
+      const sorted = [...colItems].sort((a, b) => a.y - b.y);
+      const grouped: number[] = [];
+      for (const it of sorted) {
+        if (grouped.length === 0 || it.y - grouped[grouped.length - 1] > 8) {
+          grouped.push(it.y);
+        }
+      }
+      if (grouped.length > 0) {
+        anchorYs = grouped;
+        break;
+      }
+    }
+
+    if (anchorYs.length === 0) continue;
+
+    const minBodyY = Math.min(...bodyItems.map(b => b.y));
+    const isMiddleAligned = minBodyY < anchorYs[0] - 6;
+
+    for (let r = 0; r < anchorYs.length; r++) {
+      const rowTop = isMiddleAligned
+        ? (r === 0 ? minBodyY - 4 : (anchorYs[r - 1] + anchorYs[r]) / 2)
+        : anchorYs[r] - 5;
+      const rowBot = isMiddleAligned
+        ? (r + 1 < anchorYs.length ? (anchorYs[r] + anchorYs[r + 1]) / 2 : stopY)
+        : (r + 1 < anchorYs.length ? anchorYs[r + 1] - 5 : stopY);
+
+      const rowCells = colBuckets.map(bucket => {
+        const cellItems = bucket.filter(it => it.y >= rowTop && it.y < rowBot);
+        if (cellItems.length === 0) return '';
+        const subLines: { y: number; items: DigitalTextItem[] }[] = [];
+        for (const it of cellItems) {
+          let sl = subLines.find(l => Math.abs(l.y - it.y) <= 3.5);
+          if (!sl) {
+            sl = { y: it.y, items: [] };
+            subLines.push(sl);
+          }
+          sl.items.push(it);
+        }
+        subLines.sort((a, b) => a.y - b.y);
+        const strLines = subLines.map(sl => {
+          sl.items.sort((a, b) => a.x - b.x);
+          return sl.items.map(i => i.str.trim()).join(' ').trim();
+        });
+        return joinWrappedCellLines(strLines);
+      });
+
+      allDataRows.push(rowCells);
+      if (allDataRows.length >= 6) break;
+    }
+
+    if (allDataRows.length >= 5) break;
+  }
+
+  if (allDataRows.length === 0) return null;
+  return parseTableMatrixToLandData([[headerRowTexts, ...allDataRows]], address);
+}
+
+/**
+ * Detects multi-column ruled rectangular tables on a rendered page canvas
+ * via horizontal & vertical dark-line projection.
+ */
+export function detectRuledTablesOnCanvas(canvas: HTMLCanvasElement): DetectedGridTable[] {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return [];
+
+  const w = canvas.width;
+  const h = canvas.height;
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const data = imgData.data;
+
+  // Estimate paper brightness from sparse sample
+  let brightSum = 0;
+  let brightCount = 0;
+  for (let y = 10; y < h; y += 30) {
+    for (let x = 10; x < w; x += 30) {
+      const idx = (y * w + x) * 4;
+      const g = (data[idx] * 299 + data[idx + 1] * 587 + data[idx + 2] * 114) / 1000;
+      if (g > 200) {
+        brightSum += g;
+        brightCount++;
+      }
+    }
+  }
+  const paperBrightness = brightCount > 0 ? brightSum / brightCount : 250;
+  const darkThresh = Math.max(130, Math.min(215, paperBrightness - 35));
+
+  const getGray = (x: number, y: number) => {
+    const idx = (y * w + x) * 4;
+    return (data[idx] * 299 + data[idx + 1] * 587 + data[idx + 2] * 114) / 1000;
+  };
+
+  const cluster1D = (hits: { pos: number; x0?: number; x1?: number }[], maxGap = 4): GridBand[] => {
+    const groups: GridBand[] = [];
+    for (const hit of hits) {
+      const last = groups[groups.length - 1];
+      if (last && hit.pos - last.end <= maxGap) {
+        last.end = hit.pos;
+        if (hit.x0 !== undefined) last.x0 = Math.min(last.x0 ?? hit.x0, hit.x0);
+        if (hit.x1 !== undefined) last.x1 = Math.max(last.x1 ?? hit.x1, hit.x1);
+      } else {
+        groups.push({ start: hit.pos, end: hit.pos, x0: hit.x0, x1: hit.x1 });
+      }
+    }
+    return groups;
+  };
+
+  // 1. Scan horizontal contiguous border lines (allowing <= 2px JPEG gap)
+  const minRunLen = Math.floor(w * 0.35);
+  const hHits: { pos: number; x0: number; x1: number }[] = [];
+  for (let y = 0; y < h; y++) {
+    let bestLen = 0;
+    let bestX0 = 0;
+    let bestX1 = 0;
+    let curStart = -1;
+    let gap = 0;
+    for (let x = 0; x < w; x++) {
+      if (getGray(x, y) < darkThresh) {
+        if (curStart < 0) curStart = x;
+        gap = 0;
+        const len = x - curStart + 1;
+        if (len > bestLen) {
+          bestLen = len;
+          bestX0 = curStart;
+          bestX1 = x;
+        }
+      } else if (curStart >= 0) {
+        gap++;
+        if (gap > 2) curStart = -1;
+      }
+    }
+    if (bestLen >= minRunLen) {
+      hHits.push({ pos: y, x0: bestX0, x1: bestX1 });
+    }
+  }
+
+  // Filter out thick solid section bars (> 14px)
+  const hBands = cluster1D(hHits, 4).filter(b => b.end - b.start <= 14);
+  if (hBands.length < 2) return [];
+
+  // 2. Group horizontal lines into contiguous tables
+  const tables: DetectedGridTable[] = [];
+  let curGroup: GridBand[] = [hBands[0]];
+
+  const flushGroup = (group: GridBand[]) => {
+    if (group.length < 2) return;
+    // Remove dark-filled section banner rows (where interior row center is dark gray)
+    const filteredBands: GridBand[] = [group[0]];
+    for (let i = 1; i < group.length; i++) {
+      const prev = filteredBands[filteredBands.length - 1];
+      const cur = group[i];
+      const midY = Math.floor((prev.end + cur.start) / 2);
+      const x0 = Math.max(prev.x0 ?? 0, cur.x0 ?? 0) + 10;
+      const x1 = Math.min(prev.x1 ?? w, cur.x1 ?? w) - 10;
+      let sumG = 0;
+      let cnt = 0;
+      for (let x = x0; x < x1; x += 8) {
+        sumG += getGray(x, midY);
+        cnt++;
+      }
+      const avgG = cnt > 0 ? sumG / cnt : 255;
+      if (avgG < 175) {
+        filteredBands[filteredBands.length - 1] = cur;
+      } else {
+        filteredBands.push(cur);
+      }
+    }
+
+    if (filteredBands.length < 2) return;
+    const tableTop = filteredBands[0].start;
+    const tableBot = filteredBands[filteredBands.length - 1].end;
+    const tableH = tableBot - tableTop + 1;
+    if (tableH < 18) return;
+
+    const xMin = Math.max(0, Math.min(...filteredBands.map(b => b.x0 ?? 0)) - 4);
+    const xMax = Math.min(w - 1, Math.max(...filteredBands.map(b => b.x1 ?? w - 1)) + 4);
+
+    // Detect vertical column dividers spanning >= 65% of table height
+    const vHits: { pos: number }[] = [];
+    const yStep = tableH > 200 ? 2 : 1;
+    const sampleTotal = Math.floor((tableBot - tableTop) / yStep) + 1;
+    for (let x = xMin; x <= xMax; x++) {
+      let darkCount = 0;
+      for (let y = tableTop; y <= tableBot; y += yStep) {
+        if (getGray(x, y) < darkThresh) darkCount++;
+      }
+      if (darkCount / sampleTotal >= 0.65) {
+        vHits.push({ pos: x });
+      }
+    }
+
+    const vBands = cluster1D(vHits, 4);
+    // Keep tables with >= 5 columns (vBands >= 6)
+    if (vBands.length >= 6) {
+      tables.push({
+        hBands: filteredBands,
+        vBands,
+        xStart: vBands[0].start,
+        xEnd: vBands[vBands.length - 1].end,
+        yStart: tableTop,
+        yEnd: tableBot,
+      });
+    }
+  };
+
+  for (let i = 1; i < hBands.length; i++) {
+    const prev = curGroup[curGroup.length - 1];
+    const cur = hBands[i];
+    const vGap = cur.start - prev.end;
+    const prevX0 = prev.x0 ?? 0;
+    const prevX1 = prev.x1 ?? w;
+    const curX0 = cur.x0 ?? 0;
+    const curX1 = cur.x1 ?? w;
+    const overlap = Math.min(prevX1, curX1) - Math.max(prevX0, curX0);
+    const maxW = Math.max(prevX1 - prevX0, curX1 - curX0, 1);
+
+    if (vGap >= 14 && vGap <= Math.floor(h * 0.40) && overlap / maxW >= 0.8) {
+      curGroup.push(cur);
+    } else {
+      flushGroup(curGroup);
+      curGroup = [cur];
+    }
+  }
+  flushGroup(curGroup);
+
+  return tables;
+}
+
+/**
+ * Renders table cells onto a clean, border-free, 2x/3x upscaled, contrast-stretched
+ * composite canvas, runs Tesseract OCR (PSM 6), and maps recognized words back to cells.
+ */
+async function ocrTableGridCells(
+  worker: any,
+  sourceCanvas: HTMLCanvasElement,
+  grid: DetectedGridTable
+): Promise<string[][]> {
+  const numRows = Math.min(grid.hBands.length - 1, 10);
+  const numCols = grid.vBands.length - 1;
+  if (numRows <= 0 || numCols <= 0) return [];
+
+  const srcCtx = sourceCanvas.getContext('2d');
+  if (!srcCtx) return [];
+
+  const inset = 3;
+  const padX = 44;
+  const padY = 34;
+
+  const avgRowH = (grid.yEnd - grid.yStart) / numRows;
+  const scale = avgRowH < 60 ? 3 : 2;
+
+  const cellBoxes: { srcX: number; srcY: number; srcW: number; srcH: number; dstX: number; dstY: number; dstW: number; dstH: number }[][] = [];
+  const colDstWidths: number[] = [];
+  for (let c = 0; c < numCols; c++) {
+    const sw = Math.max(1, (grid.vBands[c + 1].start - inset) - (grid.vBands[c].end + inset));
+    colDstWidths.push(sw * scale);
+  }
+  const rowDstHeights: number[] = [];
+  for (let r = 0; r < numRows; r++) {
+    const sh = Math.max(1, (grid.hBands[r + 1].start - inset) - (grid.hBands[r].end + inset));
+    rowDstHeights.push(sh * scale);
+  }
+
+  const outW = colDstWidths.reduce((a, b) => a + b, 0) + padX * (numCols + 1);
+  const outH = rowDstHeights.reduce((a, b) => a + b, 0) + padY * (numRows + 1);
+
+  const compCanvas = document.createElement('canvas');
+  compCanvas.width = outW;
+  compCanvas.height = outH;
+  const compCtx = compCanvas.getContext('2d');
+  if (!compCtx) return [];
+
+  compCtx.fillStyle = '#ffffff';
+  compCtx.fillRect(0, 0, outW, outH);
+  compCtx.imageSmoothingEnabled = true;
+  compCtx.imageSmoothingQuality = 'high';
+
+  let dstY = padY;
+  for (let r = 0; r < numRows; r++) {
+    const srcY0 = grid.hBands[r].end + inset;
+    const srcY1 = grid.hBands[r + 1].start - inset;
+    const srcH = srcY1 - srcY0;
+    const dstH = rowDstHeights[r];
+    const rowBoxes: typeof cellBoxes[number] = [];
+    let dstX = padX;
+
+    for (let c = 0; c < numCols; c++) {
+      const srcX0 = grid.vBands[c].end + inset;
+      const srcX1 = grid.vBands[c + 1].start - inset;
+      const srcW = srcX1 - srcX0;
+      const dstW = colDstWidths[c];
+
+      if (srcW >= 4 && srcH >= 4) {
+        compCtx.drawImage(sourceCanvas, srcX0, srcY0, srcW, srcH, dstX, dstY, dstW, dstH);
+      }
+
+      rowBoxes.push({ srcX: srcX0, srcY: srcY0, srcW, srcH, dstX, dstY, dstW, dstH });
+      dstX += dstW + padX;
+    }
+    cellBoxes.push(rowBoxes);
+    dstY += dstH + padY;
+  }
+
+  // Contrast-stretch composite image so light-grey text becomes crisp black on white
+  const compData = compCtx.getImageData(0, 0, outW, outH);
+  const px = compData.data;
+  let minG = 255;
+  for (let i = 0; i < px.length; i += 16) {
+    const g = (px[i] * 299 + px[i + 1] * 587 + px[i + 2] * 114) / 1000;
+    if (g < minG) minG = g;
+  }
+  const range = Math.max(1, 250 - minG);
+  if (range > 25) {
+    for (let i = 0; i < px.length; i += 4) {
+      const g = (px[i] * 299 + px[i + 1] * 587 + px[i + 2] * 114) / 1000;
+      const stretched = Math.min(255, Math.max(0, ((g - minG) / range) * 255));
+      px[i] = stretched;
+      px[i + 1] = stretched;
+      px[i + 2] = stretched;
+    }
+    compCtx.putImageData(compData, 0, 0);
+  }
+
+  let words: OcrWordBox[] = [];
+  try {
+    await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK });
+    const res = await worker.recognize(compCanvas);
+    words = (res?.data?.words || []) as OcrWordBox[];
+  } finally {
+    await worker.setParameters({ tessedit_pageseg_mode: PSM.AUTO });
+  }
+
+  // Map recognized words back to exact (row, col) cells
+  const cellWords: OcrWordBox[][][] = Array.from({ length: numRows }, () =>
+    Array.from({ length: numCols }, () => [])
+  );
+
+  for (const word of words) {
+    const txt = (word.text || '').trim();
+    if (!txt) continue;
+    const cx = (word.bbox.x0 + word.bbox.x1) / 2;
+    const cy = (word.bbox.y0 + word.bbox.y1) / 2;
+
+    for (let r = 0; r < numRows; r++) {
+      const rowRef = cellBoxes[r][0];
+      if (cy < rowRef.dstY - 14 || cy > rowRef.dstY + rowRef.dstH + 14) continue;
+      for (let c = 0; c < numCols; c++) {
+        const box = cellBoxes[r][c];
+        if (cx >= box.dstX - 14 && cx <= box.dstX + box.dstW + 14) {
+          cellWords[r][c].push(word);
+          break;
+        }
+      }
+      break;
+    }
+  }
+
+  return cellWords.map(row =>
+    row.map(cWords => {
+      if (cWords.length === 0) return '';
+      const subLines: { y: number; words: OcrWordBox[] }[] = [];
+      for (const w of cWords) {
+        const wCy = (w.bbox.y0 + w.bbox.y1) / 2;
+        const lineH = Math.max(12, w.bbox.y1 - w.bbox.y0);
+        let line = subLines.find(l => Math.abs(l.y - wCy) <= lineH * 0.65);
+        if (!line) {
+          line = { y: wCy, words: [] };
+          subLines.push(line);
+        }
+        line.words.push(w);
+      }
+      subLines.sort((a, b) => a.y - b.y);
+      const lineStrs = subLines.map(sl => {
+        sl.words.sort((a, b) => a.bbox.x0 - b.bbox.x0);
+        return sl.words.map(w => w.text.trim()).join(' ').trim();
+      });
+      return joinWrappedCellLines(lineStrs);
+    })
+  );
+}
+
+/**
+ * Reconstructs horizontal row lines from OCR word bounding boxes so column-split
+ * Tesseract layouts (e.g. vertical blocks) are re-aligned horizontally with '|' delimiters.
+ */
+function reconstructLinesFromOcrWords(words: OcrWordBox[]): string[] {
+  const valid = words.filter(w => (w.text || '').trim().length > 0);
+  if (valid.length === 0) return [];
+
+  const heights = valid.map(w => Math.max(8, w.bbox.y1 - w.bbox.y0)).sort((a, b) => a - b);
+  const medianH = heights[Math.floor(heights.length / 2)] || 16;
+  const yTol = Math.max(8, medianH * 0.65);
+  const colGapThresh = Math.max(20, medianH * 1.6);
+
+  const lines: { y: number; words: OcrWordBox[] }[] = [];
+  for (const w of valid) {
+    const cy = (w.bbox.y0 + w.bbox.y1) / 2;
+    let line = lines.find(l => Math.abs(l.y - cy) <= yTol);
+    if (!line) {
+      line = { y: cy, words: [] };
+      lines.push(line);
+    }
+    line.words.push(w);
+  }
+
+  lines.sort((a, b) => a.y - b.y);
+
+  return lines.map(line => {
+    line.words.sort((a, b) => a.bbox.x0 - b.bbox.x0);
+    let out = '';
+    for (let i = 0; i < line.words.length; i++) {
+      const cur = line.words[i];
+      if (i === 0) {
+        out = cur.text.trim();
+      } else {
+        const prev = line.words[i - 1];
+        const gap = cur.bbox.x0 - prev.bbox.x1;
+        out += (gap > colGapThresh ? ' | ' : ' ') + cur.text.trim();
+      }
+    }
+    return out;
+  });
 }
 
 /**
@@ -1093,7 +2146,7 @@ export function extractLandRecordsFromText(
 
   const lines = pre.split('\n').map(l => l.trim()).filter(Boolean);
 
-  // Strategy 1: AgriStack OCR table rows (detect lines having decimal Area + Owner Type)
+  // Strategy 1: AgriStack OCR/digital table rows (detect lines having decimal Area + Owner Type or District)
   let s1HeaderCols: LandTableHeaderCols | null = null;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -1105,25 +2158,27 @@ export function extractLandRecordsFromText(
       if (detected) s1HeaderCols = detected;
     }
 
-    // Check for decimal areas (e.g. 0.070000, 0.820000, 1.230000)
-    const areaMatches = [...line.matchAll(/\b(\d+\.\d+)[,\s]*/g)];
-    const ownerTypeMatch = line.match(/\b(Single|Sole|Joint|Individual|Ancestral|Self|Owner|Co-Owner|Tenant|स्वतःची|सामाईक|वारसाहक्क|इतर)\b/i);
+    // Check for decimal areas (e.g. 0.070000, 0.820000, 1.230000, or OCR 0,050000)
+    const normalizedLine = line.replace(/\b(\d+),(\d{4,6})\b/g, '$1.$2');
+    const areaMatches = [...normalizedLine.matchAll(/\b(\d+\.\d+)[,\s]*/g)];
+    const ownerTypeMatch = normalizedLine.match(/\b(Single|Sole|Joint|Individual|Ancestral|Self|Owner|Co-Owner|Tenant|स्वतःची|सामाईक|वारसाहक्क|इतर)\b/i);
+    const hasKnownDistrict = MAHARASHTRA_DISTRICTS.some(d => normalizedLine.toUpperCase().includes(d));
 
-    if (areaMatches.length > 0 && ownerTypeMatch) {
+    if (areaMatches.length > 0 && (ownerTypeMatch || hasKnownDistrict)) {
       const assignedArea = cleanAreaVal(areaMatches[areaMatches.length - 1][1]);
-      const ownerType = ownerTypeMatch[1];
+      const ownerType = ownerTypeMatch ? ownerTypeMatch[1] : '';
       const nextLine = lines[i + 1] || '';
 
       let rowKhata = '';
-      if (s1HeaderCols && s1HeaderCols.khata >= 0 && (line.includes('|') || line.includes('\t'))) {
-        const fullParts = splitLineIntoCols(line);
+      if (s1HeaderCols && s1HeaderCols.khata >= 0 && (normalizedLine.includes('|') || normalizedLine.includes('\t'))) {
+        const fullParts = splitLineIntoCols(normalizedLine);
         if (fullParts.length > s1HeaderCols.khata) {
           rowKhata = cleanKhataVal(fullParts[s1HeaderCols.khata]);
         }
       }
 
-      const firstAreaIndex = line.indexOf(areaMatches[0][0]);
-      const lineBeforeArea = line.substring(0, firstAreaIndex).trim();
+      const firstAreaIndex = normalizedLine.indexOf(areaMatches[0][0]);
+      const lineBeforeArea = normalizedLine.substring(0, firstAreaIndex).trim();
 
       let sNo = '';
       let ssNo = '';
@@ -1160,20 +2215,20 @@ export function extractLandRecordsFromText(
       // 1. Check pipe parts for survey numbers
       if (lineBeforeArea.includes('|')) {
         const parts = lineBeforeArea.split('|').map(p => p.trim());
-        const startIdx = s1HeaderCols && s1HeaderCols.survey >= 1 && s1HeaderCols.survey < parts.length
+        const startIdx = s1HeaderCols && s1HeaderCols.survey >= 0 && s1HeaderCols.survey < parts.length
           ? s1HeaderCols.survey
-          : 1;
+          : 0;
         const candidateIndices = [
           startIdx,
-          ...Array.from({ length: Math.max(0, parts.length - 1) }, (_, k) => k + 1).filter(idx => idx !== startIdx),
+          ...Array.from({ length: parts.length }, (_, k) => k).filter(idx => idx !== startIdx),
         ];
 
         for (const p of candidateIndices) {
           if (s1HeaderCols && p === s1HeaderCols.khata) continue;
           const part = parts[p];
-          // Two tokens separated by space in cell, e.g. "52 16/4", "67 1", "14 *"
+          // Two tokens separated by space in cell, e.g. "52 16/4", "169 2/अ", "67 1", "14 *"
           const mSpace = part.match(/\b(\d{1,5})\s+([0-9A-Za-z\u0900-\u097F\/\*\-]+)\b/);
-          if (mSpace) {
+          if (mSpace && isValidSubSurveyToken(mSpace[2])) {
             sNo = mSpace[1];
             ssNo = mSpace[2];
             if (p >= 1 && !villageRaw && /^[A-Za-z\s]+$/.test(parts[p - 1])) villageRaw = parts[p - 1];
@@ -1187,12 +2242,15 @@ export function extractLandRecordsFromText(
             break;
           }
           // Single number in cell p, and sub-survey in cell p+1
-          const mSingle = part.match(/^\d{1,5}$/);
+          const mSingle = part.match(/(?:^|\s)(\d{1,5})[,.\s]*$/);
           if (mSingle) {
-            sNo = mSingle[0];
+            sNo = mSingle[1];
             const nextIsKhata = s1HeaderCols && p + 1 === s1HeaderCols.khata;
-            if (!nextIsKhata && parts[p + 1] && /^[0-9A-Za-z\u0900-\u097F\/\*\-]+$/.test(parts[p + 1])) {
-              ssNo = parts[p + 1];
+            if (!nextIsKhata && parts[p + 1]) {
+              const firstTok = parts[p + 1].trim().split(/\s+/)[0] || '';
+              if (isValidSubSurveyToken(firstTok)) {
+                ssNo = firstTok;
+              }
             }
             if (p >= 1 && !villageRaw && /^[A-Za-z\s]+$/.test(parts[p - 1])) villageRaw = parts[p - 1];
             break;
@@ -1200,16 +2258,16 @@ export function extractLandRecordsFromText(
         }
       }
 
-      // 2. If not found via pipes, check lineBeforeArea directly
+      // 2. If not found via pipes, check lineBeforeArea directly (check space-separated pair BEFORE slash so "169 2/अ" keeps 169)
       if (!sNo) {
-        const mSlash = lineBeforeArea.match(/\b(?:Gat(?:\s*No)?\.?\s*)?(\d{1,5}(?:\s*[\/|\-]\s*[0-9A-Za-z\u0900-\u097F]+)+)\b/i);
-        if (mSlash) {
-          sNo = mSlash[1].replace(/\s+/g, '');
+        const mSpace = lineBeforeArea.match(/\b(\d{1,5})\s+([0-9A-Za-z\u0900-\u097F\/\*\-]+)\b/);
+        if (mSpace && isValidSubSurveyToken(mSpace[2])) {
+          sNo = mSpace[1];
+          ssNo = mSpace[2];
         } else {
-          const mSpace = lineBeforeArea.match(/\b(\d{1,5})\s+([0-9A-Za-z\u0900-\u097F\/\*\-]+)\b/);
-          if (mSpace) {
-            sNo = mSpace[1];
-            ssNo = mSpace[2];
+          const mSlash = lineBeforeArea.match(/\b(?:Gat(?:\s*No)?\.?\s*)?(\d{1,5}(?:\s*[\/|\-]\s*[0-9A-Za-z\u0900-\u097F]+)+)\b/i);
+          if (mSlash) {
+            sNo = mSlash[1].replace(/\s+/g, '');
           } else {
             const mSingle = lineBeforeArea.match(/\b(\d{1,5})\b/);
             if (mSingle) sNo = mSingle[1];
@@ -1273,11 +2331,12 @@ export function extractLandRecordsFromText(
 
         const v = headerCols.village >= 0 ? parts[headerCols.village] : '';
         const s = headerCols.survey >= 0 ? parts[headerCols.survey] : '';
+        const ss = headerCols.subSurvey >= 0 && headerCols.subSurvey !== headerCols.survey ? parts[headerCols.subSurvey] : '';
         const o = headerCols.owner >= 0 ? parts[headerCols.owner] : '';
         const a = headerCols.area >= 0 ? parts[headerCols.area] : '';
         const k = headerCols.khata >= 0 ? cleanKhataVal(parts[headerCols.khata]) : '';
 
-        const cleanS = cleanSurveyNo(s);
+        const cleanS = cleanSurveyNo(s, ss);
         const cleanA = cleanAreaVal(a);
 
         // A valid land record MUST have a Survey Number OR an Area!
@@ -1320,7 +2379,7 @@ export function extractLandRecordsFromText(
             area: cleanA,
           });
 
-          if (!foundState && headerCols.state >= 0) foundState = parts[headerCols.state];
+          if (!foundState && headerCols.state >= 0) foundState = normalizeStateText(parts[headerCols.state]);
           if (!foundDistrict && headerCols.district >= 0) foundDistrict = correctDistrict(parts[headerCols.district]);
           if (!foundSubDistrict && headerCols.subDistrict >= 0) foundSubDistrict = parts[headerCols.subDistrict];
           if (!foundKhataNo && k) foundKhataNo = k;
@@ -1414,14 +2473,6 @@ export function extractLandRecordsFromText(
 
   const primaryRow = finalRows[0];
 
-  const summaryParts: string[] = [];
-  if (foundTotalArea) summaryParts.push(`${foundTotalArea} Hectare`);
-  if (primaryRow.survey_no) summaryParts.push(`Gat No: ${primaryRow.survey_no}`);
-  if (primaryRow.village) summaryParts.push(primaryRow.village);
-  if (foundSubDistrict) summaryParts.push(foundSubDistrict);
-  if (foundDistrict) summaryParts.push(foundDistrict);
-  if (foundState) summaryParts.push(foundState);
-
   return {
     rows: finalRows,
     village: primaryRow.village || '',
@@ -1431,14 +2482,67 @@ export function extractLandRecordsFromText(
     subDistrict: foundSubDistrict,
     district: foundDistrict,
     state: foundState,
-    landSummary: summaryParts.join(', '),
+    landSummary: buildLandSummary(finalRows, foundTotalArea, foundSubDistrict, foundDistrict, foundState),
+  };
+}
+
+/**
+ * Runs visual grid detection + cell-composite OCR on a single rendered page canvas
+ * and returns any multi-column table matrices found.
+ */
+async function extractGridMatricesFromCanvas(
+  worker: any,
+  canvas: HTMLCanvasElement
+): Promise<string[][][]> {
+  const grids = detectRuledTablesOnCanvas(canvas);
+  const matrices: string[][][] = [];
+  for (const grid of grids) {
+    const matrix = await ocrTableGridCells(worker, canvas, grid);
+    if (matrix.length > 0) matrices.push(matrix);
+  }
+  return matrices;
+}
+
+/**
+ * Checks whether extracted land data contains at least one meaningful land row.
+ */
+function hasMeaningfulLandRows(data: ExtractedLandData | null | undefined): data is ExtractedLandData {
+  return Boolean(data && data.rows.some(r => Boolean(r.survey_no || r.area)));
+}
+
+/**
+ * Merges missing metadata (khata, state, district, sub-district) from a text-based
+ * fallback result into primary structured land data.
+ */
+function mergeLandMetadataFallbacks(
+  primary: ExtractedLandData,
+  fallback: ExtractedLandData
+): ExtractedLandData {
+  const khataNo = primary.khataNo || fallback.khataNo;
+  const state = primary.state || fallback.state;
+  const district = primary.district || fallback.district;
+  const subDistrict = primary.subDistrict || fallback.subDistrict;
+  const totalArea = primary.totalArea || fallback.totalArea;
+  const rows = primary.rows.map(r => ({
+    ...r,
+    khata_no: r.khata_no || khataNo,
+  }));
+  return {
+    ...primary,
+    rows,
+    khataNo,
+    state,
+    district,
+    subDistrict,
+    totalArea,
+    landSummary: buildLandSummary(rows, totalArea, subDistrict, district, state),
   };
 }
 
 /**
  * Extracts all 10 fields and farmer photo purely in the browser.
- * 1. Checks digital PDF text layer first.
- * 2. If scanned, runs high-resolution full-page WASM OCR.
+ * 1. Checks digital PDF text layer first (with 2D spatial coordinate table parsing).
+ * 2. If scanned or sparse, runs high-resolution full-page WASM OCR + visual table-grid OCR.
  * 3. Never returns hardcoded prefilled mock data.
  */
 export async function extractFarmerDataFromPdf(
@@ -1458,60 +2562,114 @@ export async function extractFarmerDataFromPdf(
   const photoUrl = photoDetails?.photoUrl || null;
   const pdfPageImageUrl = p1RawCanvas.toDataURL('image/jpeg', 0.85);
 
-  // Check if digital text exists in the PDF
-  const digitalTexts = await extractDigitalPageTexts(pdf);
+  // Check if digital text exists in the PDF (rotation-aware)
+  const { texts: digitalTexts, pageItems: digitalPageItems } = await extractDigitalPages(pdf);
   const hasDigitalText = digitalTexts.some(t => t.trim().length > 60);
 
   let p1Text = digitalTexts[0] || '';
   let p2Text = digitalTexts[1] || '';
   let p3Text = digitalTexts[2] || '';
   let fullText = digitalTexts.join('\n---\n');
+  let wordLinesFullText = '';
+  const ocrGridMatrices: string[][][] = [];
+  const pageCanvases: Record<number, HTMLCanvasElement> = { 1: p1RawCanvas };
 
-  // If digital text is missing or sparse (scanned form), perform OCR
-  if (!hasDigitalText || p1Text.trim().length < 60) {
-    onProgress?.(pt.initializingOcr, 40);
-    const worker = await createWorker('eng', 1, {
+  const createOcrWorker = () =>
+    createWorker('eng', 1, {
       logger: m => {
         if (m.status === 'recognizing text') {
           const pct = Math.floor(40 + (m.progress || 0) * 45);
           onProgress?.(formatMessage(pt.recognizingTextPct, { pct: Math.floor(m.progress * 100) }), pct);
         }
-      }
+      },
     });
 
-    // Page 1 OCR (Demographics, Farmer ID, Enrollment)
-    onProgress?.(pt.recognizingPage1, 45);
-    const p1Res = await worker.recognize(p1RawCanvas);
-    p1Text = p1Res.data.text;
+  // If digital text is missing or sparse (scanned form), perform full OCR + visual table grid OCR
+  if (!hasDigitalText || p1Text.trim().length < 60) {
+    onProgress?.(pt.initializingOcr, 40);
+    const worker = await createOcrWorker();
+    try {
+      const pageWordLines: string[] = [];
+      let pLastText = '';
+      let reachedConsent = false;
 
-    // Page 2 OCR (Mobile & Address)
-    if (totalPages >= 2) {
-      onProgress?.(pt.recognizingPage2, 65);
-      const p2RawCanvas = await renderPdfPageToCanvas(pdf, 2, 2.5);
-      const p2Res = await worker.recognize(p2RawCanvas);
-      p2Text = p2Res.data.text;
+      // Page 1 OCR (Demographics, Farmer ID, Enrollment, and possible Land Table Header)
+      onProgress?.(pt.recognizingPage1, 45);
+      const p1Res = await worker.recognize(p1RawCanvas);
+      p1Text = p1Res.data.text;
+      pageWordLines.push(reconstructLinesFromOcrWords((p1Res.data.words || []) as OcrWordBox[]).join('\n'));
+      ocrGridMatrices.push(...(await extractGridMatricesFromCanvas(worker, p1RawCanvas)));
+      if (/Consent\s*by\s*Farmer/i.test(p1Text)) reachedConsent = true;
+
+      // Page 2 OCR (Mobile, Address, or Land Details table)
+      if (totalPages >= 2) {
+        onProgress?.(pt.recognizingPage2, 65);
+        const p2RawCanvas = await renderPdfPageToCanvas(pdf, 2, 2.5);
+        pageCanvases[2] = p2RawCanvas;
+        const p2Res = await worker.recognize(p2RawCanvas);
+        p2Text = p2Res.data.text;
+        pageWordLines.push(reconstructLinesFromOcrWords((p2Res.data.words || []) as OcrWordBox[]).join('\n'));
+        if (!reachedConsent) {
+          ocrGridMatrices.push(...(await extractGridMatricesFromCanvas(worker, p2RawCanvas)));
+        }
+        if (/Consent\s*by\s*Farmer/i.test(p2Text)) reachedConsent = true;
+      }
+
+      // Page 3 OCR (Land Details or Consent)
+      if (totalPages >= 3) {
+        onProgress?.(pt.recognizingPage3, 80);
+        const p3RawCanvas = await renderPdfPageToCanvas(pdf, 3, 2.5);
+        pageCanvases[3] = p3RawCanvas;
+        const p3Res = await worker.recognize(p3RawCanvas);
+        p3Text = p3Res.data.text;
+        pageWordLines.push(reconstructLinesFromOcrWords((p3Res.data.words || []) as OcrWordBox[]).join('\n'));
+        if (!reachedConsent) {
+          ocrGridMatrices.push(...(await extractGridMatricesFromCanvas(worker, p3RawCanvas)));
+        }
+        if (/Consent\s*by\s*Farmer/i.test(p3Text)) reachedConsent = true;
+      }
+
+      // Final Page OCR (Signature block with clean typed Farmer Name)
+      if (totalPages >= 4) {
+        onProgress?.(pt.recognizingFinalPage, 90);
+        const pLastCanvas = await renderPdfPageToCanvas(pdf, totalPages, 2.5);
+        pageCanvases[totalPages] = pLastCanvas;
+        const pLastRes = await worker.recognize(pLastCanvas);
+        pLastText = pLastRes.data.text;
+        pageWordLines.push(reconstructLinesFromOcrWords((pLastRes.data.words || []) as OcrWordBox[]).join('\n'));
+      }
+
+      fullText = [p1Text, p2Text, p3Text, pLastText].join('\n---\n');
+      wordLinesFullText = pageWordLines.filter(Boolean).join('\n---\n');
+    } finally {
+      await worker.terminate();
     }
-
-    // Page 3 OCR (Land Details)
-    if (totalPages >= 3) {
-      onProgress?.(pt.recognizingPage3, 80);
-      const p3RawCanvas = await renderPdfPageToCanvas(pdf, 3, 2.5);
-      const p3Res = await worker.recognize(p3RawCanvas);
-      p3Text = p3Res.data.text;
+  } else {
+    // Hybrid PDF edge case: Page 1 has digital text, but Page 2 or 3 is an image with sparse/no digital text
+    const sparseLandPages = [2, 3].filter(
+      p => p <= totalPages && (digitalTexts[p - 1] || '').trim().length < 25
+    );
+    if (sparseLandPages.length > 0) {
+      onProgress?.(pt.initializingOcr, 50);
+      const worker = await createOcrWorker();
+      try {
+        const pageWordLines: string[] = [];
+        ocrGridMatrices.push(...(await extractGridMatricesFromCanvas(worker, p1RawCanvas)));
+        for (const pNum of sparseLandPages) {
+          const c = await renderPdfPageToCanvas(pdf, pNum, 2.5);
+          pageCanvases[pNum] = c;
+          const res = await worker.recognize(c);
+          if (pNum === 2) p2Text = res.data.text;
+          if (pNum === 3) p3Text = res.data.text;
+          pageWordLines.push(reconstructLinesFromOcrWords((res.data.words || []) as OcrWordBox[]).join('\n'));
+          ocrGridMatrices.push(...(await extractGridMatricesFromCanvas(worker, c)));
+        }
+        fullText = [p1Text, p2Text, p3Text, ...digitalTexts.slice(3)].filter(Boolean).join('\n---\n');
+        wordLinesFullText = pageWordLines.filter(Boolean).join('\n---\n');
+      } finally {
+        await worker.terminate();
+      }
     }
-
-    // Final Page OCR (Signature block with clean typed Farmer Name)
-    let pLastText = '';
-    if (totalPages >= 4) {
-      onProgress?.(pt.recognizingFinalPage, 90);
-      const pLastCanvas = await renderPdfPageToCanvas(pdf, totalPages, 2.5);
-      const pLastRes = await worker.recognize(pLastCanvas);
-      pLastText = pLastRes.data.text;
-    }
-
-    await worker.terminate();
-
-    fullText = [p1Text, p2Text, p3Text, pLastText].join('\n---\n');
   }
 
   onProgress?.(pt.extractingCredentials, 95);
@@ -1649,8 +2807,59 @@ export async function extractFarmerDataFromPdf(
     }
   }
 
-  // 8. Land Details & Records (dynamic multi-row extraction, limit to 5)
-  const landData = extractLandRecordsFromText(fullText, p2Text, p3Text, address);
+  // 8. Land Details & Records (3-tier: 2D Digital -> Visual Grid OCR -> Text Fallback)
+  const textFallbackLand = extractLandRecordsFromText(fullText, p2Text, p3Text, address);
+  const wordReconstructedLand = wordLinesFullText
+    ? extractLandRecordsFromText(wordLinesFullText, undefined, undefined, address)
+    : null;
+
+  let landData: ExtractedLandData | null = null;
+
+  if (hasDigitalText) {
+    const digitalSpatialLand = extractLandDataFromDigitalPages(digitalPageItems, address);
+    if (hasMeaningfulLandRows(digitalSpatialLand)) {
+      landData = mergeLandMetadataFallbacks(digitalSpatialLand, textFallbackLand);
+    }
+  }
+
+  if (!hasMeaningfulLandRows(landData) && ocrGridMatrices.length > 0) {
+    const gridLand = parseTableMatrixToLandData(ocrGridMatrices, address);
+    if (hasMeaningfulLandRows(gridLand)) {
+      landData = mergeLandMetadataFallbacks(gridLand, textFallbackLand);
+    }
+  }
+
+  // Fallback for digital PDFs whose land table is embedded as an image or unreadable text layer
+  if (!hasMeaningfulLandRows(landData) && hasDigitalText && !hasMeaningfulLandRows(textFallbackLand)) {
+    const fallbackCanvases: HTMLCanvasElement[] = [p1RawCanvas];
+    for (let pNum = 2; pNum <= Math.min(totalPages, 3); pNum++) {
+      fallbackCanvases.push(pageCanvases[pNum] || (await renderPdfPageToCanvas(pdf, pNum, 2.5)));
+    }
+    const hasAnyGrid = fallbackCanvases.some(c => detectRuledTablesOnCanvas(c).length > 0);
+    if (hasAnyGrid) {
+      const worker = await createOcrWorker();
+      try {
+        const fallbackMatrices: string[][][] = [];
+        for (const c of fallbackCanvases) {
+          fallbackMatrices.push(...(await extractGridMatricesFromCanvas(worker, c)));
+        }
+        const gridLand = parseTableMatrixToLandData(fallbackMatrices, address);
+        if (hasMeaningfulLandRows(gridLand)) {
+          landData = mergeLandMetadataFallbacks(gridLand, textFallbackLand);
+        }
+      } finally {
+        await worker.terminate();
+      }
+    }
+  }
+
+  if (!hasMeaningfulLandRows(landData)) {
+    if (hasMeaningfulLandRows(wordReconstructedLand)) {
+      landData = mergeLandMetadataFallbacks(wordReconstructedLand, textFallbackLand);
+    } else {
+      landData = textFallbackLand;
+    }
+  }
 
   // Bank Details
   const bankName = extractBankName(fullText);

@@ -17,7 +17,7 @@ import { getTranslations, Language } from '../i18n';
 export const CR80_WIDTH_MM = 85.6;
 export const CR80_HEIGHT_MM = 54;
 
-export type PvcPrintSides = 'both' | 'front' | 'back';
+export type CardPrintSides = 'both' | 'front' | 'back';
 
 export interface CardRenderOptions {
   templateOverride?: CardTemplate;
@@ -25,8 +25,8 @@ export interface CardRenderOptions {
   language?: Language;
 }
 
-export interface CardPdfOptions extends CardRenderOptions {
-  sides?: PvcPrintSides;
+export interface CardPrintOptions extends CardRenderOptions {
+  sides?: CardPrintSides;
   preRendered?: {
     frontDataUrl?: string;
     backDataUrl?: string;
@@ -819,9 +819,9 @@ function sanitizeCardFileName(farmerName?: string): string {
 
 async function resolveCardSideImages(
   record: FarmerRecord,
-  sides: PvcPrintSides = 'both',
+  sides: CardPrintSides = 'both',
   templateId?: string,
-  options?: CardPdfOptions
+  options?: CardPrintOptions
 ): Promise<Array<{ label: string; dataUrl: string }>> {
   const needsFront = sides === 'front' || sides === 'both';
   const needsBack = sides === 'back' || sides === 'both';
@@ -885,7 +885,7 @@ export async function downloadCardAsPng(
 export async function createCardPdf(
   record: FarmerRecord,
   templateId?: string,
-  options?: CardPdfOptions
+  options?: CardPrintOptions
 ): Promise<jsPDF> {
   const sides = options?.sides ?? 'both';
   const pages = await resolveCardSideImages(record, sides, templateId, options);
@@ -911,21 +911,19 @@ export async function createCardPdf(
 }
 
 /**
- * Generates an A4 Printable Sheet PDF with Front and Back side-by-side with cut guidelines.
+ * Generates an A4 Printable Sheet PDF for Front, Back, or Both sides with cut guidelines.
  * Perfect for standard desktop paper and PVC printer sheets.
  */
 export async function createPrintSheetPdf(
   record: FarmerRecord,
   templateId?: string,
-  options?: CardRenderOptions
+  options?: CardPrintOptions
 ): Promise<jsPDF> {
-  const [frontCanvas, backCanvas] = await Promise.all([
-    generateFrontCardCanvas(record, templateId, options),
-    generateBackCardCanvas(record, templateId, options),
-  ]);
-
-  const frontData = frontCanvas.toDataURL('image/png', 1.0);
-  const backData = backCanvas.toDataURL('image/png', 1.0);
+  const sides = options?.sides ?? 'both';
+  const pages = await resolveCardSideImages(record, sides, templateId, options);
+  if (pages.length === 0) {
+    throw new Error('No card pages available to export.');
+  }
 
   // Standard A4 portrait (210 x 297 mm)
   const pdf = new jsPDF({
@@ -936,7 +934,9 @@ export async function createPrintSheetPdf(
 
   const cardW = CR80_WIDTH_MM;
   const cardH = CR80_HEIGHT_MM;
-  const startX = (210 - cardW * 2 - 10) / 2; // Center horizontally
+  const gap = 10;
+  const totalW = pages.length * cardW + (pages.length - 1) * gap;
+  const startX = (210 - totalW) / 2; // Center horizontally
   const startY = 40;
 
   // Header title on A4 sheet
@@ -950,54 +950,66 @@ export async function createPrintSheetPdf(
   pdf.setTextColor(100, 116, 139);
   pdf.text(`Farmer: ${record.farmer_name || '--'}  |  ID: ${record.farmer_id || '--'}`, 105, 29, { align: 'center' });
 
-  // Draw Front Card
-  pdf.addImage(frontData, 'PNG', startX, startY, cardW, cardH);
-  pdf.setFontSize(9);
-  pdf.text('FRONT SIDE', startX + cardW / 2, startY + cardH + 6, { align: 'center' });
-
-  // Draw Back Card
-  const backX = startX + cardW + 10;
-  pdf.addImage(backData, 'PNG', backX, startY, cardW, cardH);
-  pdf.text('BACK SIDE', backX + cardW / 2, startY + cardH + 6, { align: 'center' });
+  pages.forEach((page, index) => {
+    const x = startX + index * (cardW + gap);
+    pdf.addImage(page.dataUrl, 'PNG', x, startY, cardW, cardH);
+    pdf.setFontSize(9);
+    pdf.text(page.label.toUpperCase(), x + cardW / 2, startY + cardH + 6, { align: 'center' });
+  });
 
   // Fold / Cut instruction
   pdf.setFontSize(8);
   pdf.setTextColor(148, 163, 184);
-  pdf.text('Cut along the card borders and fold/laminate together.', 105, startY + cardH + 16, { align: 'center' });
+  const cutNote =
+    pages.length > 1
+      ? 'Cut along the card borders and fold/laminate together.'
+      : 'Cut along the card borders.';
+  pdf.text(cutNote, 105, startY + cardH + 16, { align: 'center' });
 
   return pdf;
 }
 
+export function getCardPdfFilename(
+  record: FarmerRecord,
+  sides: CardPrintSides = 'both'
+): string {
+  const cleanName = sanitizeCardFileName(record.farmer_name);
+  return sides === 'both'
+    ? `${cleanName}_id_card_2sided.pdf`
+    : `${cleanName}_id_card_${sides}.pdf`;
+}
+
 /**
- * Downloads the CR80 PDF (default: 2-page duplex Front + Back, or single side).
+ * Downloads the CR80 PDF (Front, Back, or 2-page Front & Back).
  */
 export async function downloadCardAsPdf(
   record: FarmerRecord,
   filename?: string,
   templateId?: string,
-  options?: CardPdfOptions
+  options?: CardPrintOptions
 ): Promise<void> {
-  const sides = options?.sides ?? 'both';
-  const cleanName = sanitizeCardFileName(record.farmer_name);
-  const defaultFilename =
-    sides === 'both' ? `${cleanName}_id_card_2sided.pdf` : `${cleanName}_pvc_card_${sides}.pdf`;
+  const defaultFilename = getCardPdfFilename(record, options?.sides ?? 'both');
   const pdf = await createCardPdf(record, templateId, options);
   pdf.save(filename || defaultFilename);
 }
 
 /**
- * Downloads the A4 printable sheet PDF.
+ * Downloads the A4 printable sheet PDF (Front, Back, or Both sides).
  */
 export async function downloadCardPrintSheetPdf(
   record: FarmerRecord,
   filename?: string,
   templateId?: string,
-  options?: CardRenderOptions
+  options?: CardPrintOptions
 ): Promise<void> {
+  const sides = options?.sides ?? 'both';
   const cleanName = sanitizeCardFileName(record.farmer_name);
-  filename = filename || `${cleanName}_id_card_print_sheet.pdf`;
+  const defaultFilename =
+    sides === 'both'
+      ? `${cleanName}_id_card_print_sheet.pdf`
+      : `${cleanName}_id_card_${sides}_print_sheet.pdf`;
   const pdf = await createPrintSheetPdf(record, templateId, options);
-  pdf.save(filename);
+  pdf.save(filename || defaultFilename);
 }
 
 const PVC_PRINT_IFRAME_ID = 'pvc-card-print-iframe';
@@ -1009,7 +1021,7 @@ const PVC_PRINT_IFRAME_ID = 'pvc-card-print-iframe';
 export async function printCardForPvc(
   record: FarmerRecord,
   templateId?: string,
-  options?: CardPdfOptions
+  options?: CardPrintOptions
 ): Promise<void> {
   const sides = options?.sides ?? 'both';
   const pages = await resolveCardSideImages(record, sides, templateId, options);
