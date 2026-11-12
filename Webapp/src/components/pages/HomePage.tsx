@@ -192,22 +192,20 @@ export const HomePage: React.FC<HomePageProps> = ({
                       <button
                         type="button"
                         onClick={() => setPreviewSide('front')}
-                        className={`px-2.5 sm:px-3 py-1 rounded-md text-[11px] font-bold transition cursor-pointer ${
-                          previewSide === 'front'
+                        className={`px-2.5 sm:px-3 py-1 rounded-md text-[11px] font-bold transition cursor-pointer ${previewSide === 'front'
                             ? 'bg-emerald-700 text-white shadow-sm'
                             : 'text-slate-600 hover:text-slate-900'
-                        }`}
+                          }`}
                       >
                         {t.common.frontSide}
                       </button>
                       <button
                         type="button"
                         onClick={() => setPreviewSide('back')}
-                        className={`px-2.5 sm:px-3 py-1 rounded-md text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer ${
-                          previewSide === 'back'
+                        className={`px-2.5 sm:px-3 py-1 rounded-md text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer ${previewSide === 'back'
                             ? 'bg-emerald-700 text-white shadow-sm'
                             : 'text-slate-600 hover:text-slate-900'
-                        }`}
+                          }`}
                       >
                         <RefreshCw className="w-3 h-3" />
                         <span>{t.common.backSide}</span>
@@ -221,9 +219,8 @@ export const HomePage: React.FC<HomePageProps> = ({
                       <img
                         src={displayedPreviewSrc}
                         alt={`${t.home.liveCardPreview} - ${previewSide}`}
-                        className={`w-full rounded-xl shadow-lg border border-slate-300/80 object-contain transition-opacity duration-200 ${
-                          isRenderingPreview ? 'opacity-70' : 'opacity-100'
-                        }`}
+                        className={`w-full rounded-xl shadow-lg border border-slate-300/80 object-contain transition-opacity duration-200 ${isRenderingPreview ? 'opacity-70' : 'opacity-100'
+                          }`}
                         style={{ aspectRatio: '1050 / 660' }}
                       />
                     ) : (
@@ -253,20 +250,18 @@ export const HomePage: React.FC<HomePageProps> = ({
                               onSelectTemplate(tpl.id);
                             }}
                             title={format(t.home.previewTemplateTitle, { name: tpl.name })}
-                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer flex items-center gap-1 ${
-                              isSelected
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer flex items-center gap-1 ${isSelected
                                 ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm'
                                 : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50'
-                            }`}
+                              }`}
                           >
                             <span>{tpl.name}</span>
                             {tpl.isCustom && (
                               <span
-                                className={`text-[9px] px-1 py-0.2 rounded font-extrabold uppercase ${
-                                  isSelected
+                                className={`text-[9px] px-1 py-0.2 rounded font-extrabold uppercase ${isSelected
                                     ? 'bg-emerald-600 text-emerald-100'
                                     : 'bg-emerald-100 text-emerald-800'
-                                }`}
+                                  }`}
                               >
                                 {t.common.custom}
                               </span>
@@ -590,11 +585,10 @@ export const HomePage: React.FC<HomePageProps> = ({
               return (
                 <div
                   key={template.id}
-                  className={`bg-white rounded-2xl border p-4 space-y-4 transition shadow-sm hover:shadow-md ${
-                    isSelected
+                  className={`bg-white rounded-2xl border p-4 space-y-4 transition shadow-sm hover:shadow-md ${isSelected
                       ? 'border-emerald-500 ring-2 ring-emerald-500/20'
                       : 'border-slate-200'
-                  }`}
+                    }`}
                 >
                   {/* Front & Back Thumbnails */}
                   <div className="grid grid-cols-2 gap-2.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
