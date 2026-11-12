@@ -813,6 +813,154 @@ export async function generateBothCardsCanvas(
   return combineCardCanvases(frontCanvas, backCanvas);
 }
 
+function drawTrackedText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  centerX: number,
+  centerY: number,
+  tracking: number,
+  mode: 'fill' | 'stroke'
+): void {
+  const chars = Array.from(text);
+  if (chars.length === 0) return;
+
+  const charWidths = chars.map((ch) => ctx.measureText(ch).width);
+  const totalWidth =
+    charWidths.reduce((sum, w) => sum + w, 0) + tracking * Math.max(0, chars.length - 1);
+
+  let x = centerX - totalWidth / 2;
+  for (let i = 0; i < chars.length; i++) {
+    if (mode === 'stroke') {
+      ctx.strokeText(chars[i], x, centerY);
+    } else {
+      ctx.fillText(chars[i], x, centerY);
+    }
+    x += charWidths[i] + tracking;
+  }
+}
+
+/**
+ * Returns a copy of a rendered card canvas with a subtle, balanced diagonal "PREVIEW"
+ * watermark baked into the pixels so preview images cannot be copied cleanly while
+ * keeping all card details clearly legible.
+ */
+export function createWatermarkedPreviewCanvas(
+  sourceCanvas: HTMLCanvasElement,
+  label = 'PREVIEW'
+): HTMLCanvasElement {
+  const w = sourceCanvas.width;
+  const h = sourceCanvas.height;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return sourceCanvas;
+
+  ctx.drawImage(sourceCanvas, 0, 0);
+
+  ctx.save();
+  roundRect(ctx, 2, 2, w - 4, h - 4, 20);
+  ctx.clip();
+
+  const angle = (-24 * Math.PI) / 180;
+  const fontSize = Math.max(24, Math.round(Math.min(w, h) * 0.062));
+  const tracking = Math.max(5, Math.round(fontSize * 0.22));
+  const fontSpec = `700 ${fontSize}px Inter, system-ui, -apple-system, sans-serif`;
+
+  const stepX = Math.round(w * 0.40);
+  const stepY = Math.round(h * 0.32);
+  const span = Math.hypot(w, h) * 0.72;
+  const lineExtent = span + stepX;
+
+  const configureGridContext = (targetCtx: CanvasRenderingContext2D) => {
+    targetCtx.translate(w / 2, h / 2);
+    targetCtx.rotate(angle);
+    targetCtx.font = fontSpec;
+    targetCtx.textBaseline = 'middle';
+    targetCtx.textAlign = 'left';
+    targetCtx.lineJoin = 'round';
+  };
+
+  // 1. Soft white halo under-layer on main canvas for legibility on dark regions
+  ctx.save();
+  configureGridContext(ctx);
+
+  const drawLine = (
+    targetCtx: CanvasRenderingContext2D,
+    lineY: number,
+    color: string,
+    width: number
+  ) => {
+    targetCtx.beginPath();
+    targetCtx.moveTo(-lineExtent, lineY);
+    targetCtx.lineTo(lineExtent, lineY);
+    targetCtx.strokeStyle = color;
+    targetCtx.lineWidth = width;
+    targetCtx.stroke();
+  };
+
+  let rowIdx = 0;
+  drawLine(ctx, -span - stepY / 2, 'rgba(255, 255, 255, 0.30)', 7.0);
+  for (let y = -span; y <= span; y += stepY) {
+    const rowOffset = (rowIdx % 2) * (stepX / 2);
+    for (let x = -span - stepX / 2; x <= span + stepX / 2; x += stepX) {
+      const cx = x + rowOffset;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.32)';
+      ctx.lineWidth = 6.5;
+      drawTrackedText(ctx, label, cx, y, tracking, 'stroke');
+    }
+    drawLine(ctx, y + stepY / 2, 'rgba(255, 255, 255, 0.30)', 7.0);
+    rowIdx += 1;
+  }
+  ctx.restore();
+
+  // 2. Thicker wording with red outline rendered on an offscreen layer and composited uniformly
+  const textOverlay = document.createElement('canvas');
+  textOverlay.width = w;
+  textOverlay.height = h;
+  const tctx = textOverlay.getContext('2d');
+  if (tctx) {
+    configureGridContext(tctx);
+
+    let textRowIdx = 0;
+    for (let y = -span; y <= span; y += stepY) {
+      const rowOffset = (textRowIdx % 2) * (stepX / 2);
+      for (let x = -span - stepX / 2; x <= span + stepX / 2; x += stepX) {
+        const cx = x + rowOffset;
+        tctx.strokeStyle = '#dc2626';
+        tctx.lineWidth = 4.6;
+        drawTrackedText(tctx, label, cx, y, tracking, 'stroke');
+
+        tctx.strokeStyle = '#0f172a';
+        tctx.fillStyle = '#0f172a';
+        tctx.lineWidth = 1.4;
+        drawTrackedText(tctx, label, cx, y, tracking, 'stroke');
+        drawTrackedText(tctx, label, cx, y, tracking, 'fill');
+      }
+      textRowIdx += 1;
+    }
+
+    ctx.save();
+    ctx.globalAlpha = 0.38;
+    ctx.drawImage(textOverlay, 0, 0);
+    ctx.restore();
+  }
+
+  // 3. Thicker continuous red lines between wording rows
+  ctx.save();
+  configureGridContext(ctx);
+  drawLine(ctx, -span - stepY / 2, 'rgba(220, 38, 38, 0.38)', 4.5);
+  for (let y = -span; y <= span; y += stepY) {
+    drawLine(ctx, y + stepY / 2, 'rgba(220, 38, 38, 0.38)', 4.5);
+  }
+  ctx.restore();
+
+  ctx.restore();
+  return canvas;
+}
+
 function sanitizeCardFileName(farmerName?: string): string {
   return (farmerName || 'farmer').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
 }

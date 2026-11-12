@@ -480,6 +480,7 @@ export const en: Translations = {
     updatingPreview: 'Updating card preview...',
     generatingPreview: 'Generating high-res card design...',
     previewLoading: 'Preview loading...',
+    previewWatermarkNote: 'Preview watermark is automatically removed when you download or print.',
     personalUseNote: 'This card is strictly for personal reference & informational reference.',
     downloadBtn: 'Download',
     downloadTitle: 'Download options (PNG Image or PDF)',

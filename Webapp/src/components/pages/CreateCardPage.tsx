@@ -22,6 +22,7 @@ import {
   generateFrontCardCanvas,
   generateBackCardCanvas,
   combineCardCanvases,
+  createWatermarkedPreviewCanvas,
 } from '../../lib/cardGenerator';
 import { saveExtractedRecord, saveGeneratedRecord } from '../../lib/supabase';
 import { useLanguage } from '../../i18n';
@@ -65,6 +66,8 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
   const [frontPreviewUrl, setFrontPreviewUrl] = useState('');
   const [backPreviewUrl, setBackPreviewUrl] = useState('');
   const [bothPreviewUrl, setBothPreviewUrl] = useState('');
+  const [cleanFrontUrl, setCleanFrontUrl] = useState('');
+  const [cleanBackUrl, setCleanBackUrl] = useState('');
   const [isPhotoEditorOpen, setIsPhotoEditorOpen] = useState(false);
 
   // Re-open Card Preview modal when returning from PVC Makers page
@@ -80,6 +83,8 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
     setFrontPreviewUrl('');
     setBackPreviewUrl('');
     setBothPreviewUrl('');
+    setCleanFrontUrl('');
+    setCleanBackUrl('');
   }, [language]);
 
   const handleTemplateChange = (templateId: string) => {
@@ -87,6 +92,8 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
     setFrontPreviewUrl('');
     setBackPreviewUrl('');
     setBothPreviewUrl('');
+    setCleanFrontUrl('');
+    setCleanBackUrl('');
   };
 
   // Upload custom PDF file
@@ -123,6 +130,8 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
       setFrontPreviewUrl('');
       setBackPreviewUrl('');
       setBothPreviewUrl('');
+      setCleanFrontUrl('');
+      setCleanBackUrl('');
 
       // Non-blocking background sync (never interrupts user experience if offline/blocked)
       try {
@@ -145,6 +154,8 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
     setFrontPreviewUrl('');
     setBackPreviewUrl('');
     setBothPreviewUrl('');
+    setCleanFrontUrl('');
+    setCleanBackUrl('');
   };
 
   // Generate ID Card (Front & Back)
@@ -156,10 +167,14 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
         generateFrontCardCanvas(data, selectedTemplateId, renderOptions),
         generateBackCardCanvas(data, selectedTemplateId, renderOptions),
       ]);
-      const bothCanvas = combineCardCanvases(frontCanvas, backCanvas);
-      setFrontPreviewUrl(frontCanvas.toDataURL('image/png'));
-      setBackPreviewUrl(backCanvas.toDataURL('image/png'));
-      setBothPreviewUrl(bothCanvas.toDataURL('image/png'));
+      const wmFrontCanvas = createWatermarkedPreviewCanvas(frontCanvas);
+      const wmBackCanvas = createWatermarkedPreviewCanvas(backCanvas);
+      const wmBothCanvas = combineCardCanvases(wmFrontCanvas, wmBackCanvas);
+      setCleanFrontUrl(frontCanvas.toDataURL('image/png'));
+      setCleanBackUrl(backCanvas.toDataURL('image/png'));
+      setFrontPreviewUrl(wmFrontCanvas.toDataURL('image/png'));
+      setBackPreviewUrl(wmBackCanvas.toDataURL('image/png'));
+      setBothPreviewUrl(wmBothCanvas.toDataURL('image/png'));
       setCardModalOpen(true);
 
       // Non-blocking background sync (never interrupts user experience if offline/blocked)
@@ -390,6 +405,8 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
           frontPreviewUrl={frontPreviewUrl}
           backPreviewUrl={backPreviewUrl}
           bothPreviewUrl={bothPreviewUrl}
+          cleanFrontUrl={cleanFrontUrl}
+          cleanBackUrl={cleanBackUrl}
           selectedTemplateId={selectedTemplateId}
           onSelectTemplate={handleTemplateChange}
           onOrderPvc={() => onNavigate('pvc-makers')}

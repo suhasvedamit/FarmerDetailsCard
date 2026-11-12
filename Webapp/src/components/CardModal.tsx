@@ -23,8 +23,8 @@ import {
   printCardForPvc,
   generateFrontCardCanvas,
   generateBackCardCanvas,
-  generateBothCardsCanvas,
   combineCardCanvases,
+  createWatermarkedPreviewCanvas,
 } from '../lib/cardGenerator';
 import { useLanguage } from '../i18n';
 
@@ -35,6 +35,8 @@ interface CardModalProps {
   frontPreviewUrl?: string;
   backPreviewUrl?: string;
   bothPreviewUrl?: string;
+  cleanFrontUrl?: string;
+  cleanBackUrl?: string;
   selectedTemplateId: string;
   onSelectTemplate: (templateId: string) => void;
   onOrderPvc?: () => void;
@@ -47,6 +49,8 @@ export const CardModal: React.FC<CardModalProps> = ({
   frontPreviewUrl: initialFrontUrl,
   backPreviewUrl: initialBackUrl,
   bothPreviewUrl: initialBothUrl,
+  cleanFrontUrl: initialCleanFrontUrl,
+  cleanBackUrl: initialCleanBackUrl,
   selectedTemplateId,
   onSelectTemplate,
   onOrderPvc,
@@ -57,6 +61,8 @@ export const CardModal: React.FC<CardModalProps> = ({
   const [frontUrl, setFrontUrl] = useState<string>(initialFrontUrl || '');
   const [backUrl, setBackUrl] = useState<string>(initialBackUrl || '');
   const [bothUrl, setBothUrl] = useState<string>(initialBothUrl || '');
+  const [exportFrontUrl, setExportFrontUrl] = useState<string>(initialCleanFrontUrl || '');
+  const [exportBackUrl, setExportBackUrl] = useState<string>(initialCleanBackUrl || '');
   const [isLoadingPreviews, setIsLoadingPreviews] = useState<boolean>(false);
   const [openMenu, setOpenMenu] = useState<'download' | 'print' | null>(null);
   const [busyAction, setBusyAction] = useState<'download' | 'print' | null>(null);
@@ -104,6 +110,8 @@ export const CardModal: React.FC<CardModalProps> = ({
       setFrontUrl(initialFrontUrl);
       setBackUrl(initialBackUrl);
       setBothUrl(initialBothUrl);
+      setExportFrontUrl(initialCleanFrontUrl || '');
+      setExportBackUrl(initialCleanBackUrl || '');
       setIsLoadingPreviews(false);
       return;
     }
@@ -113,31 +121,44 @@ export const CardModal: React.FC<CardModalProps> = ({
       setIsLoadingPreviews(true);
       try {
         const renderOptions = { language };
+        const needsFront = !initialFrontUrl || !initialBothUrl;
+        const needsBack = !initialBackUrl || !initialBothUrl;
+
         const [fCanvas, bCanvas] = await Promise.all([
-          initialFrontUrl
-            ? Promise.resolve(null)
-            : generateFrontCardCanvas(record, selectedTemplateId, renderOptions),
-          initialBackUrl
-            ? Promise.resolve(null)
-            : generateBackCardCanvas(record, selectedTemplateId, renderOptions),
+          needsFront ? generateFrontCardCanvas(record, selectedTemplateId, renderOptions) : Promise.resolve(null),
+          needsBack ? generateBackCardCanvas(record, selectedTemplateId, renderOptions) : Promise.resolve(null),
         ]);
 
-        const bothCanvas = initialBothUrl
-          ? null
-          : fCanvas && bCanvas
-            ? combineCardCanvases(fCanvas, bCanvas)
-            : await generateBothCardsCanvas(record, selectedTemplateId, renderOptions);
+        const wmFrontCanvas = fCanvas ? createWatermarkedPreviewCanvas(fCanvas) : null;
+        const wmBackCanvas = bCanvas ? createWatermarkedPreviewCanvas(bCanvas) : null;
+        const wmBothCanvas =
+          !initialBothUrl && wmFrontCanvas && wmBackCanvas
+            ? combineCardCanvases(wmFrontCanvas, wmBackCanvas)
+            : null;
 
         if (!isMounted) return;
 
-        if (fCanvas) setFrontUrl(fCanvas.toDataURL('image/png'));
-        else if (initialFrontUrl) setFrontUrl(initialFrontUrl);
+        if (fCanvas && wmFrontCanvas) {
+          setExportFrontUrl(fCanvas.toDataURL('image/png'));
+          setFrontUrl(initialFrontUrl || wmFrontCanvas.toDataURL('image/png'));
+        } else if (initialFrontUrl) {
+          setExportFrontUrl(initialCleanFrontUrl || '');
+          setFrontUrl(initialFrontUrl);
+        }
 
-        if (bCanvas) setBackUrl(bCanvas.toDataURL('image/png'));
-        else if (initialBackUrl) setBackUrl(initialBackUrl);
+        if (bCanvas && wmBackCanvas) {
+          setExportBackUrl(bCanvas.toDataURL('image/png'));
+          setBackUrl(initialBackUrl || wmBackCanvas.toDataURL('image/png'));
+        } else if (initialBackUrl) {
+          setExportBackUrl(initialCleanBackUrl || '');
+          setBackUrl(initialBackUrl);
+        }
 
-        if (bothCanvas) setBothUrl(bothCanvas.toDataURL('image/png'));
-        else if (initialBothUrl) setBothUrl(initialBothUrl);
+        if (wmBothCanvas) {
+          setBothUrl(wmBothCanvas.toDataURL('image/png'));
+        } else if (initialBothUrl) {
+          setBothUrl(initialBothUrl);
+        }
       } catch (err) {
         console.error('Failed to generate card previews:', err);
       } finally {
@@ -156,6 +177,8 @@ export const CardModal: React.FC<CardModalProps> = ({
     initialFrontUrl,
     initialBackUrl,
     initialBothUrl,
+    initialCleanFrontUrl,
+    initialCleanBackUrl,
     selectedTemplateId,
     language,
     activeTemplate?.updatedAt,
@@ -171,12 +194,13 @@ export const CardModal: React.FC<CardModalProps> = ({
   const byActiveSide = <T,>(front: T, back: T, both: T): T =>
     ({ front, back, both })[activeSide];
 
-  const preRenderedCards = !isLoadingPreviews
-    ? {
-      frontDataUrl: frontUrl || undefined,
-      backDataUrl: backUrl || undefined,
-    }
-    : undefined;
+  const preRenderedCards =
+    !isLoadingPreviews && (exportFrontUrl || exportBackUrl)
+      ? {
+          frontDataUrl: exportFrontUrl || undefined,
+          backDataUrl: exportBackUrl || undefined,
+        }
+      : undefined;
 
   const sideExportOptions = {
     language,
@@ -346,24 +370,35 @@ export const CardModal: React.FC<CardModalProps> = ({
         </div>
 
         {/* Card Live Preview Container */}
-        <div className="relative flex flex-col items-center justify-center p-3 bg-gradient-to-b from-slate-100 to-slate-200 rounded-xl min-h-[300px] border border-slate-200 overflow-hidden">
+        <div
+          onContextMenu={(e) => e.preventDefault()}
+          className="relative flex flex-col items-center justify-center p-3 bg-gradient-to-b from-slate-100 to-slate-200 rounded-xl min-h-[300px] border border-slate-200 overflow-hidden select-none"
+        >
           {currentPreview ? (
-            <div className="w-full flex justify-center relative">
-              <img
-                src={currentPreview}
-                alt={`${t.cardModal.title} - ${activeSide}`}
-                className={`max-h-[60vh] max-w-full rounded-xl shadow-xl border border-slate-300 object-contain transition-opacity duration-150 ${isLoadingPreviews ? 'opacity-50' : 'opacity-100'
-                  }`}
-              />
-              {isLoadingPreviews && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="bg-white/90 backdrop-blur-sm px-4 py-2.5 rounded-lg shadow-md border border-slate-200 flex items-center space-x-2 text-slate-700">
-                    <div className="w-4 h-4 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
-                    <span className="text-sm font-semibold">{t.cardModal.updatingPreview}</span>
+            <>
+              <div className="w-full flex justify-center relative">
+                <img
+                  src={currentPreview}
+                  alt={`${t.cardModal.title} - ${activeSide}`}
+                  draggable={false}
+                  onContextMenu={(e) => e.preventDefault()}
+                  style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
+                  className={`max-h-[60vh] max-w-full rounded-xl shadow-xl border border-slate-300 object-contain select-none transition-opacity duration-150 ${isLoadingPreviews ? 'opacity-50' : 'opacity-100'
+                    }`}
+                />
+                {isLoadingPreviews && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="bg-white/90 backdrop-blur-sm px-4 py-2.5 rounded-lg shadow-md border border-slate-200 flex items-center space-x-2 text-slate-700">
+                      <div className="w-4 h-4 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                      <span className="text-sm font-semibold">{t.cardModal.updatingPreview}</span>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+              <p className="mt-2.5 text-[11px] text-slate-500 text-center">
+                {t.cardModal.previewWatermarkNote}
+              </p>
+            </>
           ) : isLoadingPreviews ? (
             <div className="flex flex-col items-center justify-center py-16 space-y-2 text-slate-500">
               <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin" />

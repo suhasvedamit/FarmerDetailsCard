@@ -457,6 +457,7 @@ export interface Translations {
     updatingPreview: string;
     generatingPreview: string;
     previewLoading: string;
+    previewWatermarkNote: string;
     personalUseNote: string;
     downloadBtn: string;
     downloadTitle: string;

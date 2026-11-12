@@ -476,6 +476,7 @@ export const mr: Translations = {
     updatingPreview: 'कार्ड प्रीव्ह्यू अपडेट होत आहे...',
     generatingPreview: 'उच्च दर्जाचे कार्ड डिझाइन तयार होत आहे...',
     previewLoading: 'प्रीव्ह्यू लोड होत आहे...',
+    previewWatermarkNote: 'डाउनलोड किंवा प्रिंट करताना प्रीव्ह्यू वॉटरमार्क आपोआप काढला जातो.',
     personalUseNote: 'हे कार्ड केवळ वैयक्तिक संदर्भ व माहितीच्या सोयीसाठी आहे.',
     downloadBtn: 'डाउनलोड करा',
     downloadTitle: 'डाउनलोड पर्याय (PNG इमेज किंवा PDF)',
