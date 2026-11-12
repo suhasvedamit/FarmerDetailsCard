@@ -846,7 +846,8 @@ function drawTrackedText(
  */
 export function createWatermarkedPreviewCanvas(
   sourceCanvas: HTMLCanvasElement,
-  label = 'PREVIEW'
+  label = 'PREVIEW',
+  subLabel = 'cardstudio.vedamit.com'
 ): HTMLCanvasElement {
   const w = sourceCanvas.width;
   const h = sourceCanvas.height;
@@ -868,11 +869,34 @@ export function createWatermarkedPreviewCanvas(
   const fontSize = Math.max(24, Math.round(Math.min(w, h) * 0.062));
   const tracking = Math.max(5, Math.round(fontSize * 0.22));
   const fontSpec = `700 ${fontSize}px Inter, system-ui, -apple-system, sans-serif`;
+  const subFontSize = Math.max(13, Math.round(fontSize * 0.42));
+  const subFontSpec = `700 ${subFontSize}px Inter, system-ui, -apple-system, sans-serif`;
 
   const stepX = Math.round(w * 0.40);
   const stepY = Math.round(h * 0.32);
   const span = Math.hypot(w, h) * 0.72;
   const lineExtent = span + stepX;
+
+  ctx.save();
+  ctx.font = subFontSpec;
+  const subLabelWidth = subLabel ? ctx.measureText(subLabel).width : 0;
+  ctx.restore();
+
+  const urlGapHalf = subLabelWidth > 0 ? subLabelWidth / 2 + 14 : 0;
+  const urlStepX = Math.max(Math.round(w * 0.56), Math.round(subLabelWidth + 240));
+
+  const getLineUrlCenters = (lineIdx: number): number[] => {
+    if (!subLabel || subLabelWidth <= 0) return [];
+    const offset = (lineIdx % 2) * (urlStepX / 2);
+    const centers: number[] = [];
+    for (let x = -lineExtent - urlStepX; x <= lineExtent + urlStepX; x += urlStepX) {
+      const cx = x + offset;
+      if (cx + urlGapHalf > -lineExtent && cx - urlGapHalf < lineExtent) {
+        centers.push(cx);
+      }
+    }
+    return centers;
+  };
 
   const configureGridContext = (targetCtx: CanvasRenderingContext2D) => {
     targetCtx.translate(w / 2, h / 2);
@@ -883,26 +907,62 @@ export function createWatermarkedPreviewCanvas(
     targetCtx.lineJoin = 'round';
   };
 
+  const drawSegmentedLine = (
+    targetCtx: CanvasRenderingContext2D,
+    lineY: number,
+    lineIdx: number,
+    lineColor: string,
+    lineWidth: number,
+    drawSubLabel: (cx: number) => void
+  ) => {
+    const centers = getLineUrlCenters(lineIdx);
+    targetCtx.strokeStyle = lineColor;
+    targetCtx.lineWidth = lineWidth;
+
+    let cursor = -lineExtent;
+    for (const cx of centers) {
+      const segEnd = Math.min(lineExtent, cx - urlGapHalf);
+      if (segEnd > cursor) {
+        targetCtx.beginPath();
+        targetCtx.moveTo(cursor, lineY);
+        targetCtx.lineTo(segEnd, lineY);
+        targetCtx.stroke();
+      }
+      if (cx >= -lineExtent && cx <= lineExtent) {
+        drawSubLabel(cx);
+      }
+      cursor = Math.max(cursor, cx + urlGapHalf);
+    }
+
+    if (cursor < lineExtent) {
+      targetCtx.beginPath();
+      targetCtx.moveTo(cursor, lineY);
+      targetCtx.lineTo(lineExtent, lineY);
+      targetCtx.stroke();
+    }
+  };
+
   // 1. Soft white halo under-layer on main canvas for legibility on dark regions
   ctx.save();
   configureGridContext(ctx);
 
-  const drawLine = (
-    targetCtx: CanvasRenderingContext2D,
-    lineY: number,
-    color: string,
-    width: number
-  ) => {
-    targetCtx.beginPath();
-    targetCtx.moveTo(-lineExtent, lineY);
-    targetCtx.lineTo(lineExtent, lineY);
-    targetCtx.strokeStyle = color;
-    targetCtx.lineWidth = width;
-    targetCtx.stroke();
+  const drawHaloUrl = (cx: number, lineY: number) => {
+    if (!subLabel) return;
+    ctx.save();
+    ctx.font = subFontSpec;
+    ctx.textAlign = 'center';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.36)';
+    ctx.lineWidth = 3.2;
+    ctx.strokeText(subLabel, cx, lineY);
+    ctx.restore();
   };
 
   let rowIdx = 0;
-  drawLine(ctx, -span - stepY / 2, 'rgba(255, 255, 255, 0.30)', 7.0);
+  let lineIdx = 0;
+  const firstLineY = -span - stepY / 2;
+  drawSegmentedLine(ctx, firstLineY, lineIdx++, 'rgba(255, 255, 255, 0.30)', 7.0, (cx) =>
+    drawHaloUrl(cx, firstLineY)
+  );
   for (let y = -span; y <= span; y += stepY) {
     const rowOffset = (rowIdx % 2) * (stepX / 2);
     for (let x = -span - stepX / 2; x <= span + stepX / 2; x += stepX) {
@@ -911,7 +971,10 @@ export function createWatermarkedPreviewCanvas(
       ctx.lineWidth = 6.5;
       drawTrackedText(ctx, label, cx, y, tracking, 'stroke');
     }
-    drawLine(ctx, y + stepY / 2, 'rgba(255, 255, 255, 0.30)', 7.0);
+    const nextLineY = y + stepY / 2;
+    drawSegmentedLine(ctx, nextLineY, lineIdx++, 'rgba(255, 255, 255, 0.30)', 7.0, (cx) =>
+      drawHaloUrl(cx, nextLineY)
+    );
     rowIdx += 1;
   }
   ctx.restore();
@@ -948,12 +1011,28 @@ export function createWatermarkedPreviewCanvas(
     ctx.restore();
   }
 
-  // 3. Thicker continuous red lines between wording rows
+  // 3. Thicker continuous red lines with inline URL woven cleanly between wording rows
   ctx.save();
   configureGridContext(ctx);
-  drawLine(ctx, -span - stepY / 2, 'rgba(220, 38, 38, 0.38)', 4.5);
+  const drawInlineUrl = (cx: number, lineY: number) => {
+    if (!subLabel) return;
+    ctx.save();
+    ctx.font = subFontSpec;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(185, 28, 28, 0.50)';
+    ctx.fillText(subLabel, cx, lineY);
+    ctx.restore();
+  };
+
+  let redLineIdx = 0;
+  drawSegmentedLine(ctx, firstLineY, redLineIdx++, 'rgba(220, 38, 38, 0.38)', 4.5, (cx) =>
+    drawInlineUrl(cx, firstLineY)
+  );
   for (let y = -span; y <= span; y += stepY) {
-    drawLine(ctx, y + stepY / 2, 'rgba(220, 38, 38, 0.38)', 4.5);
+    const nextLineY = y + stepY / 2;
+    drawSegmentedLine(ctx, nextLineY, redLineIdx++, 'rgba(220, 38, 38, 0.38)', 4.5, (cx) =>
+      drawInlineUrl(cx, nextLineY)
+    );
   }
   ctx.restore();
 
