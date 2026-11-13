@@ -14,6 +14,7 @@ export interface Translations {
   common: {
     appName: string;
     home: string;
+    farmerCard: string;
     contact: string;
     createCard: string;
     orderPvc: string;
@@ -105,6 +106,27 @@ export interface Translations {
     heroDescBrand: string;
     heroDescText: string;
     exploreDesignsBtn: string;
+    exploreToolsBtn: string;
+    toolsHub: {
+      badge: string;
+      title: string;
+      subtitle: string;
+      liveBadge: string;
+      comingSoonBadge: string;
+      openToolBtn: string;
+      comingSoonNote: string;
+      browserOnlyTag: string;
+      cscTag: string;
+      farmerTitle: string;
+      farmerDesc: string;
+      farmerMeta: string;
+      aadhaarTitle: string;
+      aadhaarDesc: string;
+      aadhaarMeta: string;
+      pvcMakersTitle: string;
+      pvcMakersDesc: string;
+      pvcMakersMeta: string;
+    };
     liveCardPreview: string;
     defaultTemplateName: string;
     renderingSample: string;

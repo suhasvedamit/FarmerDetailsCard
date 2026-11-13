@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react';
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  // GitHub Pages requires relative base or repo name base
+  // Serve from root "/" for custom domain cardstudio.vedamit.com and clean SPA routes (/farmer, etc.)
   base: './',
   build: {
     outDir: 'dist',

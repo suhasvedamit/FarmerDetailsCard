@@ -1170,7 +1170,7 @@ export async function createPrintSheetPdf(
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(16);
   pdf.setTextColor(21, 128, 61);
-  pdf.text('MyAgriCard - Farmer ID Card Print Sheet', 105, 22, { align: 'center' });
+  pdf.text('Card Studio - Farmer Summary Card Print Sheet', 105, 22, { align: 'center' });
 
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(10);

@@ -1,6 +1,7 @@
 /**
- * Navigation helpers and routing types for the Farmer ID Card web application.
- * Supports query parameters (?page=create-card, ?page=terms), hash fragments (#create-card), and history pushState.
+ * Navigation helpers and routing types for Card Studio (cardstudio.vedamit.com).
+ * Uses clean pathname routes (/, /farmer, /pvc-makers, /terms, etc.) while
+ * remaining backward-compatible with ?page=... query parameters and #hash fragments.
  */
 
 export type AppPage =
@@ -13,59 +14,93 @@ export type AppPage =
   | 'contact'
   | 'disclaimer';
 
+const PAGE_PATHS: Record<AppPage, string> = {
+  home: '/',
+  'create-card': '/farmer',
+  'pvc-makers': '/pvc-makers',
+  verify: '/verify',
+  terms: '/terms',
+  privacy: '/privacy',
+  contact: '/contact',
+  disclaimer: '/disclaimer',
+};
+
+function resolvePageCandidate(rawCandidate: string | null | undefined): AppPage | null {
+  const candidate = (rawCandidate || '')
+    .toLowerCase()
+    .replace(/^#+/, '')
+    .replace(/^\/+|\/+$/g, '')
+    .trim();
+
+  if (!candidate) return null;
+
+  if (
+    candidate === 'farmer' ||
+    candidate === 'farmer-card' ||
+    candidate === 'farmer-id' ||
+    candidate === 'create-card' ||
+    candidate === 'create' ||
+    candidate === 'card-maker' ||
+    candidate === 'maker' ||
+    candidate === 'generator' ||
+    candidate === 'app' ||
+    candidate === 'product'
+  ) {
+    return 'create-card';
+  }
+  if (
+    candidate === 'pvc-makers' ||
+    candidate === 'order-pvc' ||
+    candidate === 'pvc' ||
+    candidate === 'pvc-agents' ||
+    candidate === 'agents'
+  ) {
+    return 'pvc-makers';
+  }
+  if (candidate === 'terms' || candidate === 'terms-and-conditions' || candidate === 'terms-of-service') {
+    return 'terms';
+  }
+  if (candidate === 'privacy' || candidate === 'privacy-policy') {
+    return 'privacy';
+  }
+  if (candidate === 'contact' || candidate === 'contact-us' || candidate === 'support') {
+    return 'contact';
+  }
+  if (candidate === 'disclaimer' || candidate === 'legal' || candidate === 'legal-disclaimer') {
+    return 'disclaimer';
+  }
+  if (candidate === 'verify') {
+    return 'verify';
+  }
+  if (candidate === 'home') {
+    return 'home';
+  }
+
+  return null;
+}
+
 /**
- * Determines the current active page from the browser URL search params or hash.
+ * Determines the current active page from URL query params, hash fragments, or pathname.
  */
 export function getPageFromUrl(): AppPage {
   if (typeof window === 'undefined') return 'home';
 
   try {
     const params = new URLSearchParams(window.location.search);
-    const pageParam = params.get('page')?.toLowerCase().trim();
-    const hash = window.location.hash.toLowerCase().replace('#', '').replace('/', '').trim();
 
-    const candidate = pageParam || hash;
-
-    if (
-      candidate === 'create-card' ||
-      candidate === 'create' ||
-      candidate === 'card-maker' ||
-      candidate === 'maker' ||
-      candidate === 'generator' ||
-      candidate === 'app' ||
-      candidate === 'product'
-    ) {
-      return 'create-card';
-    }
-    if (
-      candidate === 'pvc-makers' ||
-      candidate === 'order-pvc' ||
-      candidate === 'pvc' ||
-      candidate === 'pvc-agents' ||
-      candidate === 'agents'
-    ) {
-      return 'pvc-makers';
-    }
-    if (candidate === 'terms' || candidate === 'terms-and-conditions' || candidate === 'terms-of-service') {
-      return 'terms';
-    }
-    if (candidate === 'privacy' || candidate === 'privacy-policy') {
-      return 'privacy';
-    }
-    if (candidate === 'contact' || candidate === 'contact-us' || candidate === 'support') {
-      return 'contact';
-    }
-    if (candidate === 'disclaimer' || candidate === 'legal' || candidate === 'legal-disclaimer') {
-      return 'disclaimer';
-    }
-    if (candidate === 'verify') {
-      return 'verify';
-    }
-
-    // QR Verification fallback checks
+    // QR Verification fallback checks take priority so scanned links always verify
     if (params.has('verify') || params.has('data') || params.has('farmer_id') || params.has('id')) {
       return 'verify';
     }
+
+    const fromQuery = resolvePageCandidate(params.get('page'));
+    if (fromQuery) return fromQuery;
+
+    const fromHash = resolvePageCandidate(window.location.hash);
+    if (fromHash) return fromHash;
+
+    const fromPath = resolvePageCandidate(window.location.pathname);
+    if (fromPath) return fromPath;
   } catch (e) {
     console.warn('[Navigation] Error reading page from URL:', e);
   }
@@ -74,37 +109,27 @@ export function getPageFromUrl(): AppPage {
 }
 
 /**
- * Generates the clean URL for a given target page.
- * Keeps existing path (important for GitHub Pages sub-directories).
+ * Generates the clean URL path for a given target page.
  */
 export function getPageUrl(page: AppPage): string {
+  const targetPath = PAGE_PATHS[page] || '/';
+
   if (typeof window === 'undefined') {
-    return page === 'home' ? '/' : `?page=${page}`;
+    return targetPath;
   }
 
   try {
-    const url = new URL(window.location.href);
-
-    if (page === 'home') {
+    if (page === 'verify') {
+      const url = new URL(window.location.href);
+      url.pathname = targetPath;
       url.searchParams.delete('page');
-      url.searchParams.delete('data');
-      url.searchParams.delete('verify');
-      url.searchParams.delete('farmer_id');
-      url.searchParams.delete('id');
-    } else {
-      url.searchParams.set('page', page);
-      if (page !== 'verify') {
-        url.searchParams.delete('data');
-        url.searchParams.delete('verify');
-        url.searchParams.delete('farmer_id');
-        url.searchParams.delete('id');
-      }
+      url.hash = '';
+      return url.pathname + url.search;
     }
 
-    url.hash = '';
-    return url.pathname + url.search;
+    return targetPath;
   } catch {
-    return page === 'home' ? window.location.pathname : `?page=${page}`;
+    return targetPath;
   }
 }
 

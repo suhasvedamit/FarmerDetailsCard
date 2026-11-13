@@ -2,13 +2,14 @@ import { Translations } from '../types';
 
 export const en: Translations = {
   meta: {
-    pageTitle: 'Farmer Details Card — Summary Card Formatter',
+    pageTitle: 'Card Studio — Multi-Card Formatting & Print Studio',
   },
   common: {
-    appName: 'Farmer Details Card',
+    appName: 'Card Studio',
     home: 'Home',
+    farmerCard: 'Farmer Card',
     contact: 'Contact',
-    createCard: 'Create Card',
+    createCard: 'Farmer Card',
     orderPvc: 'Order PVC',
     frontSide: 'Front Side',
     backSide: 'Back Side',
@@ -30,7 +31,7 @@ export const en: Translations = {
     selectLanguageAria: 'Select language',
   },
   header: {
-    brandSubtitle: 'Summary & card formatting studio for farmer documents',
+    brandSubtitle: 'Multi-Card & CSC Print Studio',
     mainNavAria: 'Main Navigation',
     openMenuAria: 'Open navigation menu',
     closeMenuAria: 'Close navigation menu',
@@ -38,13 +39,13 @@ export const en: Translations = {
   footer: {
     disclaimerTitle: 'Important Disclaimer',
     disclaimerBodyStart:
-      'This web utility is provided solely for informational and personal convenience formatting. The cards produced are unofficial summary cards and do',
+      'This web utility is provided solely for informational and personal convenience formatting. The cards produced are unofficial summary or print-formatted cards and do',
     disclaimerBodyNot: 'NOT',
     disclaimerBodyEnd:
       'hold statutory, official, or legal validity. All respective official marks and portal names belong strictly to their governmental authorities.',
     productTitle: 'Product',
-    homeOverview: 'Home & Overview',
-    cardMakerStudio: 'Card Maker Studio',
+    homeOverview: 'Card Studio Hub',
+    cardMakerStudio: 'Farmer Summary Card',
     orderPvcCard: 'Order PVC Card',
     legalPoliciesTitle: 'Legal & Policies',
     termsAndConditions: 'Terms and Conditions',
@@ -54,7 +55,7 @@ export const en: Translations = {
     contactFeedback: 'Contact Us / Feedback',
     reportIssue: 'Report an Issue / Bug',
     supportLabel: 'Support:',
-    copyright: '© {year} Farmer Details Card. All rights reserved.',
+    copyright: '© {year} Card Studio. All rights reserved.',
     designedBy: 'Designed and developed by',
     developerName: 'Vedamit Solutions',
   },
@@ -63,10 +64,10 @@ export const en: Translations = {
     infoBadge: 'Information & Guidelines',
     lastUpdatedLabel: 'Last Updated:',
     lastUpdatedValue: 'November 2026',
-    ctaTitle: 'Ready to create your Farmer Summary Card?',
+    ctaTitle: 'Ready to format your printable card?',
     ctaDescription:
-      'Upload your PM-Kisan or AgriStack PDF document to extract details and generate front & back printable cards instantly.',
-    ctaButton: 'Open Card Maker',
+      'Open our live Farmer Summary Card Studio to extract details from your PM-Kisan or AgriStack PDF and export print-ready CR80 cards.',
+    ctaButton: 'Open Farmer Card Studio',
     navTerms: 'Terms & Conditions',
     navPrivacy: 'Privacy Policy',
     navDisclaimer: 'Legal Disclaimer',
@@ -98,13 +99,38 @@ export const en: Translations = {
     backHomeButton: 'Return to Home Page',
   },
   home: {
-    heroBadge: 'Smart PDF Extraction & Card Studio',
-    heroTitleStart: 'Turn Farmer Documents into',
-    heroTitleHighlight: 'Print-Ready Summary Cards',
-    heroDescBrand: 'Farmer Details Card',
+    heroBadge: 'Multi-Card & CSC Print Studio',
+    heroTitleStart: 'All-in-One Studio for',
+    heroTitleHighlight: 'Print-Ready CR80 & PVC Cards',
+    heroDescBrand: 'Card Studio',
     heroDescText:
-      'extracts farmer, land, and bank details directly from registration PDFs—or lets you enter them manually—and renders crisp, two-sided CR80 pocket cards ready for printing.',
+      'turns official PDFs and citizen details into crisp, two-sided CR80 pocket cards with secure data handling—live now for Farmer Summary Cards, with e-Aadhaar print formatting coming for CSC operators.',
     exploreDesignsBtn: 'Explore Card Designs',
+    exploreToolsBtn: 'Browse Card Tools',
+    toolsHub: {
+      badge: 'Card Studio Suite',
+      title: 'Card Editing & Printing Tools Built for Citizens & CSC Centers',
+      subtitle:
+        'Start immediately with our live Farmer Summary Card Studio or Order PVC directory. Dedicated CSC print formatting for e-Aadhaar is rolling out next.',
+      liveBadge: 'Live Now',
+      comingSoonBadge: 'Coming Soon',
+      openToolBtn: 'Open Tool',
+      comingSoonNote: 'In Development',
+      browserOnlyTag: 'Secure Data Handling',
+      cscTag: 'CSC / VLE Ready',
+      farmerTitle: 'Farmer Summary Card',
+      farmerDesc:
+        'Extract farmer, land (up to 5 survey rows), and bank details from PM-Kisan / AgriStack PDFs with QR summary and CR80 export.',
+      farmerMeta: 'OCR + Manual + Custom Templates',
+      aadhaarTitle: 'e-Aadhaar Print Formatter',
+      aadhaarDesc:
+        'Unlock password-protected e-Aadhaar PDFs securely and auto-crop front & back to exact CR80 PVC card dimensions.',
+      aadhaarMeta: 'Secure Processing • Masked & Unmasked Print Crop',
+      pvcMakersTitle: 'Nearby PVC Print Centers',
+      pvcMakersDesc:
+        'Don’t own a PVC printer? Search verified CSC / Maha-e-Seva centers by district or pincode and send your PDF via WhatsApp.',
+      pvcMakersMeta: 'District & Pincode Search • Direct WhatsApp Order',
+    },
     liveCardPreview: 'Live Card Preview',
     defaultTemplateName: 'Template',
     renderingSample: 'Rendering sample card...',
@@ -222,7 +248,7 @@ export const en: Translations = {
     },
   },
   createCard: {
-    breadcrumbStudio: 'Card Maker Studio',
+    breadcrumbStudio: 'Farmer Summary Card',
     pageTitle: 'Create Your Farmer Summary Card',
     readingFile: 'Reading {fileName}...',
     fileSizeExceeded: 'File size exceeds the 5 MB limit. Please upload a PDF under 5 MB.',
@@ -598,7 +624,7 @@ export const en: Translations = {
     ifscLabel: 'IFSC Code:',
     fullAddressLabel: 'Full Address',
     footerNote:
-      'Farmer Details Card • This is strictly for personal convenience & informational reference.',
+      'Card Studio • Strictly for personal convenience & informational reference.',
     linkCopied: 'Link Copied',
     copyLink: 'Copy Link',
     openCardMaker: 'Open Card Maker',
@@ -621,7 +647,7 @@ export const en: Translations = {
   termsPage: {
     title: 'Terms and Conditions',
     subtitle:
-      'Please read these terms and conditions carefully before using the Farmer Details Card formatting service. By accessing this tool, you agree to comply with all terms stated herein.',
+      'Please read these terms and conditions carefully before using Card Studio. By accessing this tool, you agree to comply with all terms stated herein.',
     warningTitle: 'Crucial Non-Government Notice',
     warningBodyStart: 'This web application is an',
     warningBodyHighlight1: 'independent, third-party utility tool',
@@ -633,7 +659,7 @@ export const en: Translations = {
     warningBodyEnd: '.',
     s1Title: 'Acceptance of Terms',
     s1Body:
-      'By accessing, uploading any document to, or generating a card from the Farmer Details Card Maker ("we", "our", or "the Service"), you acknowledge that you have read, understood, and unconditionally agree to be bound by these Terms and Conditions. If you do not agree with any part of these terms, you must immediately refrain from using this website.',
+      'By accessing, uploading any document to, or generating a card from Card Studio ("we", "our", or "the Service"), you acknowledge that you have read, understood, and unconditionally agree to be bound by these Terms and Conditions. If you do not agree with any part of these terms, you must immediately refrain from using this website.',
     s2Title: 'Nature and Scope of Service',
     s2Intro:
       'The Service operates strictly as an automated text parsing and layout formatting utility:',
@@ -756,7 +782,7 @@ export const en: Translations = {
       'Comprehensive legal statement outlining the independent nature, absence of government affiliation, and non-statutory status of this utility tool.',
     bannerTitle: 'Important Legal Notice & Status Statement',
     bannerBody:
-      'This website (Farmer Details Card Maker) is an independent, non-governmental third-party software utility. It is NOT affiliated with, sponsored by, authorized by, or associated with the Government of India, the Ministry of Agriculture & Farmers Welfare, PM-KISAN, AgriStack, or any State/Central Government Department.',
+      'This website (Card Studio) is an independent, non-governmental third-party software utility. It is NOT affiliated with, sponsored by, authorized by, or associated with the Government of India, the Ministry of Agriculture & Farmers Welfare, PM-KISAN, AgriStack, UIDAI, Income Tax Department, or any State/Central Government Department.',
     s1Title: '1. Independent Third-Party Status',
     s1Body1:
       'This tool was developed independently to assist Indian farmers, agricultural families, and local Village Level Entrepreneurs (VLEs/CSC operators) in reading details from their official registration PDFs and formatting them into a neat summary card.',

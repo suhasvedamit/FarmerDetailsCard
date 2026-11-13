@@ -19,8 +19,13 @@ import {
   Plus,
   Pencil,
   Upload,
+  LayoutGrid,
+  Store,
+  FileBadge2,
+  Clock,
 } from 'lucide-react';
 import { AppPage, getPageUrl } from '../../lib/navigation';
+import { CARD_STUDIO_TOOLS, CardToolId } from '../../data/cardTools';
 import {
   CardTemplate,
   DEFAULT_CARD_TEMPLATE_ID,
@@ -163,11 +168,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                   </button>
 
                   <a
-                    href="#designs"
+                    href="#tools"
                     className="px-5 py-3.5 bg-white hover:bg-emerald-50/70 text-slate-800 border border-slate-300 hover:border-emerald-300 text-sm font-bold rounded-xl shadow-sm transition flex items-center justify-center space-x-2"
                   >
-                    <Layers className="w-4 h-4 text-emerald-700" />
-                    <span>{t.home.exploreDesignsBtn}</span>
+                    <LayoutGrid className="w-4 h-4 text-emerald-700" />
+                    <span>{t.home.exploreToolsBtn}</span>
                   </a>
                 </div>
               </div>
@@ -304,9 +309,177 @@ export const HomePage: React.FC<HomePageProps> = ({
         </section>
 
         {/* ========================================================= */}
-        {/* 2. PRODUCT METRICS / HIGHLIGHTS STRIP                     */}
+        {/* 2. CARD STUDIO TOOLS HUB (LIVE + UPCOMING CSC MODULES)    */}
         {/* ========================================================= */}
-        <section className="bg-white border-b border-slate-200">
+        <section id="tools" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-14 space-y-8">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div className="space-y-2 max-w-2xl">
+              <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>{t.home.toolsHub.badge}</span>
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                {t.home.toolsHub.title}
+              </h2>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                {t.home.toolsHub.subtitle}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-700 shadow-sm">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{t.home.toolsHub.browserOnlyTag}</span>
+              </span>
+              <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-700 shadow-sm">
+                <Printer className="w-3.5 h-3.5 text-sky-600" />
+                <span>{t.home.toolsHub.cscTag}</span>
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {CARD_STUDIO_TOOLS.map((tool) => {
+              const toolCopyMap: Record<
+                CardToolId,
+                { title: string; desc: string; meta: string; icon: React.ReactNode }
+              > = {
+                'farmer-card': {
+                  title: t.home.toolsHub.farmerTitle,
+                  desc: t.home.toolsHub.farmerDesc,
+                  meta: t.home.toolsHub.farmerMeta,
+                  icon: <CreditCard className="w-5 h-5" />,
+                },
+                'aadhaar-print': {
+                  title: t.home.toolsHub.aadhaarTitle,
+                  desc: t.home.toolsHub.aadhaarDesc,
+                  meta: t.home.toolsHub.aadhaarMeta,
+                  icon: <FileBadge2 className="w-5 h-5" />,
+                },
+                'pvc-makers': {
+                  title: t.home.toolsHub.pvcMakersTitle,
+                  desc: t.home.toolsHub.pvcMakersDesc,
+                  meta: t.home.toolsHub.pvcMakersMeta,
+                  icon: <Store className="w-5 h-5" />,
+                },
+              };
+
+              const accentClasses: Record<
+                typeof tool.accent,
+                { iconWrap: string; borderHover: string }
+              > = {
+                emerald: {
+                  iconWrap: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+                  borderHover: 'hover:border-emerald-400',
+                },
+                sky: {
+                  iconWrap: 'bg-sky-100 text-sky-700 border-sky-200',
+                  borderHover: 'hover:border-sky-300',
+                },
+                amber: {
+                  iconWrap: 'bg-amber-100 text-amber-700 border-amber-200',
+                  borderHover: 'hover:border-amber-300',
+                },
+              };
+
+              const copy = toolCopyMap[tool.id];
+              const accent = accentClasses[tool.accent];
+              const isLive = tool.status === 'live' && tool.page;
+
+              if (isLive && tool.page) {
+                return (
+                  <a
+                    key={tool.id}
+                    href={getPageUrl(tool.page)}
+                    onClick={(e) => {
+                      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+                      e.preventDefault();
+                      if (tool.page === 'create-card') {
+                        onLaunchCreateCard(previewTemplateId);
+                      } else if (tool.page) {
+                        onNavigate(tool.page);
+                      }
+                    }}
+                    className={`group bg-white rounded-2xl border border-slate-200 ${accent.borderHover} p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between gap-4`}
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div
+                          className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${accent.iconWrap}`}
+                        >
+                          {copy.icon}
+                        </div>
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                          <span>{t.home.toolsHub.liveBadge}</span>
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <h3 className="text-base font-extrabold text-slate-900 group-hover:text-emerald-800 transition">
+                          {copy.title}
+                        </h3>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          {copy.desc}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-medium text-slate-500 truncate">
+                        {copy.meta}
+                      </span>
+                      <span className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-emerald-700 group-hover:bg-emerald-600 text-white text-xs font-bold shrink-0 transition">
+                        <span>{t.home.toolsHub.openToolBtn}</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </span>
+                    </div>
+                  </a>
+                );
+              }
+
+              return (
+                <div
+                  key={tool.id}
+                  className="bg-white/80 rounded-2xl border border-dashed border-slate-300 p-5 flex flex-col justify-between gap-4"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div
+                        className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${accent.iconWrap}`}
+                      >
+                        {copy.icon}
+                      </div>
+                      <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                        <Clock className="w-3 h-3" />
+                        <span>{t.home.toolsHub.comingSoonBadge}</span>
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <h3 className="text-base font-bold text-slate-900">{copy.title}</h3>
+                      <p className="text-xs text-slate-600 leading-relaxed">{copy.desc}</p>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-medium text-slate-500 truncate">
+                      {copy.meta}
+                    </span>
+                    <span className="text-[11px] font-bold text-slate-400 shrink-0">
+                      {t.home.toolsHub.comingSoonNote}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* ========================================================= */}
+        {/* 3. PRODUCT METRICS / HIGHLIGHTS STRIP                     */}
+        {/* ========================================================= */}
+        <section className="bg-white border-y border-slate-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
               <div className="p-3 sm:p-4 rounded-xl bg-slate-50 border border-slate-200/80">

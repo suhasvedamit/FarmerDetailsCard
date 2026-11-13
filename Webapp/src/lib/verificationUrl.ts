@@ -179,13 +179,13 @@ export function compactToVerificationData(c: CompactFarmerPayload): FarmerVerifi
 }
 
 /**
- * Returns the base URL for the current application
+ * Returns the base verification URL for the current application
  */
 export function getBaseVerificationUrl(): string {
   if (typeof window !== 'undefined' && window.location) {
-    return `${window.location.origin}${window.location.pathname}`;
+    return `${window.location.origin}/verify`;
   }
-  return '';
+  return 'https://cardstudio.vedamit.com/verify';
 }
 
 /**

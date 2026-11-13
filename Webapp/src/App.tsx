@@ -29,8 +29,10 @@ import {
   extractVerificationDataFromUrl,
   FarmerVerificationData,
 } from './lib/verificationUrl';
+import { useLanguage } from './i18n';
 
 export const App: React.FC = () => {
+  const { t } = useLanguage();
   // Navigation & Page routing state
   const [currentPage, setCurrentPage] = useState<AppPage>(() => getPageFromUrl());
 
@@ -107,6 +109,21 @@ export const App: React.FC = () => {
       ? extractVerificationDataFromUrl()
       : null
   );
+
+  useEffect(() => {
+    const appName = t.common.appName;
+    const pageTitleMap: Record<AppPage, string> = {
+      home: t.meta.pageTitle,
+      'create-card': `${t.createCard.breadcrumbStudio} — ${appName}`,
+      'pvc-makers': `${t.pvcMakersPage.breadcrumbTitle} — ${appName}`,
+      verify: `${t.verificationPage.personalDetailsTitle} — ${appName}`,
+      terms: `${t.termsPage.title} — ${appName}`,
+      privacy: `${t.privacyPage.title} — ${appName}`,
+      contact: `${t.contactPage.title} — ${appName}`,
+      disclaimer: `${t.disclaimerPage.title} — ${appName}`,
+    };
+    document.title = pageTitleMap[currentPage] || t.meta.pageTitle;
+  }, [currentPage, t]);
 
   useEffect(() => {
     const handleLocationChange = () => {
