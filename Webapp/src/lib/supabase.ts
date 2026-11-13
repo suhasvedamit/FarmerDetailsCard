@@ -223,3 +223,46 @@ export async function saveGeneratedRecord(
     console.warn('[Supabase] Background sync error for generated_records (non-fatal):', err?.message || err);
   }
 }
+
+/**
+ * Saves payment details when user pays to unlock downloads.
+ * Guaranteed NEVER to throw or block the user interface.
+ */
+export async function savePaymentRecord(
+  record: FarmerRecord,
+  paymentId: string,
+  amount: number,
+  currency = 'INR',
+  orderId = '',
+  signature = ''
+): Promise<void> {
+  if (!supabase) {
+    return;
+  }
+
+  try {
+    const row = {
+      farmer_id: record.farmer_id || '',
+      farmer_name: record.farmer_name || '',
+      enrollment_no: record.enrollment_no || '',
+      payment_id: paymentId,
+      amount,
+      currency,
+      status: 'paid',
+      order_id: orderId,
+      signature: signature,
+      created_at: new Date().toISOString(),
+    };
+
+    const result = await withTimeout(
+      supabase.from('card_payments').insert([row])
+    );
+
+    if (result && result.error) {
+      console.warn('[Supabase] Background sync failed for card_payments (non-fatal):', result.error.message || result.error);
+    }
+  } catch (err: any) {
+    console.warn('[Supabase] Background sync error for card_payments (non-fatal):', err?.message || err);
+  }
+}
+

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CreditCard, Home, ChevronRight, Lock, Loader2 } from 'lucide-react';
 import { Header } from '../Header';
 import { DropZone } from '../DropZone';
@@ -8,6 +8,7 @@ import { FarmerForm } from '../FarmerForm';
 import { CardModal } from '../CardModal';
 import { DisclaimerModal } from '../DisclaimerModal';
 import { PhotoEditorModal } from '../PhotoEditorModal';
+import { EmptyFieldsAlertModal } from '../EmptyFieldsAlertModal';
 import { BackgroundSelector } from '../BackgroundSelector';
 import { Footer } from '../Footer';
 import { AppPage, getPageUrl } from '../../lib/navigation';
@@ -25,6 +26,7 @@ import {
   createWatermarkedPreviewCanvas,
 } from '../../lib/cardGenerator';
 import { saveExtractedRecord, saveGeneratedRecord } from '../../lib/supabase';
+import { hasEmptyFormFields } from '../../lib/formValidation';
 import { useLanguage } from '../../i18n';
 
 interface CreateCardPageProps {
@@ -69,6 +71,8 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
   const [cleanFrontUrl, setCleanFrontUrl] = useState('');
   const [cleanBackUrl, setCleanBackUrl] = useState('');
   const [isPhotoEditorOpen, setIsPhotoEditorOpen] = useState(false);
+  const [emptyFieldsAlertOpen, setEmptyFieldsAlertOpen] = useState(false);
+  const formSectionRef = useRef<HTMLDivElement>(null);
 
   // Re-open Card Preview modal when returning from PVC Makers page
   useEffect(() => {
@@ -191,6 +195,28 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
     }
   };
 
+  // Check form completeness before generating; prompt with alert if any field is empty
+  const handleInitiateGenerateCard = () => {
+    if (isProcessing) return;
+    if (hasEmptyFormFields(data)) {
+      setEmptyFieldsAlertOpen(true);
+      return;
+    }
+    handleGenerateCard();
+  };
+
+  // User chose to proceed anyway with empty fields
+  const handleProceedAnyway = () => {
+    setEmptyFieldsAlertOpen(false);
+    handleGenerateCard();
+  };
+
+  // User chose to edit the form
+  const handleEditFormFromAlert = () => {
+    setEmptyFieldsAlertOpen(false);
+    formSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const generateButtonLabel =
     dataSource === 'pdf'
       ? t.createCard.btnReviewAndGenerate
@@ -213,7 +239,7 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
 
       <button
         type="button"
-        onClick={handleGenerateCard}
+        onClick={handleInitiateGenerateCard}
         disabled={isProcessing}
         className="w-full py-3.5 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm sm:text-base font-bold rounded-xl shadow-md shadow-emerald-700/15 transition flex items-center justify-center space-x-2 cursor-pointer"
       >
@@ -311,7 +337,7 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
           </div>
 
           {/* Form & Photo Workspace */}
-          <div className="relative animate-fadeIn">
+          <div ref={formSectionRef} className="relative animate-fadeIn">
             <fieldset
               disabled={isProcessing}
               aria-busy={isProcessing}
@@ -396,6 +422,13 @@ export const CreateCardPage: React.FC<CreateCardPageProps> = ({
             )}
           </div>
         </main>
+
+        {/* Incomplete Form Fields Warning Modal */}
+        <EmptyFieldsAlertModal
+          isOpen={emptyFieldsAlertOpen}
+          onProceedAnyway={handleProceedAnyway}
+          onEditForm={handleEditFormFromAlert}
+        />
 
         {/* Card Generation Modal (Front & Back) */}
         <CardModal

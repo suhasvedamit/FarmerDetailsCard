@@ -80,92 +80,33 @@ export function hasFarmerRecordContent(record: FarmerRecord): boolean {
   );
 }
 
-function stripHeavyFields(
-  record: FarmerRecord,
-  level: 'pdf_only' | 'all_raw' | 'all_images'
-): FarmerRecord {
-  const next: FarmerRecord = { ...record };
-  delete next.pdf_page_image_url;
-  if (level === 'all_raw' || level === 'all_images') {
-    delete next.raw_photo_url;
+// Automatically purge any previously cached draft data for privacy
+if (typeof window !== 'undefined') {
+  try {
+    window.sessionStorage?.removeItem(CARD_DRAFT_STORAGE_KEY);
+    window.localStorage?.removeItem(CARD_DRAFT_STORAGE_KEY);
+  } catch {
+    // ignore
   }
-  if (level === 'all_images') {
-    delete next.photo_url;
-    delete next.photo_base64;
-  }
-  return next;
 }
 
-export function saveCardDraft(draft: CardDraftState): void {
-  if (typeof window === 'undefined' || !window.sessionStorage) return;
-
-  // Strip heavy PDF page bitmap from originalExtractedData since it's only used for diffing
-  const sanitizedOriginal = draft.originalExtractedData
-    ? stripHeavyFields(draft.originalExtractedData, 'all_images')
-    : null;
-
-  const tryPersist = (dataCopy: FarmerRecord): boolean => {
-    try {
-      const payload: CardDraftState = {
-        ...draft,
-        data: dataCopy,
-        originalExtractedData: sanitizedOriginal,
-      };
-      window.sessionStorage.setItem(CARD_DRAFT_STORAGE_KEY, JSON.stringify(payload));
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  if (tryPersist(draft.data)) return;
-  if (tryPersist(stripHeavyFields(draft.data, 'pdf_only'))) return;
-  if (tryPersist(stripHeavyFields(draft.data, 'all_raw'))) return;
-  tryPersist(stripHeavyFields(draft.data, 'all_images'));
+export function saveCardDraft(_draft: CardDraftState): void {
+  // Details are kept strictly in-memory in React state (App.tsx).
+  // Never stored in localStorage, sessionStorage, or browser cache for farmer privacy.
+  clearCardDraft();
 }
 
 export function loadCardDraft(): CardDraftState {
-  const fallback = createInitialCardDraft();
-  if (typeof window === 'undefined' || !window.sessionStorage) return fallback;
-
-  try {
-    const raw = window.sessionStorage.getItem(CARD_DRAFT_STORAGE_KEY);
-    if (!raw) return fallback;
-    const parsed = JSON.parse(raw) as Partial<CardDraftState>;
-    if (!parsed || !parsed.data) return fallback;
-
-    const empty = createEmptyFarmerRecord();
-    return {
-      data: {
-        ...empty,
-        ...parsed.data,
-        land_detail: {
-          ...empty.land_detail,
-          ...(parsed.data.land_detail || {}),
-        },
-        bank_detail: {
-          ...empty.bank_detail,
-          ...(parsed.data.bank_detail || {}),
-        },
-        land_records:
-          parsed.data.land_records && parsed.data.land_records.length > 0
-            ? parsed.data.land_records
-            : empty.land_records,
-      },
-      originalExtractedData: parsed.originalExtractedData || null,
-      dataSource: parsed.dataSource === 'pdf' ? 'pdf' : 'manual',
-      uploadedFileName: parsed.uploadedFileName || '',
-      sessionId: parsed.sessionId || createSessionId(),
-    };
-  } catch {
-    return fallback;
-  }
+  // Details are kept strictly in-memory — no local storage or cache.
+  clearCardDraft();
+  return createInitialCardDraft();
 }
 
 export function clearCardDraft(): void {
-  if (typeof window === 'undefined' || !window.sessionStorage) return;
+  if (typeof window === 'undefined') return;
   try {
-    window.sessionStorage.removeItem(CARD_DRAFT_STORAGE_KEY);
+    window.sessionStorage?.removeItem(CARD_DRAFT_STORAGE_KEY);
+    window.localStorage?.removeItem(CARD_DRAFT_STORAGE_KEY);
   } catch {
     // ignore storage errors
   }

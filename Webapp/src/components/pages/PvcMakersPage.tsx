@@ -13,12 +13,18 @@ import {
   CheckCircle2,
   Clock,
   Store,
+  Lock,
 } from 'lucide-react';
 import { FarmerRecord } from '../../types';
 import { AppPage, getPageUrl } from '../../lib/navigation';
 import { hasFarmerRecordContent } from '../../lib/cardDraftStorage';
 import { createCardPdf, downloadCardAsPdf, getCardPdfFilename } from '../../lib/cardGenerator';
 import { getCardTemplate, useCardTemplates } from '../../lib/cardTemplates';
+import {
+  isCardPaid,
+  openRazorpayCheckout,
+  getCardDownloadPriceInr,
+} from '../../lib/payment';
 import {
   PVC_MAKERS,
   PvcMakerAgent,
@@ -78,8 +84,14 @@ export const PvcMakersPage: React.FC<PvcMakersPageProps> = ({
   const [isDownloadingPdf, setIsDownloadingPdf] = useState<boolean>(false);
   const [preparedPdfUrl, setPreparedPdfUrl] = useState<string>('');
   const [orderNotice, setOrderNotice] = useState<OrderNoticeState | null>(null);
+  const [isPaid, setIsPaid] = useState<boolean>(() => isCardPaid(activeRecord));
+  const priceInr = getCardDownloadPriceInr();
 
   const hasAutoDownloadedRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    setIsPaid(isCardPaid(activeRecord));
+  }, [activeRecord]);
 
   const activeTemplate = getCardTemplate(selectedTemplateId);
   const pdfFilename = useMemo(
@@ -142,8 +154,7 @@ export const PvcMakersPage: React.FC<PvcMakersPageProps> = ({
     setSelectedDistrict('');
   };
 
-  const handleDownloadPdf = async () => {
-    if (!hasCardData || isDownloadingPdf) return;
+  const executeDownload = async () => {
     if (preparedPdfUrl) {
       triggerBlobDownload(preparedPdfUrl, pdfFilename);
       hasAutoDownloadedRef.current = true;
@@ -164,6 +175,24 @@ export const PvcMakersPage: React.FC<PvcMakersPageProps> = ({
     }
   };
 
+  const handleDownloadPdf = async () => {
+    if (!hasCardData || isDownloadingPdf) return;
+
+    if (!isPaid) {
+      openRazorpayCheckout({
+        record: activeRecord,
+        amountInr: priceInr,
+        onSuccess: () => {
+          setIsPaid(true);
+          void executeDownload();
+        },
+      });
+      return;
+    }
+
+    await executeDownload();
+  };
+
   const handleOrderOnWhatsApp = (agent: PvcMakerAgent) => {
     const waUrl = buildPvcOrderWhatsAppUrl(agent, {
       record: activeRecord,
@@ -174,12 +203,31 @@ export const PvcMakersPage: React.FC<PvcMakersPageProps> = ({
     });
     if (!waUrl) return;
 
+    if (hasCardData && !isPaid) {
+      openRazorpayCheckout({
+        record: activeRecord,
+        amountInr: priceInr,
+        onSuccess: () => {
+          setIsPaid(true);
+          window.open(waUrl, '_blank', 'noopener,noreferrer');
+          void executeDownload();
+          setOrderNotice({
+            agentId: agent.id,
+            shopName: getAgentShopName(agent, language),
+            waUrl,
+            fileName: pdfFilename,
+          });
+        },
+      });
+      return;
+    }
+
     // Open WhatsApp synchronously in click handler to avoid browser popup blockers
     window.open(waUrl, '_blank', 'noopener,noreferrer');
 
     if (hasCardData) {
       if (!hasAutoDownloadedRef.current) {
-        void handleDownloadPdf();
+        void executeDownload();
       }
       setOrderNotice({
         agentId: agent.id,
@@ -299,7 +347,11 @@ export const PvcMakersPage: React.FC<PvcMakersPageProps> = ({
               onClick={() => handleOrderOnWhatsApp(agent)}
               className="flex-1 sm:flex-none px-4 py-2.5 bg-emerald-700 hover:bg-emerald-600 active:scale-95 text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm hover:shadow transition flex items-center justify-center space-x-2 cursor-pointer"
             >
-              <MessageCircle className="w-4 h-4 shrink-0" />
+              {hasCardData && !isPaid ? (
+                <Lock className="w-4 h-4 text-amber-300 shrink-0" />
+              ) : (
+                <MessageCircle className="w-4 h-4 shrink-0" />
+              )}
               <span>{t.pvcMakersPage.shareOrderWhatsAppBtn}</span>
             </button>
           )}

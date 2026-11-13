@@ -260,6 +260,13 @@ export const mr: Translations = {
     overlayFallbackMsg: 'अपलोड केलेला दस्तऐवज वाचत आहे...',
     btnReviewAndGenerate: 'बदल तपासा आणि कार्ड तयार करा',
     btnPreviewAndGenerate: 'प्रीव्ह्यू पहा आणि कार्ड तयार करा',
+    emptyFieldsAlertTitle: 'माहिती भरणे बाकी आहे',
+    emptyFieldsAlertSubtitle: '',
+    emptyFieldsAlertDesc:
+      'फॉर्ममधील काही माहिती रिकामी आहे. तुम्हाला फॉर्म दुरुस्त करायचा आहे की पुढे जायचे आहे?',
+    emptyFieldsBadge: '',
+    btnEditForm: 'फॉर्म दुरुस्त करा',
+    btnProceedAnyway: 'तरीही पुढे जा',
   },
   dropZone: {
     recommendedBadge: 'स्मार्ट ऑटो-एक्स्ट्रॅक्ट • शिफारस केलेले',
@@ -533,6 +540,17 @@ export const mr: Translations = {
     orderPvcBtn: 'PVC ऑर्डर करा',
     orderPvcTitle: 'PVC प्रिंटर नाही का? जवळचे PVC कार्ड मेकर पहा',
     orderPvcHint: 'PVC प्रिंटर नसल्यास जवळच्या मेकरकडून ऑर्डर करण्यासाठी "PVC ऑर्डर करा" वर क्लिक करा.',
+    downloadLockedTitle: 'कार्ड डाउनलोड (PNG व PDF) अनलॉक करण्यासाठी पेमेंट आवश्यक',
+    downloadLockedHeader: 'डाउनलोड लॉक आहे',
+    downloadLockedSub: 'या कार्डचे उच्च दर्जाचे PNG, PDF आणि प्रिंट पर्याय अनलॉक करण्यासाठी एकदा ₹{amount} भरा.',
+    payToUnlockBtn: '⚡ ₹{amount} भरा व अनलॉक करा',
+    lockedTag: 'लॉक',
+    paidBadge: '✓ अनलॉक',
+    paymentSuccessToast: 'पेमेंट यशस्वी! {name} यांच्या कार्डचे डाउनलोड आणि प्रिंट पर्याय आता अनलॉक झाले आहेत.',
+    printLockedHeader: 'प्रिंट पर्याय लॉक आहे',
+    printLockedSub: 'डाउनलोड अनलॉक केल्यास PVC कार्ड आणि A4 शीट प्रिंटिंग देखील अनलॉक होईल.',
+    editFormBtn: 'फॉर्म दुरुस्त करा',
+    emptyFieldsNotice: 'या कार्डवरील काही माहिती रिकामी आहे. माहिती भरण्यासाठी फॉर्म दुरुस्त करू शकता.',
   },
   cardCanvas: {
     photoPlaceholder: 'फोटो',
@@ -867,5 +885,6 @@ export const mr: Translations = {
       'कृपया {shopName} सोबतच्या WhatsApp चॅटमध्ये "{fileName}" ही फाइल जोडा. तुमचा शेतकरी तपशील संदेशात आपोआप भरला आहे.',
     downloadAgainLink: 'PDF पुन्हा डाउनलोड करा',
     openWhatsAppAgainLink: 'WhatsApp पुन्हा उघडा',
+    downloadLockedAlert: 'PDF पाठवण्यापूर्वी कृपया कार्ड डाउनलोड अनलॉक करण्यासाठी पेमेंट करा.',
   },
 };

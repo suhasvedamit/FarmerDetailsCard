@@ -11,6 +11,9 @@ import {
   ChevronDown,
   Loader2,
   ShoppingBag,
+  Lock,
+  ShieldCheck,
+  CheckCircle2,
 } from 'lucide-react';
 import { FarmerRecord } from '../types';
 import logoImg from '../assets/logo.png';
@@ -26,7 +29,12 @@ import {
   combineCardCanvases,
   createWatermarkedPreviewCanvas,
 } from '../lib/cardGenerator';
-import { useLanguage } from '../i18n';
+import { useLanguage, formatMessage } from '../i18n';
+import {
+  isCardPaid,
+  openRazorpayCheckout,
+  getCardDownloadPriceInr,
+} from '../lib/payment';
 
 interface CardModalProps {
   isOpen: boolean;
@@ -66,8 +74,19 @@ export const CardModal: React.FC<CardModalProps> = ({
   const [isLoadingPreviews, setIsLoadingPreviews] = useState<boolean>(false);
   const [openMenu, setOpenMenu] = useState<'download' | 'print' | null>(null);
   const [busyAction, setBusyAction] = useState<'download' | 'print' | null>(null);
+  const [isPaid, setIsPaid] = useState<boolean>(() => isCardPaid(record));
+  const [isProcessingPayment, setIsProcessingPayment] = useState<boolean>(false);
+  const [paymentSuccessToast, setPaymentSuccessToast] = useState<string | null>(null);
   const downloadMenuRef = useRef<HTMLDivElement>(null);
   const printMenuRef = useRef<HTMLDivElement>(null);
+
+  const priceInr = getCardDownloadPriceInr();
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsPaid(isCardPaid(record));
+    }
+  }, [isOpen, record]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -197,9 +216,9 @@ export const CardModal: React.FC<CardModalProps> = ({
   const preRenderedCards =
     !isLoadingPreviews && (exportFrontUrl || exportBackUrl)
       ? {
-          frontDataUrl: exportFrontUrl || undefined,
-          backDataUrl: exportBackUrl || undefined,
-        }
+        frontDataUrl: exportFrontUrl || undefined,
+        backDataUrl: exportBackUrl || undefined,
+      }
       : undefined;
 
   const sideExportOptions = {
@@ -210,12 +229,41 @@ export const CardModal: React.FC<CardModalProps> = ({
 
   const isBusy = busyAction !== null;
 
+  const handlePayToUnlock = (pendingAction?: () => Promise<void> | void) => {
+    if (isProcessingPayment) return;
+    setIsProcessingPayment(true);
+    openRazorpayCheckout({
+      record,
+      amountInr: priceInr,
+      onSuccess: () => {
+        setIsPaid(true);
+        setIsProcessingPayment(false);
+        setPaymentSuccessToast(
+          formatMessage(t.cardModal.paymentSuccessToast, {
+            name: record.farmer_name || 'Farmer',
+          })
+        );
+        setTimeout(() => setPaymentSuccessToast(null), 7000);
+        if (pendingAction) {
+          void pendingAction();
+        }
+      },
+      onFailure: (err) => {
+        setIsProcessingPayment(false);
+        console.warn('[Payment] Checkout not completed:', err);
+      },
+      onDismiss: () => {
+        setIsProcessingPayment(false);
+      },
+    });
+  };
+
   const runExportAction = async (
     kind: 'download' | 'print',
     action: () => Promise<void>,
     onErrorMsg?: string
   ) => {
-    if (isBusy || isLoadingPreviews) return;
+    if (isBusy || isLoadingPreviews || isProcessingPayment) return;
     setOpenMenu(null);
     setBusyAction(kind);
     try {
@@ -238,11 +286,20 @@ export const CardModal: React.FC<CardModalProps> = ({
       ),
       sub: t.cardModal.downloadImageSub,
       hoverClass: 'hover:bg-emerald-50 hover:text-emerald-800',
-      icon: <ImageIcon className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />,
-      onClick: () =>
-        runExportAction('download', () =>
-          downloadCardAsPng(record, activeSide, undefined, selectedTemplateId, { language })
-        ),
+      icon: !isPaid ? (
+        <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+      ) : (
+        <ImageIcon className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+      ),
+      onClick: () => {
+        const action = () =>
+          downloadCardAsPng(record, activeSide, undefined, selectedTemplateId, { language });
+        if (!isPaid) {
+          handlePayToUnlock(() => runExportAction('download', action));
+        } else {
+          runExportAction('download', action);
+        }
+      },
     },
     {
       key: 'pdf',
@@ -253,11 +310,20 @@ export const CardModal: React.FC<CardModalProps> = ({
       ),
       sub: t.cardModal.downloadPdfSub,
       hoverClass: 'hover:bg-teal-50 hover:text-teal-800',
-      icon: <FileText className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />,
-      onClick: () =>
-        runExportAction('download', () =>
-          downloadCardAsPdf(record, undefined, selectedTemplateId, sideExportOptions)
-        ),
+      icon: !isPaid ? (
+        <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+      ) : (
+        <FileText className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
+      ),
+      onClick: () => {
+        const action = () =>
+          downloadCardAsPdf(record, undefined, selectedTemplateId, sideExportOptions);
+        if (!isPaid) {
+          handlePayToUnlock(() => runExportAction('download', action));
+        } else {
+          runExportAction('download', action);
+        }
+      },
     },
   ];
 
@@ -271,13 +337,19 @@ export const CardModal: React.FC<CardModalProps> = ({
       ),
       sub: t.cardModal.pvcPrintSub,
       hoverClass: 'hover:bg-indigo-50 hover:text-indigo-800',
-      icon: <CreditCard className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />,
-      onClick: () =>
-        runExportAction(
-          'print',
-          () => printCardForPvc(record, selectedTemplateId, sideExportOptions),
-          t.cardModal.pvcPrintFailed
-        ),
+      icon: !isPaid ? (
+        <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+      ) : (
+        <CreditCard className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+      ),
+      onClick: () => {
+        const action = () => printCardForPvc(record, selectedTemplateId, sideExportOptions);
+        if (!isPaid) {
+          handlePayToUnlock(() => runExportAction('print', action, t.cardModal.pvcPrintFailed));
+        } else {
+          runExportAction('print', action, t.cardModal.pvcPrintFailed);
+        }
+      },
     },
     {
       key: 'a4',
@@ -288,11 +360,20 @@ export const CardModal: React.FC<CardModalProps> = ({
       ),
       sub: t.cardModal.a4PrintSub,
       hoverClass: 'hover:bg-sky-50 hover:text-sky-800',
-      icon: <FileText className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />,
-      onClick: () =>
-        runExportAction('print', () =>
-          downloadCardPrintSheetPdf(record, undefined, selectedTemplateId, sideExportOptions)
-        ),
+      icon: !isPaid ? (
+        <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+      ) : (
+        <FileText className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
+      ),
+      onClick: () => {
+        const action = () =>
+          downloadCardPrintSheetPdf(record, undefined, selectedTemplateId, sideExportOptions);
+        if (!isPaid) {
+          handlePayToUnlock(() => runExportAction('print', action));
+        } else {
+          runExportAction('print', action);
+        }
+      },
     },
   ];
 
@@ -411,6 +492,55 @@ export const CardModal: React.FC<CardModalProps> = ({
           )}
         </div>
 
+        {paymentSuccessToast && (
+          <div className="bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-xl px-4 py-2.5 text-xs font-semibold flex items-center justify-between gap-2 shadow-sm animate-fadeIn">
+            <div className="flex items-center space-x-2 min-w-0">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span className="truncate">{paymentSuccessToast}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPaymentSuccessToast(null)}
+              className="text-emerald-700 hover:text-emerald-900 p-0.5 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Complete Payment Lock Bar (Shown on complete bar when unpaid) */}
+        {!isPaid && (
+          <div className="w-full bg-gradient-to-r from-amber-50 via-amber-100/60 to-emerald-50 border-2 border-amber-400 rounded-2xl p-3.5 sm:px-5 sm:py-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md animate-fadeIn">
+            <div className="flex items-center space-x-3 text-slate-800 w-full sm:w-auto min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow shrink-0">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 text-left">
+                <div className="text-xs sm:text-sm font-bold text-amber-950 flex items-center gap-2">
+                  <span>{t.cardModal.downloadLockedHeader}</span>
+                </div>
+                <p className="text-[11px] sm:text-xs text-amber-900/80 truncate sm:whitespace-normal">
+                  {formatMessage(t.cardModal.downloadLockedSub, { amount: priceInr })}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handlePayToUnlock()}
+              disabled={isProcessingPayment}
+              className="w-full sm:w-auto px-5 py-2.5 bg-emerald-700 hover:bg-emerald-600 active:scale-95 disabled:opacity-60 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md flex items-center justify-center space-x-2 shrink-0 cursor-pointer transition"
+            >
+              {isProcessingPayment ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Lock className="w-4 h-4 text-emerald-200" />
+              )}
+              <span>{formatMessage(t.cardModal.payToUnlockBtn, { amount: priceInr })}</span>
+            </button>
+          </div>
+        )}
+
         {/* Action Buttons Toolbar */}
         <div className="flex flex-col lg:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100">
           <p className="text-sm text-slate-500 text-center lg:text-left">
@@ -422,15 +552,23 @@ export const CardModal: React.FC<CardModalProps> = ({
             <div ref={downloadMenuRef} className="sm:relative inline-flex">
               <button
                 type="button"
-                onClick={() => setOpenMenu((prev) => (prev === 'download' ? null : 'download'))}
-                disabled={isBusy || isLoadingPreviews}
-                title={t.cardModal.downloadTitle}
+                onClick={() => {
+                  if (!isPaid) {
+                    handlePayToUnlock();
+                    return;
+                  }
+                  setOpenMenu((prev) => (prev === 'download' ? null : 'download'));
+                }}
+                disabled={isBusy || isLoadingPreviews || isProcessingPayment}
+                title={!isPaid ? t.cardModal.downloadLockedTitle : t.cardModal.downloadTitle}
                 aria-haspopup="menu"
                 aria-expanded={openMenu === 'download'}
                 className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-600 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-bold rounded-lg shadow-sm hover:shadow transition flex items-center space-x-1.5 cursor-pointer"
               >
-                {busyAction === 'download' ? (
+                {busyAction === 'download' || isProcessingPayment ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
+                ) : !isPaid ? (
+                  <Lock className="w-4 h-4 text-amber-300" />
                 ) : (
                   <Download className="w-4 h-4 text-emerald-100" />
                 )}
@@ -461,8 +599,14 @@ export const CardModal: React.FC<CardModalProps> = ({
                     >
                       {item.icon}
                       <div className="min-w-0">
-                        <div className="text-xs sm:text-sm font-semibold leading-tight">
-                          {item.label}
+                        <div className="text-xs sm:text-sm font-semibold leading-tight flex items-center gap-1.5">
+                          <span>{item.label}</span>
+                          {!isPaid && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                              <Lock className="w-2.5 h-2.5" />
+                              <span>{t.cardModal.lockedTag}</span>
+                            </span>
+                          )}
                         </div>
                         <div className="text-[11px] text-slate-500 mt-0.5">
                           {item.sub}
@@ -478,15 +622,23 @@ export const CardModal: React.FC<CardModalProps> = ({
             <div ref={printMenuRef} className="sm:relative inline-flex">
               <button
                 type="button"
-                onClick={() => setOpenMenu((prev) => (prev === 'print' ? null : 'print'))}
-                disabled={isBusy || isLoadingPreviews}
-                title={t.cardModal.printTitle}
+                onClick={() => {
+                  if (!isPaid) {
+                    handlePayToUnlock();
+                    return;
+                  }
+                  setOpenMenu((prev) => (prev === 'print' ? null : 'print'));
+                }}
+                disabled={isBusy || isLoadingPreviews || isProcessingPayment}
+                title={!isPaid ? t.cardModal.printLockedHeader : t.cardModal.printTitle}
                 aria-haspopup="menu"
                 aria-expanded={openMenu === 'print'}
                 className="px-4 py-2.5 bg-indigo-700 hover:bg-indigo-600 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-bold rounded-lg shadow-sm hover:shadow transition flex items-center space-x-1.5 cursor-pointer"
               >
-                {busyAction === 'print' ? (
+                {busyAction === 'print' || isProcessingPayment ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
+                ) : !isPaid ? (
+                  <Lock className="w-4 h-4 text-amber-300" />
                 ) : (
                   <Printer className="w-4 h-4 text-indigo-100" />
                 )}
@@ -517,8 +669,14 @@ export const CardModal: React.FC<CardModalProps> = ({
                     >
                       {item.icon}
                       <div className="min-w-0">
-                        <div className="text-xs sm:text-sm font-semibold leading-tight">
-                          {item.label}
+                        <div className="text-xs sm:text-sm font-semibold leading-tight flex items-center gap-1.5">
+                          <span>{item.label}</span>
+                          {!isPaid && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                              <Lock className="w-2.5 h-2.5" />
+                              <span>{t.cardModal.lockedTag}</span>
+                            </span>
+                          )}
                         </div>
                         <div className="text-[11px] text-slate-500 mt-0.5">
                           {item.sub}

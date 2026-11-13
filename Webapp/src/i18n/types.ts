@@ -240,6 +240,12 @@ export interface Translations {
     overlayFallbackMsg: string;
     btnReviewAndGenerate: string;
     btnPreviewAndGenerate: string;
+    emptyFieldsAlertTitle: string;
+    emptyFieldsAlertSubtitle: string;
+    emptyFieldsAlertDesc: string;
+    emptyFieldsBadge: string;
+    btnEditForm: string;
+    btnProceedAnyway: string;
   };
   dropZone: {
     recommendedBadge: string;
@@ -510,6 +516,17 @@ export interface Translations {
     orderPvcBtn: string;
     orderPvcTitle: string;
     orderPvcHint: string;
+    downloadLockedTitle: string;
+    downloadLockedHeader: string;
+    downloadLockedSub: string;
+    payToUnlockBtn: string;
+    lockedTag: string;
+    paidBadge: string;
+    paymentSuccessToast: string;
+    printLockedHeader: string;
+    printLockedSub: string;
+    editFormBtn: string;
+    emptyFieldsNotice: string;
   };
   cardCanvas: {
     photoPlaceholder: string;
@@ -757,6 +774,7 @@ export interface Translations {
     pdfSentNoticeDesc: string;
     downloadAgainLink: string;
     openWhatsAppAgainLink: string;
+    downloadLockedAlert: string;
   };
 }
 

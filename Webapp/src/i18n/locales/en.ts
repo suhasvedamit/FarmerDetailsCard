@@ -261,6 +261,13 @@ export const en: Translations = {
     overlayFallbackMsg: 'Reading uploaded document...',
     btnReviewAndGenerate: 'Review Changes and Generate Card',
     btnPreviewAndGenerate: 'Preview & Generate ID Card',
+    emptyFieldsAlertTitle: 'Fields Are Missing',
+    emptyFieldsAlertSubtitle: '',
+    emptyFieldsAlertDesc:
+      'Some fields on the form are empty. Do you want to edit the form or proceed anyway?',
+    emptyFieldsBadge: '',
+    btnEditForm: 'Edit Form',
+    btnProceedAnyway: 'Proceed Anyway',
   },
   dropZone: {
     recommendedBadge: 'Smart Auto-Extract • Recommended',
@@ -537,6 +544,17 @@ export const en: Translations = {
     orderPvcBtn: 'Order PVC',
     orderPvcTitle: 'No PVC printer? Find a nearby PVC maker agent',
     orderPvcHint: 'No PVC printer? Click Order PVC to find a nearby maker.',
+    downloadLockedTitle: 'Payment required to unlock card downloads (PNG & PDF)',
+    downloadLockedHeader: 'Downloads are locked',
+    downloadLockedSub: 'Pay ₹{amount} once to unlock high-resolution PNG, PDF & print exports for this card.',
+    payToUnlockBtn: '⚡ Pay ₹{amount} to Unlock',
+    lockedTag: 'Locked',
+    paidBadge: '✓ Unlocked',
+    paymentSuccessToast: 'Payment successful! Downloads & print options are now unlocked for {name}.',
+    printLockedHeader: 'Printing is locked',
+    printLockedSub: 'Unlocking download also unlocks PVC Card & A4 sheet printing for this card.',
+    editFormBtn: 'Edit Form',
+    emptyFieldsNotice: 'Some details on this card are empty. You can return to edit the form at any time.',
   },
   cardCanvas: {
     photoPlaceholder: 'Photo',
@@ -879,6 +897,7 @@ export const en: Translations = {
       'Please attach "{fileName}" in the WhatsApp chat with {shopName}. Your farmer details are already filled in the message.',
     downloadAgainLink: 'Download PDF again',
     openWhatsAppAgainLink: 'Open WhatsApp again',
+    downloadLockedAlert: 'Please pay to unlock card downloads before sending PDF.',
   },
 };
 
