@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { UploadCloud, Sparkles, Zap, FileCheck2 } from 'lucide-react';
+import { UploadCloud, Sparkles, Zap, FileCheck2, ExternalLink } from 'lucide-react';
+import samplePdfUrl from '../assets/sample-farmer-registration.pdf';
 import { useLanguage } from '../i18n';
 
 interface DropZoneProps {
@@ -102,6 +103,22 @@ export const DropZone: React.FC<DropZoneProps> = ({
           <h2 className="text-lg sm:text-2xl font-extrabold text-slate-900 tracking-tight">
             {t.dropZone.heading}
           </h2>
+
+          <p className="text-xs sm:text-sm text-slate-600 font-medium">
+            <span className="text-[#7c2d12] font-bold underline underline-offset-2 decoration-[#7c2d12]">
+              {t.dropZone.govPdfNotice}
+            </span>{' '}
+            <a
+              href={samplePdfUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 font-semibold text-emerald-700 hover:text-emerald-800 underline underline-offset-2 hover:no-underline transition"
+            >
+              <span>{t.dropZone.sampleAttachedText}</span>
+              <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+            </a>
+          </p>
         </div>
       </div>
 

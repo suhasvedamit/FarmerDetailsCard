@@ -273,6 +273,8 @@ export const mr: Translations = {
     noTypingBadge: 'हाताने टाइप करण्याची गरज नाही',
     extractedBadge: 'वाचलेली फाइल: {fileName}',
     heading: 'सर्व माहिती आपोआप भरण्यासाठी शेतकरी नोंदणी PDF अपलोड करा',
+    govPdfNotice: 'केवळ शासन-अधिकृत शेतकरी नोंदणी PDF अपलोड करा.',
+    sampleAttachedText: 'केवळ संदर्भासाठी नमुना प्रत सोबत जोडली आहे.',
     selectPdfLink: 'PDF निवडा (आपोआप भरण्यासाठी)',
     dragDropRest: 'किंवा तुमची शेतकरी नोंदणी PDF येथे ड्रॅग आणि ड्रॉप करा',
     supportsHint: '५ MB पर्यंतच्या PDF फाइल्सना सपोर्ट • जलद OCR द्वारे लगेच कार्ड मिळवा',

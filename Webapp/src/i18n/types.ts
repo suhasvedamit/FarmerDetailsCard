@@ -252,6 +252,8 @@ export interface Translations {
     noTypingBadge: string;
     extractedBadge: string;
     heading: string;
+    govPdfNotice: string;
+    sampleAttachedText: string;
     selectPdfLink: string;
     dragDropRest: string;
     supportsHint: string;

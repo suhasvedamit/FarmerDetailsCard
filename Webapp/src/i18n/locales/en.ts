@@ -274,6 +274,8 @@ export const en: Translations = {
     noTypingBadge: 'No Manual Typing Needed',
     extractedBadge: 'Extracted: {fileName}',
     heading: 'Upload Farmer Registration PDF to Auto-Fill Everything',
+    govPdfNotice: 'Upload only the Government-authorized Farmer Registration PDF.',
+    sampleAttachedText: 'Sample attached for reference only.',
     selectPdfLink: 'Select PDF to Auto-Extract',
     dragDropRest: 'or drag and drop your Farmer Registration PDF here',
     supportsHint: 'Supports PDF files up to 5 MB • Quick OCR extraction — get your card immediately',
