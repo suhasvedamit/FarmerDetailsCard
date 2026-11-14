@@ -38,7 +38,7 @@ export const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate }) => {
           onClick={(e) => handleNavClick(e, 'home')}
           className="flex items-center space-x-2.5 sm:space-x-3 group focus:outline-none min-w-0"
         >
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center p-1 shadow-sm border border-emerald-500/40 bg-white/95 group-hover:scale-105 transition-transform shrink-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center p-1 shadow-sm border border-emerald-500/40 bg-white/95 group-hover:scale-105 transition-transform shrink-0">
             <img src={logoImg} alt={t.common.appName} className="w-full h-full object-contain" />
           </div>
           <div className="min-w-0">
@@ -63,11 +63,10 @@ export const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate }) => {
                   key={item.page}
                   href={getPageUrl(item.page)}
                   onClick={(e) => handleNavClick(e, item.page)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 ${
-                    isActive
-                      ? 'bg-emerald-950/70 text-white border border-emerald-500/40 shadow-sm'
-                      : 'text-emerald-100/90 hover:text-white hover:bg-emerald-700/60 border border-transparent'
-                  }`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 ${isActive
+                    ? 'bg-emerald-950/70 text-white border border-emerald-500/40 shadow-sm'
+                    : 'text-emerald-100/90 hover:text-white hover:bg-emerald-700/60 border border-transparent'
+                    }`}
                 >
                   <span>{item.label}</span>
                 </a>
@@ -80,11 +79,10 @@ export const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate }) => {
           <a
             href={getPageUrl('create-card')}
             onClick={(e) => handleNavClick(e, 'create-card')}
-            className={`px-2.5 sm:px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition flex items-center space-x-1.5 whitespace-nowrap ${
-              currentPage === 'create-card'
-                ? 'bg-emerald-100 text-emerald-950 ring-2 ring-emerald-300/60'
-                : 'bg-white hover:bg-emerald-50 text-emerald-900'
-            }`}
+            className={`px-2.5 sm:px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition flex items-center space-x-1.5 whitespace-nowrap ${currentPage === 'create-card'
+              ? 'bg-emerald-100 text-emerald-950 ring-2 ring-emerald-300/60'
+              : 'bg-white hover:bg-emerald-50 text-emerald-900'
+              }`}
           >
             <CreditCard className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
             <span>{t.common.createCard}</span>
@@ -114,11 +112,10 @@ export const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate }) => {
                   key={item.page}
                   href={getPageUrl(item.page)}
                   onClick={(e) => handleNavClick(e, item.page)}
-                  className={`flex-1 min-w-[110px] flex items-center justify-center space-x-2 px-3 py-2 rounded-lg text-xs font-semibold transition ${
-                    isActive
-                      ? 'bg-white text-emerald-900 shadow-sm'
-                      : 'text-emerald-100 hover:bg-emerald-800 hover:text-white'
-                  }`}
+                  className={`flex-1 min-w-[110px] flex items-center justify-center space-x-2 px-3 py-2 rounded-lg text-xs font-semibold transition ${isActive
+                    ? 'bg-white text-emerald-900 shadow-sm'
+                    : 'text-emerald-100 hover:bg-emerald-800 hover:text-white'
+                    }`}
                 >
                   {item.icon}
                   <span>{item.label}</span>
