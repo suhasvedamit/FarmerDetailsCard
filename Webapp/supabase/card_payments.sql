@@ -38,6 +38,9 @@ GRANT ALL ON TABLE public.card_payments TO anon, authenticated, service_role;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
 
 -- 6. Row Level Security Policies
+-- Drop any conflicting or restrictive deny policies that may have been created by templates
+DROP POLICY IF EXISTS "Deny all access to card_payments" ON public.card_payments;
+
 -- Allow anonymous & authenticated clients to insert payment confirmation records
 DROP POLICY IF EXISTS "Allow anon insert to card_payments" ON public.card_payments;
 CREATE POLICY "Allow anon insert to card_payments"

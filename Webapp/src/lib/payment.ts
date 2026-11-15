@@ -47,7 +47,10 @@ if (typeof window !== 'undefined') {
  * Returns the configured Razorpay Key ID (trimmed of any accidental spaces).
  */
 export function getRazorpayKeyId(): string {
+  const win = typeof window !== 'undefined' ? (window as any) : {};
   const envKey =
+    win.__ENV__?.VITE_RAZORPAY_KEY_ID ||
+    win.VITE_RAZORPAY_KEY_ID ||
     import.meta.env.VITE_RAZORPAY_KEY_ID ||
     'rzp_test_TzdhcrzOfZcV5p';
   return String(envKey).trim();
@@ -138,15 +141,21 @@ export function saveCardPayment(
   // Store strictly in runtime memory — never in localStorage or browser cache
   inMemoryPaidCards.set(cardKey, paymentRecord);
 
-  // Non-blocking sync to Supabase (never interrupts user if network/table fails)
-  savePaymentRecord(
-    record,
-    paymentResponse.razorpay_payment_id,
-    amountInr,
-    'INR',
-    paymentResponse.razorpay_order_id || '',
-    paymentResponse.razorpay_signature || ''
-  ).catch(() => { });
+  // Non-blocking sync to Supabase (guaranteed never to throw or interrupt user if network/url/table fails)
+  try {
+    savePaymentRecord(
+      record,
+      paymentResponse.razorpay_payment_id,
+      amountInr,
+      'INR',
+      paymentResponse.razorpay_order_id || '',
+      paymentResponse.razorpay_signature || ''
+    ).catch((err) => {
+      console.warn('[Payment] Non-fatal background sync warning:', err);
+    });
+  } catch (syncErr) {
+    console.warn('[Payment] Non-fatal background sync trigger error:', syncErr);
+  }
 
   return paymentRecord;
 }
@@ -154,37 +163,73 @@ export function saveCardPayment(
 let razorpayScriptPromise: Promise<boolean> | null = null;
 
 /**
- * Dynamically loads the Razorpay checkout.js script if not already present.
+ * Dynamically loads the Razorpay checkout.js script with strict timeout and retry support.
+ * Guaranteed never to hang indefinitely.
  */
-export function loadRazorpayScript(): Promise<boolean> {
+export function loadRazorpayScript(timeoutMs = 8000): Promise<boolean> {
   if (typeof window === 'undefined') return Promise.resolve(false);
   if ((window as any).Razorpay) return Promise.resolve(true);
   if (razorpayScriptPromise) return razorpayScriptPromise;
 
   razorpayScriptPromise = new Promise<boolean>((resolve) => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let settled = false;
+
+    const finish = (result: boolean) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      if (!result) {
+        // Reset promise on failure so next click can retry loading
+        razorpayScriptPromise = null;
+      }
+      resolve(result);
+    };
+
+    // Hard timeout so loading never hangs the button indefinitely
+    timer = setTimeout(() => {
+      console.warn('[Razorpay] Script loading timed out after', timeoutMs, 'ms');
+      finish(Boolean((window as any).Razorpay));
+    }, timeoutMs);
+
     const existing = document.querySelector(
       'script[src="https://checkout.razorpay.com/v1/checkout.js"]'
     ) as HTMLScriptElement | null;
 
     if (existing) {
       if ((window as any).Razorpay) {
-        resolve(true);
+        finish(true);
         return;
       }
-      existing.addEventListener('load', () => resolve(true));
-      existing.addEventListener('error', () => resolve(false));
-      return;
+      // If an existing tag was in DOM but failed or hasn't loaded Razorpay, remove it to retry cleanly
+      try {
+        existing.remove();
+      } catch {
+        // ignore removal error
+      }
     }
 
-    const script = document.createElement('script');
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.async = true;
-    script.onload = () => resolve(true);
-    script.onerror = () => {
-      console.error('[Razorpay] Script failed to load from checkout.razorpay.com');
-      resolve(false);
-    };
-    document.body.appendChild(script);
+    try {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.async = true;
+      script.onload = () => {
+        if ((window as any).Razorpay) {
+          finish(true);
+        } else {
+          // In rare cases script loaded but Razorpay wasn't defined yet
+          setTimeout(() => finish(Boolean((window as any).Razorpay)), 100);
+        }
+      };
+      script.onerror = (err) => {
+        console.error('[Razorpay] Script failed to load from checkout.razorpay.com:', err);
+        finish(false);
+      };
+      document.head.appendChild(script);
+    } catch (err) {
+      console.error('[Razorpay] Error appending checkout script tag:', err);
+      finish(false);
+    }
   });
 
   return razorpayScriptPromise;
@@ -200,78 +245,85 @@ export async function openRazorpayCheckout({
   onFailure,
   onDismiss,
 }: CheckoutOptions): Promise<boolean> {
-  const isLoaded = await loadRazorpayScript();
-  if (!isLoaded || !(window as any).Razorpay) {
-    const errMsg =
-      'Payment service could not be loaded. Please check your internet connection or ad-blocker.';
-    console.error('[Payment]', errMsg);
-    alert(errMsg);
-    onFailure?.(new Error(errMsg));
-    return false;
-  }
-
-  const key = getRazorpayKeyId();
-  if (!key) {
-    const errMsg = 'Payment gateway is not configured.';
-    console.error('[Payment]', errMsg);
-    alert(errMsg);
-    onFailure?.(new Error(errMsg));
-    return false;
-  }
-
-  const amountInPaise = Math.round(amountInr * 100);
-
-  const options = {
-    key,
-    amount: amountInPaise,
-    currency: 'INR',
-    name: 'Card Studio',
-    description: `Farmer ID Card Download — ${record.farmer_name || 'AgriStack Card'}`,
-    image: `${window.location.origin}/logo.png`,
-    handler: function (response: RazorpaySuccessResponse) {
-      try {
-        const paymentRecord = saveCardPayment(record, response, amountInr);
-        onSuccess(response, paymentRecord);
-      } catch (err) {
-        console.error('[Razorpay] Error in payment handler callback:', err);
-        onSuccess(response, {
-          cardKey: getCardPaymentKey(record),
-          farmerId: record.farmer_id || '',
-          farmerName: record.farmer_name || '',
-          paymentId: response.razorpay_payment_id,
-          amount: amountInr,
-          currency: 'INR',
-          paidAt: new Date().toISOString(),
-        });
-      }
-    },
-    prefill: {},
-    notes: {
-      farmer_id: record.farmer_id || '',
-      enrollment_no: record.enrollment_no || '',
-    },
-    theme: {
-      color: '#047857', // Emerald 700 to match webapp branding
-    },
-    modal: {
-      confirm_close: true,
-      ondismiss: function () {
-        onDismiss?.();
-      },
-    },
-  };
-
   try {
+    const isLoaded = await loadRazorpayScript(8000);
+    if (!isLoaded || !(window as any).Razorpay) {
+      const errMsg =
+        'Payment service could not be loaded. Please check your internet connection or ad-blocker and try again.';
+      console.error('[Payment]', errMsg);
+      onFailure?.(new Error(errMsg));
+      return false;
+    }
+
+    const key = getRazorpayKeyId();
+    if (!key) {
+      const errMsg = 'Payment gateway is not configured.';
+      console.error('[Payment]', errMsg);
+      onFailure?.(new Error(errMsg));
+      return false;
+    }
+
+    const amountInPaise = Math.round(amountInr * 100);
+
+    const options = {
+      key,
+      amount: amountInPaise,
+      currency: 'INR',
+      name: 'Card Studio',
+      description: `Farmer ID Card Download — ${record.farmer_name || 'AgriStack Card'}`,
+      image: `${window.location.origin}/logo.png`,
+      handler: function (response: RazorpaySuccessResponse) {
+        try {
+          const paymentRecord = saveCardPayment(record, response, amountInr);
+          onSuccess(response, paymentRecord);
+        } catch (err) {
+          console.error('[Razorpay] Error in payment handler callback:', err);
+          onSuccess(response, {
+            cardKey: getCardPaymentKey(record),
+            farmerId: record.farmer_id || '',
+            farmerName: record.farmer_name || '',
+            paymentId: response.razorpay_payment_id,
+            amount: amountInr,
+            currency: 'INR',
+            paidAt: new Date().toISOString(),
+          });
+        }
+      },
+      prefill: {},
+      notes: {
+        farmer_id: record.farmer_id || '',
+        enrollment_no: record.enrollment_no || '',
+      },
+      theme: {
+        color: '#047857', // Emerald 700 to match webapp branding
+      },
+      modal: {
+        confirm_close: true,
+        ondismiss: function () {
+          onDismiss?.();
+        },
+      },
+    };
+
     const rzp = new (window as any).Razorpay(options);
     rzp.on('payment.failed', function (resp: any) {
+      const errDetail =
+        resp?.error?.description ||
+        resp?.error?.reason ||
+        resp?.error?.message ||
+        'Payment was declined or cancelled.';
       console.error('[Razorpay] Payment failed:', resp?.error);
-      onFailure?.(resp?.error || new Error('Payment failed'));
+      onFailure?.(new Error(errDetail));
     });
     rzp.open();
     return true;
-  } catch (err) {
+  } catch (err: any) {
     console.error('[Razorpay] Failed to open checkout modal:', err);
-    onFailure?.(err);
+    const errObj =
+      err instanceof Error
+        ? err
+        : new Error(String(err?.message || err || 'Failed to initialize payment'));
+    onFailure?.(errObj);
     return false;
   }
 }

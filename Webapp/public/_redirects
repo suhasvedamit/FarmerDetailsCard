@@ -1,0 +1,3 @@
+# Single Page Application (SPA) routing for Cloudflare Pages & Netlify
+# Rewrites all requests to /index.html with a 200 HTTP status code so client-side routing handles them
+/*    /index.html   200

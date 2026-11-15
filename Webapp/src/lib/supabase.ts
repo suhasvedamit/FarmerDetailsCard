@@ -1,24 +1,58 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { FarmerRecord } from '../types';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+function getSupabaseConfig(): { url: string; key: string } {
+  const win = typeof window !== 'undefined' ? (window as any) : {};
+  const url =
+    win.__ENV__?.VITE_SUPABASE_URL ||
+    win.VITE_SUPABASE_URL ||
+    import.meta.env.VITE_SUPABASE_URL ||
+    '';
+  const key =
+    win.__ENV__?.VITE_SUPABASE_ANON_KEY ||
+    win.VITE_SUPABASE_ANON_KEY ||
+    import.meta.env.VITE_SUPABASE_ANON_KEY ||
+    '';
+  return { url: String(url).trim(), key: String(key).trim() };
+}
 
-// Safely initialize client without throwing even if env vars are malformed or missing
-export let supabase: SupabaseClient | null = null;
-try {
-  if (supabaseUrl && supabaseAnonKey && supabaseUrl.startsWith('http')) {
-    supabase = createClient(supabaseUrl, supabaseAnonKey, {
+let cachedClient: SupabaseClient | null = null;
+let lastUsedUrl = '';
+let lastUsedKey = '';
+
+/**
+ * Returns the Supabase client safely, re-initializing if URL or Key was updated.
+ * Guaranteed never to throw an unhandled exception.
+ */
+export function getSupabaseClient(): SupabaseClient | null {
+  try {
+    const { url, key } = getSupabaseConfig();
+    if (!url || !key || !url.startsWith('http')) {
+      return null;
+    }
+
+    if (cachedClient && url === lastUsedUrl && key === lastUsedKey) {
+      return cachedClient;
+    }
+
+    cachedClient = createClient(url, key, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
       },
     });
+    lastUsedUrl = url;
+    lastUsedKey = key;
+    supabase = cachedClient;
+    return cachedClient;
+  } catch (initErr) {
+    console.warn('[Supabase] Client initialization failed (non-fatal):', initErr);
+    return null;
   }
-} catch (initErr) {
-  console.warn('[Supabase] Client initialization failed (non-fatal):', initErr);
-  supabase = null;
 }
+
+// Safely initialize client without throwing even if env vars are malformed or missing
+export let supabase: SupabaseClient | null = getSupabaseClient();
 
 /**
  * 5-second timeout wrapper so blocked networks or ad-blockers never stall the app
@@ -123,7 +157,8 @@ export async function saveExtractedRecord(
   sessionId: string,
   fileName?: string
 ): Promise<void> {
-  if (!supabase) {
+  const client = getSupabaseClient() || supabase;
+  if (!client) {
     return;
   }
 
@@ -154,7 +189,7 @@ export async function saveExtractedRecord(
     };
 
     const result = await withTimeout(
-      supabase.from('extracted_records').insert([row])
+      client.from('extracted_records').insert([row])
     );
 
     if (result && result.error) {
@@ -176,7 +211,8 @@ export async function saveGeneratedRecord(
   sessionId: string,
   originalRecord?: FarmerRecord | null
 ): Promise<void> {
-  if (!supabase) {
+  const client = getSupabaseClient() || supabase;
+  if (!client) {
     return;
   }
 
@@ -212,7 +248,7 @@ export async function saveGeneratedRecord(
     };
 
     const result = await withTimeout(
-      supabase.from('generated_records').insert([row])
+      client.from('generated_records').insert([row])
     );
 
     if (result && result.error) {
@@ -236,7 +272,8 @@ export async function savePaymentRecord(
   orderId = '',
   signature = ''
 ): Promise<void> {
-  if (!supabase) {
+  const client = getSupabaseClient() || supabase;
+  if (!client) {
     return;
   }
 
@@ -255,7 +292,7 @@ export async function savePaymentRecord(
     };
 
     const result = await withTimeout(
-      supabase.from('card_payments').insert([row])
+      client.from('card_payments').insert([row])
     );
 
     if (result && result.error) {

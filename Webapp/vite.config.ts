@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   envPrefix: ['VITE_'],
   // Serve from root "/" for custom domain cardstudio.vedamit.com and clean SPA routes (/farmer, etc.)
-  base: './',
+  base: '/',
   build: {
     outDir: 'dist',
     sourcemap: false,

@@ -14,6 +14,7 @@ import {
   Lock,
   ShieldCheck,
   CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 import { FarmerRecord } from '../types';
 import logoImg from '../assets/logo.png';
@@ -76,6 +77,7 @@ export const CardModal: React.FC<CardModalProps> = ({
   const [busyAction, setBusyAction] = useState<'download' | 'print' | null>(null);
   const [isPaid, setIsPaid] = useState<boolean>(() => isCardPaid(record));
   const [isProcessingPayment, setIsProcessingPayment] = useState<boolean>(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
   const [paymentSuccessToast, setPaymentSuccessToast] = useState<string | null>(null);
   const downloadMenuRef = useRef<HTMLDivElement>(null);
   const printMenuRef = useRef<HTMLDivElement>(null);
@@ -88,10 +90,30 @@ export const CardModal: React.FC<CardModalProps> = ({
     }
   }, [isOpen, record]);
 
+  // Safety timeout: ensure button never stays permanently locked in loading state
+  useEffect(() => {
+    if (!isProcessingPayment) return;
+    const timer = setTimeout(() => {
+      setIsProcessingPayment((current) => {
+        if (current) {
+          setPaymentError(
+            t.cardModal.paymentFailedDesc ||
+            'Payment request timed out. Please check your connection or ad-blocker and try again.'
+          );
+          return false;
+        }
+        return false;
+      });
+    }, 25000);
+    return () => clearTimeout(timer);
+  }, [isProcessingPayment, t.cardModal.paymentFailedDesc]);
+
   useEffect(() => {
     if (!isOpen) {
       setOpenMenu(null);
       setActiveSide('both');
+      setIsProcessingPayment(false);
+      setPaymentError(null);
       return;
     }
     if (!openMenu) return;
@@ -229,33 +251,49 @@ export const CardModal: React.FC<CardModalProps> = ({
 
   const isBusy = busyAction !== null;
 
-  const handlePayToUnlock = (pendingAction?: () => Promise<void> | void) => {
+  const handlePayToUnlock = async (pendingAction?: () => Promise<void> | void) => {
     if (isProcessingPayment) return;
+    setPaymentError(null);
     setIsProcessingPayment(true);
-    openRazorpayCheckout({
-      record,
-      amountInr: priceInr,
-      onSuccess: () => {
-        setIsPaid(true);
-        setIsProcessingPayment(false);
-        setPaymentSuccessToast(
-          formatMessage(t.cardModal.paymentSuccessToast, {
-            name: record.farmer_name || 'Farmer',
-          })
-        );
-        setTimeout(() => setPaymentSuccessToast(null), 7000);
-        if (pendingAction) {
-          void pendingAction();
-        }
-      },
-      onFailure: (err) => {
-        setIsProcessingPayment(false);
-        console.warn('[Payment] Checkout not completed:', err);
-      },
-      onDismiss: () => {
-        setIsProcessingPayment(false);
-      },
-    });
+    try {
+      await openRazorpayCheckout({
+        record,
+        amountInr: priceInr,
+        onSuccess: () => {
+          setIsPaid(true);
+          setIsProcessingPayment(false);
+          setPaymentError(null);
+          setPaymentSuccessToast(
+            formatMessage(t.cardModal.paymentSuccessToast, {
+              name: record.farmer_name || 'Farmer',
+            })
+          );
+          setTimeout(() => setPaymentSuccessToast(null), 7000);
+          if (pendingAction) {
+            void pendingAction();
+          }
+        },
+        onFailure: (err) => {
+          setIsProcessingPayment(false);
+          const errorMsg =
+            err?.message ||
+            t.cardModal.paymentFailedDesc ||
+            'Payment could not be completed. Please try again.';
+          setPaymentError(errorMsg);
+          console.warn('[Payment] Checkout not completed:', err);
+        },
+        onDismiss: () => {
+          setIsProcessingPayment(false);
+        },
+      });
+    } catch (err: any) {
+      setIsProcessingPayment(false);
+      setPaymentError(
+        err?.message ||
+        t.cardModal.paymentFailedDesc ||
+        'Failed to initialize payment gateway. Please try again.'
+      );
+    }
   };
 
   const runExportAction = async (
@@ -505,6 +543,40 @@ export const CardModal: React.FC<CardModalProps> = ({
             >
               <X className="w-3.5 h-3.5" />
             </button>
+          </div>
+        )}
+
+        {paymentError && (
+          <div className="bg-rose-50 border border-rose-300 text-rose-900 rounded-xl px-4 py-3 text-xs sm:text-sm font-medium flex items-center justify-between gap-3 shadow-sm animate-fadeIn">
+            <div className="flex items-start space-x-2.5 min-w-0">
+              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <div className="font-bold text-rose-950 text-xs sm:text-sm">
+                  {t.cardModal.paymentFailedTitle || 'Payment Not Completed'}
+                </div>
+                <div className="text-[11px] sm:text-xs text-rose-800 break-words mt-0.5">
+                  {paymentError}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => handlePayToUnlock()}
+                disabled={isProcessingPayment}
+                className="px-2.5 py-1 text-xs font-bold bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-lg shadow-sm cursor-pointer transition disabled:opacity-50"
+              >
+                {t.cardModal.paymentRetryBtn || 'Retry'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentError(null)}
+                aria-label={t.common.close}
+                className="text-rose-500 hover:text-rose-700 p-1 rounded-lg hover:bg-rose-100 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         )}
 

@@ -179,21 +179,35 @@ export const PvcMakersPage: React.FC<PvcMakersPageProps> = ({
     if (!hasCardData || isDownloadingPdf) return;
 
     if (!isPaid) {
-      openRazorpayCheckout({
-        record: activeRecord,
-        amountInr: priceInr,
-        onSuccess: () => {
-          setIsPaid(true);
-          void executeDownload();
-        },
-      });
+      setIsDownloadingPdf(true);
+      try {
+        await openRazorpayCheckout({
+          record: activeRecord,
+          amountInr: priceInr,
+          onSuccess: () => {
+            setIsPaid(true);
+            setIsDownloadingPdf(false);
+            void executeDownload();
+          },
+          onFailure: (err) => {
+            setIsDownloadingPdf(false);
+            alert(err?.message || 'Payment could not be completed. Please try again.');
+          },
+          onDismiss: () => {
+            setIsDownloadingPdf(false);
+          },
+        });
+      } catch (err: any) {
+        setIsDownloadingPdf(false);
+        alert(err?.message || 'Payment failed to initialize. Please try again.');
+      }
       return;
     }
 
     await executeDownload();
   };
 
-  const handleOrderOnWhatsApp = (agent: PvcMakerAgent) => {
+  const handleOrderOnWhatsApp = async (agent: PvcMakerAgent) => {
     const waUrl = buildPvcOrderWhatsAppUrl(agent, {
       record: activeRecord,
       hasCardData,
@@ -204,21 +218,28 @@ export const PvcMakersPage: React.FC<PvcMakersPageProps> = ({
     if (!waUrl) return;
 
     if (hasCardData && !isPaid) {
-      openRazorpayCheckout({
-        record: activeRecord,
-        amountInr: priceInr,
-        onSuccess: () => {
-          setIsPaid(true);
-          window.open(waUrl, '_blank', 'noopener,noreferrer');
-          void executeDownload();
-          setOrderNotice({
-            agentId: agent.id,
-            shopName: getAgentShopName(agent, language),
-            waUrl,
-            fileName: pdfFilename,
-          });
-        },
-      });
+      try {
+        await openRazorpayCheckout({
+          record: activeRecord,
+          amountInr: priceInr,
+          onSuccess: () => {
+            setIsPaid(true);
+            window.open(waUrl, '_blank', 'noopener,noreferrer');
+            void executeDownload();
+            setOrderNotice({
+              agentId: agent.id,
+              shopName: getAgentShopName(agent, language),
+              waUrl,
+              fileName: pdfFilename,
+            });
+          },
+          onFailure: (err) => {
+            alert(err?.message || 'Payment could not be completed. Please try again.');
+          },
+        });
+      } catch (err: any) {
+        alert(err?.message || 'Payment failed to initialize. Please try again.');
+      }
       return;
     }
 

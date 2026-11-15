@@ -525,6 +525,9 @@ export interface Translations {
     lockedTag: string;
     paidBadge: string;
     paymentSuccessToast: string;
+    paymentFailedTitle: string;
+    paymentFailedDesc: string;
+    paymentRetryBtn: string;
     printLockedHeader: string;
     printLockedSub: string;
     editFormBtn: string;
